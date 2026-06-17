@@ -1,0 +1,22 @@
+# Workspace members. Each OpenForge plugin is its own package under plugins/.
+packages:
+  - plugins/*
+
+# Shared toolchain versions, pinned to match the OpenForge plugin build contract
+# (see ../openforge/plugins/* and docs/adr/0002-openforge-plugin-package-runtime.md
+# in the OpenForge repo). Plugins reference these with "catalog:" so every plugin
+# in this monorepo builds against one identical toolchain and cannot drift.
+#
+# NOTE: @openforge/plugin-sdk is intentionally NOT in this catalog. It is linked
+# per-plugin from the sibling OpenForge checkout with
+#   "@openforge/plugin-sdk": "link:../../../openforge/packages/plugin-sdk"
+# because pnpm does not yet support the link: protocol inside a catalog
+# (ERR_PNPM_CATALOG_ENTRY_INVALID_SPEC). See docs/adr/0001.
+catalog:
+  svelte: ^5.56.3
+  '@sveltejs/vite-plugin-svelte': ^7.1.2
+  '@testing-library/svelte': ^5.3.1
+  vite: ^8.0.16
+  vitest: ^4.1.8
+  typescript: ^6.0.3
+  '@types/node': ^25.9.3

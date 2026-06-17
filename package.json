@@ -1,0 +1,17 @@
+{
+  "name": "openforge-plugins",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.5.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build:sdk": "pnpm -C ../openforge --filter @openforge/plugin-sdk build",
+    "setup": "pnpm run build:sdk && pnpm install",
+    "build": "pnpm -r run build",
+    "test": "pnpm -r run test",
+    "typecheck": "pnpm -r run typecheck"
+  }
+}
