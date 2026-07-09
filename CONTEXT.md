@@ -62,3 +62,30 @@ The way a built plugin from this repo is loaded into a running OpenForge app —
 pointing the app's plugin manager at the plugin directory's absolute path. Install
 is app-wide; enablement is per project.
 _Avoid_: "publish", "deploy" — there is no registry or marketplace step.
+
+## Jira plugin
+
+Domain language owned by the Jira plugin (`dev.kvg.jira`). A **Plugin-owned
+Domain** in OpenForge terms: these concepts belong to the plugin, not to
+OpenForge core. OpenForge's **Task** stays the unit of work; the terms below name
+the *external* tracker entity it can be linked to.
+
+**Jira Issue**:
+The external Atlassian work item (Issue Key, summary, status, assignee, type, …)
+that an OpenForge **Task** may be linked to. A Task is OpenForge's unit of work; a
+Jira Issue lives in Jira. The two are linked, never merged.
+_Avoid_: calling an OpenForge Task an "issue" or "ticket"; "card", "story" (a
+story is one issue type, not the category).
+
+**Issue Key**:
+The human-readable Jira identifier such as `PROJ-123`. It can look identical to an
+OpenForge **Task id** (e.g. `KVG-1219`) but the two id systems are independent —
+coincidental shape is not identity.
+_Avoid_: conflating with the **Task id**; "issue number", "ticket id".
+
+**Issue Link**:
+The stored association from one OpenForge **Task** to one **Issue Key**, held in
+`storage.task(taskId)`. Created explicitly by the user; may be pre-filled by
+scanning the Task's text for a key-shaped hint, but the hint is never authoritative.
+_Avoid_: "mapping"/"sync" (nothing is written back into the Task or into Jira);
+assuming the Task id equals the Issue Key.
