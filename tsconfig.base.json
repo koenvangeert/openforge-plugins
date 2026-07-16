@@ -1,5 +1,5 @@
 {
-  "// note": "Shared TS config for every plugin. Mirrors the OpenForge built-in plugin tsconfigs. No SDK `paths` override is needed here: @openforge/plugin-sdk resolves through the node_modules link to the SDK's built dist/ (and its .d.ts), so the SDK must be built in the OpenForge checkout first (pnpm run build:sdk).",
+  "// note": "Shared TS config for every plugin. Mirrors the OpenForge built-in plugin tsconfigs. No SDK `paths` override is needed here: @openforge-app/plugin-sdk resolves through the node_modules link to the SDK's built dist/ (and its .d.ts), so the SDK must be built in the OpenForge checkout first (pnpm run build:sdk).",
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",

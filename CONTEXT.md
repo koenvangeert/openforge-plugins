@@ -32,7 +32,7 @@ _Avoid_: "the OpenForge install", "the app" — the running desktop app is a
 different thing from the source checkout.
 
 **SDK**:
-`@openforge/plugin-sdk` and its subpaths (`/frontend`, `/backend`, `/testing`,
+`@openforge-app/plugin-sdk` and its subpaths (`/frontend`, `/backend`, `/testing`,
 `/vite`). The only OpenForge code a plugin may import. Consumed here via a local
 **SDK Link**, not a published package.
 _Avoid_: OpenForge app internals, renderer stores, Electron/preload, Rust internals.

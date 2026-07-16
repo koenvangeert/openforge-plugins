@@ -8,7 +8,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "build:sdk": "pnpm -C ../openforge --filter @openforge/plugin-sdk build",
+    "build:sdk": "pnpm -C ../openforge --filter @openforge-app/plugin-sdk build",
     "setup": "pnpm run build:sdk && pnpm install",
     "build": "pnpm -r run build",
     "test": "pnpm -r run test",

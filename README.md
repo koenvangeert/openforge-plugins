@@ -2,7 +2,7 @@
 
 A monorepo for building **OpenForge Trusted Plugins** — `package.json#openforge`
 packages that extend the OpenForge desktop app at runtime through the
-`@openforge/plugin-sdk` contract.
+`@openforge-app/plugin-sdk` contract.
 
 Each plugin lives in its own package under `plugins/`. They share one pinned
 toolchain (via a pnpm catalog) and one SDK (linked from a local OpenForge
@@ -26,7 +26,7 @@ workspace/tmp/
 └── openforge-plugins/    <- this repo
 ```
 
-Why a local link and not an npm dependency: `@openforge/plugin-sdk` is not
+Why a local link and not an npm dependency: `@openforge-app/plugin-sdk` is not
 published to any registry yet. See [`docs/adr/0001`](./docs/adr/0001-link-sdk-from-local-openforge-checkout.md).
 
 Requirements:
@@ -34,7 +34,7 @@ Requirements:
 - Node `>=20`
 - pnpm `11.5.0` (pinned via `packageManager`)
 - A built OpenForge SDK. The SDK's `exports` point at `dist/`, so the package
-  must be built before any plugin can resolve `@openforge/plugin-sdk` or its
+  must be built before any plugin can resolve `@openforge-app/plugin-sdk` or its
   types.
 
 ## Getting started
@@ -48,7 +48,7 @@ pnpm run setup
 sibling repo pins a different pnpm version, build it manually instead:
 
 ```bash
-cd ../openforge && pnpm --filter @openforge/plugin-sdk build && cd -
+cd ../openforge && pnpm --filter @openforge-app/plugin-sdk build && cd -
 pnpm install
 ```
 
@@ -97,7 +97,7 @@ collides with core (`com.openforge.*`). Declare only the capabilities you use in
     "test": "vitest run"
   },
   "dependencies": {
-    "@openforge/plugin-sdk": "link:../../../openforge/packages/plugin-sdk"
+    "@openforge-app/plugin-sdk": "link:../../../openforge/packages/plugin-sdk"
   },
   "peerDependencies": {
     "svelte": "^5.0.0"
@@ -152,7 +152,7 @@ Externalize it with `openforgePluginViteExternals`.
 
 ```ts
 import { svelte } from '@sveltejs/vite-plugin-svelte'
-import { openforgePluginViteExternals } from '@openforge/plugin-sdk/vite'
+import { openforgePluginViteExternals } from '@openforge-app/plugin-sdk/vite'
 import { defineConfig } from 'vite'
 
 export default defineConfig({
@@ -177,7 +177,7 @@ export default defineConfig({
     target: 'node20',
     rollupOptions: { output: { entryFileNames: 'backend.js', format: 'es' } }
   },
-  ssr: { noExternal: ['@openforge/plugin-sdk'] }
+  ssr: { noExternal: ['@openforge-app/plugin-sdk'] }
 })
 ```
 
@@ -185,7 +185,7 @@ export default defineConfig({
 
 ```ts
 // src/frontend.ts
-import { defineFrontendPlugin } from '@openforge/plugin-sdk/frontend'
+import { defineFrontendPlugin } from '@openforge-app/plugin-sdk/frontend'
 
 export default defineFrontendPlugin({
   activate(openforge, context) {
@@ -204,7 +204,7 @@ export default defineFrontendPlugin({
 
 ```ts
 // src/backend.ts  (omit if frontend-only)
-import { defineBackendPlugin } from '@openforge/plugin-sdk/backend'
+import { defineBackendPlugin } from '@openforge-app/plugin-sdk/backend'
 
 export default defineBackendPlugin({
   activate(openforge, context) {
@@ -228,7 +228,7 @@ deactivation cleans up. `activate()` does not return a cleanup function.
 // src/<name>.test.ts
 import { describe, expect, it } from 'vitest'
 import plugin from './frontend'
-import { createOpenForgeRegistryFake } from '@openforge/plugin-sdk/testing'
+import { createOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
 
 describe('activation', () => {
   it('registers the view', async () => {
@@ -271,7 +271,7 @@ project?" prompt. Use OpenForge's plugin reload action after rebuilding.
 
 ## What plugins may and may not do
 
-- Import only `@openforge/plugin-sdk` (and `/frontend`, `/backend`, `/testing`,
+- Import only `@openforge-app/plugin-sdk` (and `/frontend`, `/backend`, `/testing`,
   `/vite`) plus normal npm deps. Never import OpenForge renderer stores, Electron/
   preload APIs, Rust internals, or app IPC wrappers.
 - Storage is JSON-only, auto-namespaced by plugin id; pick the narrowest scope

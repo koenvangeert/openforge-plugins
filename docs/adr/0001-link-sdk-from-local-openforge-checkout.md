@@ -7,13 +7,13 @@ Task: KVG-1210
 ## Context
 
 This monorepo builds OpenForge Trusted Plugins, which compile against
-`@openforge/plugin-sdk`. At the time of writing:
+`@openforge-app/plugin-sdk`. At the time of writing:
 
 - The SDK is version `0.1.0` and **not published to any registry** (public npm
   returns 404; no private registry is configured).
 - Every existing OpenForge plugin lives *inside* the OpenForge pnpm workspace and
   references the SDK with `workspace:*`, building it with
-  `pnpm --filter @openforge/plugin-sdk build`. None of that is available to a
+  `pnpm --filter @openforge-app/plugin-sdk build`. None of that is available to a
   separate repo.
 - OpenForge's own plugin runtime (ADR-0002) supports installing built plugins from
   `npm:`, `git:`, and local path sources — so a standalone plugins repo is a
@@ -29,7 +29,7 @@ Consume the SDK through a per-plugin pnpm `link:` dependency pointing at a sibli
 OpenForge checkout:
 
 ```json
-"@openforge/plugin-sdk": "link:../../../openforge/packages/plugin-sdk"
+"@openforge-app/plugin-sdk": "link:../../../openforge/packages/plugin-sdk"
 ```
 
 The expected layout is `workspace/tmp/{openforge, openforge-plugins}`. The SDK must
