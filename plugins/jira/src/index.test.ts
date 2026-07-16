@@ -10,6 +10,7 @@ describe('jira plugin package metadata', () => {
   it('declares valid openforge metadata with the expected capabilities', () => {
     expect(isOpenForgePackageMetadata(packageJson.openforge)).toBe(true)
     expect(packageJson.openforge.id).toBe('dev.kvg.jira')
+    expect(packageJson.openforge.icon).toBe('kanban')
     expect(packageJson.openforge.requires).toEqual(
       expect.arrayContaining(['views', 'settings', 'backend', 'storage', 'commands', 'system.openUrl']),
     )
@@ -22,7 +23,7 @@ describe('jira plugin activation', () => {
     await registry.activateFrontend(plugin)
 
     expect(plugin[OPENFORGE_FRONTEND_PLUGIN_MARKER]).toBe(true)
-    expect(registry.snapshot.views).toMatchObject([{ id: 'query', placement: 'rail' }])
+    expect(registry.snapshot.views).toMatchObject([{ id: 'query', icon: 'kanban', placement: 'rail' }])
     expect(registry.snapshot.taskPaneTabs).toEqual([])
     expect(registry.snapshot.settingsSections).toMatchObject([{ id: 'credentials' }])
     expect(registry.snapshot.commands).toMatchObject([{ id: 'refresh' }])

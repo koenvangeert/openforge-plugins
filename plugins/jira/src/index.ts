@@ -10,7 +10,7 @@ export default defineFrontendPlugin({
       openforge.views.register({
         id: 'query',
         title: 'Jira',
-        icon: 'square-check-big',
+        icon: 'kanban',
         placement: 'rail',
         order: 40,
         component: JiraQueryView,
