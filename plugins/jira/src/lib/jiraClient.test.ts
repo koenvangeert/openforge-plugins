@@ -13,6 +13,15 @@ function response(status: number, body: unknown): Response {
   } as unknown as Response
 }
 
+function nonJsonResponse(status: number): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    statusText: `HTTP ${status}`,
+    json: async () => { throw new SyntaxError('Unexpected end of JSON input') },
+  } as unknown as Response
+}
+
 const okFetch = (body: unknown) => vi.fn(async () => response(200, body))
 
 describe('fetchIssue', () => {
@@ -78,6 +87,44 @@ describe('fetchIssue', () => {
     const result = await fetchIssue(creds, 'PROJ-1', vi.fn(async () => response(503, {})))
     expect(result).toMatchObject({ ok: false, error: 'unknown', message: 'HTTP 503' })
   })
+
+  it('maps a non-JSON success response to unknown', async () => {
+    const result = await fetchIssue(creds, 'PROJ-1', vi.fn(async () => nonJsonResponse(200)))
+
+    expect(result).toEqual({ ok: false, error: 'unknown', message: 'Jira returned an invalid response.' })
+  })
+
+  it('maps an unexpected JSON success body to unknown', async () => {
+    const result = await fetchIssue(creds, 'PROJ-1', okFetch(null))
+
+    expect(result).toEqual({ ok: false, error: 'unknown', message: 'Jira returned an invalid response.' })
+  })
+
+  it('rejects an issue body that would violate the success contract', async () => {
+    const result = await fetchIssue(creds, 'PROJ-1', okFetch({ key: 'PROJ-1', fields: { summary: 42 } }))
+
+    expect(result).toEqual({ ok: false, error: 'unknown', message: 'Jira returned an invalid response.' })
+  })
+
+  it('normalizes nullable Jira fields to the documented fallbacks', async () => {
+    const result = await fetchIssue(creds, 'PROJ-1', okFetch({
+      key: 'PROJ-1',
+      fields: { summary: null, status: null, issuetype: null, assignee: null, updated: null },
+      renderedFields: { description: null },
+    }))
+
+    expect(result).toMatchObject({
+      ok: true,
+      issue: {
+        summary: '(no summary)',
+        status: 'Unknown',
+        issueType: 'Unknown',
+        assignee: null,
+        updated: null,
+        descriptionHtml: '',
+      },
+    })
+  })
 })
 
 describe('searchIssues', () => {
@@ -112,9 +159,31 @@ describe('searchIssues', () => {
     expect(result).toEqual({ ok: false, error: 'invalid-jql', message: "Error in JQL near 'not'." })
   })
 
+  it('falls back to status text for a non-JSON error response', async () => {
+    const result = await searchIssues(
+      creds,
+      'this is not jql',
+      vi.fn(async () => nonJsonResponse(400)),
+    )
+
+    expect(result).toEqual({ ok: false, error: 'invalid-jql', message: 'HTTP 400' })
+  })
+
   it('maps 401 to invalid-credentials', async () => {
     const result = await searchIssues(creds, 'project = PROJ', vi.fn(async () => response(403, {})))
     expect(result).toMatchObject({ ok: false, error: 'invalid-credentials' })
+  })
+
+  it('maps a non-JSON success response to unknown', async () => {
+    const result = await searchIssues(creds, 'project = PROJ', vi.fn(async () => nonJsonResponse(200)))
+
+    expect(result).toEqual({ ok: false, error: 'unknown', message: 'Jira returned an invalid response.' })
+  })
+
+  it('maps an unexpected JSON success body to unknown', async () => {
+    const result = await searchIssues(creds, 'project = PROJ', okFetch({ issues: [null] }))
+
+    expect(result).toEqual({ ok: false, error: 'unknown', message: 'Jira returned an invalid response.' })
   })
 })
 
@@ -127,5 +196,17 @@ describe('testConnection', () => {
   it('maps 401 to invalid-credentials', async () => {
     const result = await testConnection(creds, vi.fn(async () => response(401, {})))
     expect(result).toMatchObject({ ok: false, error: 'invalid-credentials' })
+  })
+
+  it('maps a non-JSON success response to unknown', async () => {
+    const result = await testConnection(creds, vi.fn(async () => nonJsonResponse(200)))
+
+    expect(result).toEqual({ ok: false, error: 'unknown', message: 'Jira returned an invalid response.' })
+  })
+
+  it('maps an unexpected JSON success body to unknown', async () => {
+    const result = await testConnection(creds, okFetch({ displayName: 42 }))
+
+    expect(result).toEqual({ ok: false, error: 'unknown', message: 'Jira returned an invalid response.' })
   })
 })

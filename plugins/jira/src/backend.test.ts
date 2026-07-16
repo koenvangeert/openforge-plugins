@@ -15,6 +15,15 @@ function response(status: number, body: unknown): Response {
   } as unknown as Response
 }
 
+function nonJsonResponse(status: number): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    statusText: `HTTP ${status}`,
+    json: async () => { throw new SyntaxError('Unexpected end of JSON input') },
+  } as unknown as Response
+}
+
 async function setup(withCreds: boolean): Promise<TestingOpenForgeRegistryFake> {
   const registry = createOpenForgeRegistryFake({ pluginId: 'dev.kvg.jira', projectId: 'P-1' })
   if (withCreds) {
@@ -134,6 +143,15 @@ describe('getIssue', () => {
     })))
     const result = await invoke<IssueResult>(registry, METHOD.getIssue, { key: 'PROJ-1' })
     expect(result).toMatchObject({ ok: true, issue: { key: 'PROJ-1', descriptionHtml: '<p>hi</p>' } })
+  })
+
+  it('returns an unknown failure instead of rejecting on a non-JSON success response', async () => {
+    const registry = await setup(true)
+    vi.stubGlobal('fetch', vi.fn(async () => nonJsonResponse(200)))
+
+    const result = await invoke<IssueResult>(registry, METHOD.getIssue, { key: 'PROJ-1' })
+
+    expect(result).toEqual({ ok: false, error: 'unknown', message: 'Jira returned an invalid response.' })
   })
 })
 
