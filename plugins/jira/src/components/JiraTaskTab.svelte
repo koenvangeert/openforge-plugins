@@ -75,62 +75,53 @@
   })
 </script>
 
-<section class="tab">
+<section class="flex flex-col gap-3 p-3">
   {#if linkedKey}
-    <div class="bar">
-      <span class="linked">Linked to <strong>{linkedKey}</strong></span>
-      <span class="actions">
-        <button type="button" onclick={() => void refresh()} disabled={loading}>
+    <div class="flex items-center justify-between gap-2">
+      <span>Linked to <strong>{linkedKey}</strong></span>
+      <span class="flex gap-2">
+        <button class="btn btn-primary btn-sm" type="button" onclick={() => void refresh()} disabled={loading}>
+          {#if loading}<span class="loading loading-spinner loading-xs"></span>{/if}
           {loading ? 'Refreshing…' : 'Refresh'}
         </button>
-        <button type="button" onclick={() => void unlink()}>Unlink</button>
+        <button class="btn btn-ghost btn-sm" type="button" onclick={() => void unlink()}>Unlink</button>
       </span>
     </div>
 
     {#if error}
-      <p class="error" role="alert">{error.message}</p>
+      <p class="alert alert-error py-2 text-sm" role="alert">{error.message}</p>
     {/if}
 
     {#if issue}
       <IssueCard {issue} onOpen={(url) => void api.system.openUrl(url)} />
     {:else if loading}
-      <p class="muted">Loading {linkedKey}…</p>
+      <p class="text-sm text-base-content/60">Loading {linkedKey}…</p>
     {:else if !error}
-      <p class="muted">No issue data yet.</p>
+      <p class="text-sm text-base-content/60">No issue data yet.</p>
     {/if}
   {:else}
-    <div class="unlinked">
-      <p class="muted">This task isn't linked to a Jira issue yet.</p>
+    <div class="flex flex-col gap-3">
+      <p class="text-sm text-base-content/60">This task isn't linked to a Jira issue yet.</p>
       {#if suggestion}
-        <p class="suggestion">
+        <p class="text-sm">
           Suggested from the task text: <strong>{suggestion}</strong> — confirm to link.
         </p>
       {/if}
-      <div class="link-form">
-        <label for="jira-key-input">Issue key</label>
+      <div class="flex items-center gap-2">
+        <label class="text-xs text-base-content/70" for="jira-key-input">Issue key</label>
         <input
+          class="input input-bordered input-sm flex-1"
           id="jira-key-input"
           type="text"
           placeholder="PROJ-123"
           bind:value={inputKey}
           onkeydown={(event) => { if (event.key === 'Enter') void link() }}
         />
-        <button type="button" onclick={() => void link()}>Link</button>
+        <button class="btn btn-primary btn-sm" type="button" onclick={() => void link()}>Link</button>
       </div>
       {#if error}
-        <p class="error" role="alert">{error.message}</p>
+        <p class="alert alert-error py-2 text-sm" role="alert">{error.message}</p>
       {/if}
     </div>
   {/if}
 </section>
-
-<style>
-  .tab { display: flex; flex-direction: column; gap: 0.75rem; padding: 0.75rem; }
-  .bar { display: flex; justify-content: space-between; align-items: center; }
-  .actions { display: flex; gap: 0.5rem; }
-  .link-form { display: flex; gap: 0.5rem; align-items: center; }
-  .link-form label { font-size: 0.85rem; opacity: 0.7; }
-  .muted { opacity: 0.6; }
-  .suggestion { font-size: 0.9rem; }
-  .error { color: var(--of-color-danger, #c0392b); }
-</style>
