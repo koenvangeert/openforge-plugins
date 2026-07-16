@@ -1,0 +1,18 @@
+import { svelte } from '@sveltejs/vite-plugin-svelte'
+import { svelteTesting } from '@testing-library/svelte/vite'
+import { defineConfig } from 'vitest/config'
+
+// The SDK resolves through the node_modules `link:` to its built `dist/`
+// (see docs/adr/0001), so no source aliases are needed here — unlike the
+// in-repo OpenForge plugins that alias `@openforge-app/plugin-sdk` to source.
+export default defineConfig({
+  plugins: [svelte(), svelteTesting()],
+  test: {
+    // Default to Node so backend/HTTP tests run without a DOM. Test files that
+    // need a browser DOM (DOMPurify sanitize, component render) opt in with a
+    // `// @vitest-environment jsdom` docblock.
+    environment: 'node',
+    globals: true,
+    include: ['src/**/*.test.ts'],
+  },
+})
