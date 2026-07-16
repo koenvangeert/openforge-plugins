@@ -36,6 +36,7 @@
       "settings",
       "backend",
       "storage",
+      "tasks",
       "commands",
       "system.openUrl"
     ]

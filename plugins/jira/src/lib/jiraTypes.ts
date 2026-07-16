@@ -10,6 +10,7 @@
 export type JiraErrorCode =
   | 'no-credentials'
   | 'invalid-credentials'
+  | 'invalid-key'
   | 'not-found'
   | 'invalid-jql'
   | 'network'
@@ -19,6 +20,7 @@ export interface JiraIssue {
   key: string
   summary: string
   status: string
+  priority: string | null
   issueType: string
   assignee: string | null
   updated: string | null
@@ -28,13 +30,18 @@ export interface JiraIssue {
   url: string
 }
 
-export interface JiraSearchRow {
+export interface GetIssueRequest {
   key: string
-  summary: string
-  status: string
-  issueType: string
-  assignee: string | null
-  url: string
+}
+
+export interface SearchIssuesRequest {
+  jql: string
+  nextPageToken?: string | null
+}
+
+export interface JiraPageMetadata {
+  isLast: boolean
+  nextPageToken: string | null
 }
 
 export type IssueResult =
@@ -42,7 +49,7 @@ export type IssueResult =
   | { ok: false; error: JiraErrorCode; message: string }
 
 export type SearchResult =
-  | { ok: true; rows: JiraSearchRow[] }
+  | { ok: true; issues: JiraIssue[]; page: JiraPageMetadata }
   | { ok: false; error: JiraErrorCode; message: string }
 
 export type TestConnectionResult =

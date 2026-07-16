@@ -31,6 +31,7 @@ describe('fetchIssue', () => {
       fields: {
         summary: 'Do the thing',
         status: { name: 'In Progress' },
+        priority: { name: 'High' },
         issuetype: { name: 'Story' },
         assignee: { displayName: 'Ada' },
         updated: '2026-07-09T10:00:00.000+0000',
@@ -50,6 +51,7 @@ describe('fetchIssue', () => {
         key: 'PROJ-1',
         summary: 'Do the thing',
         status: 'In Progress',
+        priority: 'High',
         issueType: 'Story',
         assignee: 'Ada',
         updated: '2026-07-09T10:00:00.000+0000',
@@ -128,32 +130,64 @@ describe('fetchIssue', () => {
 })
 
 describe('searchIssues', () => {
-  it('POSTs the JQL and maps rows', async () => {
+  it('POSTs a continuation token and returns normalized issues with page metadata', async () => {
     const fetchImpl = okFetch({
+      isLast: false,
+      nextPageToken: 'page-3',
       issues: [
-        { key: 'PROJ-1', fields: { summary: 'One', status: { name: 'To Do' }, issuetype: { name: 'Bug' }, assignee: null } },
+        {
+          key: 'PROJ-1',
+          fields: {
+            summary: 'One',
+            status: { name: 'To Do' },
+            priority: { name: 'High' },
+            issuetype: { name: 'Bug' },
+            assignee: null,
+          },
+          renderedFields: { description: '<p>Details</p>' },
+        },
       ],
     })
-    const result = await searchIssues(creds, 'project = PROJ', fetchImpl)
+    const result = await searchIssues(creds, { jql: 'project = PROJ', nextPageToken: 'page-2' }, fetchImpl)
     expect(fetchImpl).toHaveBeenCalledWith(
       'https://acme.atlassian.net/rest/api/3/search/jql',
-      expect.objectContaining({ method: 'POST' }),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          jql: 'project = PROJ',
+          maxResults: 50,
+          nextPageToken: 'page-2',
+          fields: ['summary', 'status', 'priority', 'issuetype', 'assignee', 'description'],
+          expand: 'renderedFields',
+        }),
+      }),
     )
     expect(result).toEqual({
       ok: true,
-      rows: [{ key: 'PROJ-1', summary: 'One', status: 'To Do', issueType: 'Bug', assignee: null, url: 'https://acme.atlassian.net/browse/PROJ-1' }],
+      issues: [{
+        key: 'PROJ-1',
+        summary: 'One',
+        status: 'To Do',
+        priority: 'High',
+        issueType: 'Bug',
+        assignee: null,
+        updated: null,
+        descriptionHtml: '<p>Details</p>',
+        url: 'https://acme.atlassian.net/browse/PROJ-1',
+      }],
+      page: { isLast: false, nextPageToken: 'page-3' },
     })
   })
 
-  it('returns an empty row list for no matches', async () => {
-    const result = await searchIssues(creds, 'project = EMPTY', okFetch({ issues: [] }))
-    expect(result).toEqual({ ok: true, rows: [] })
+  it('returns an empty issue page for no matches', async () => {
+    const result = await searchIssues(creds, { jql: 'project = EMPTY' }, okFetch({ issues: [], isLast: true }))
+    expect(result).toEqual({ ok: true, issues: [], page: { isLast: true, nextPageToken: null } })
   })
 
   it('maps 400 to invalid-jql with the Jira message', async () => {
     const result = await searchIssues(
       creds,
-      'this is not jql',
+      { jql: 'this is not jql' },
       vi.fn(async () => response(400, { errorMessages: ["Error in JQL near 'not'."] })),
     )
     expect(result).toEqual({ ok: false, error: 'invalid-jql', message: "Error in JQL near 'not'." })
@@ -162,7 +196,7 @@ describe('searchIssues', () => {
   it('falls back to status text for a non-JSON error response', async () => {
     const result = await searchIssues(
       creds,
-      'this is not jql',
+      { jql: 'this is not jql' },
       vi.fn(async () => nonJsonResponse(400)),
     )
 
@@ -170,18 +204,24 @@ describe('searchIssues', () => {
   })
 
   it('maps 401 to invalid-credentials', async () => {
-    const result = await searchIssues(creds, 'project = PROJ', vi.fn(async () => response(403, {})))
+    const result = await searchIssues(creds, { jql: 'project = PROJ' }, vi.fn(async () => response(403, {})))
     expect(result).toMatchObject({ ok: false, error: 'invalid-credentials' })
   })
 
   it('maps a non-JSON success response to unknown', async () => {
-    const result = await searchIssues(creds, 'project = PROJ', vi.fn(async () => nonJsonResponse(200)))
+    const result = await searchIssues(creds, { jql: 'project = PROJ' }, vi.fn(async () => nonJsonResponse(200)))
 
     expect(result).toEqual({ ok: false, error: 'unknown', message: 'Jira returned an invalid response.' })
   })
 
   it('maps an unexpected JSON success body to unknown', async () => {
-    const result = await searchIssues(creds, 'project = PROJ', okFetch({ issues: [null] }))
+    const result = await searchIssues(creds, { jql: 'project = PROJ' }, okFetch({ issues: [null], isLast: true }))
+
+    expect(result).toEqual({ ok: false, error: 'unknown', message: 'Jira returned an invalid response.' })
+  })
+
+  it('rejects a non-final page without a continuation token', async () => {
+    const result = await searchIssues(creds, { jql: 'project = PROJ' }, okFetch({ issues: [], isLast: false }))
 
     expect(result).toEqual({ ok: false, error: 'unknown', message: 'Jira returned an invalid response.' })
   })

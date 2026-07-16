@@ -98,6 +98,14 @@ describe('saveSettings', () => {
 })
 
 describe('getIssue', () => {
+  it('returns a typed invalid-key failure for a null RPC payload', async () => {
+    const registry = await setup(true)
+
+    const result = await invoke<IssueResult>(registry, METHOD.getIssue, null)
+
+    expect(result).toMatchObject({ ok: false, error: 'invalid-key' })
+  })
+
   it('returns no-credentials when the plugin is unconfigured', async () => {
     const registry = await setup(false)
     const result = await invoke<IssueResult>(registry, METHOD.getIssue, { key: 'PROJ-1' })
@@ -109,7 +117,18 @@ describe('getIssue', () => {
     const fetchSpy = vi.fn()
     vi.stubGlobal('fetch', fetchSpy)
     const result = await invoke<IssueResult>(registry, METHOD.getIssue, { key: '  ' })
-    expect(result).toMatchObject({ ok: false, error: 'not-found' })
+    expect(result).toMatchObject({ ok: false, error: 'invalid-key' })
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('rejects a malformed direct lookup key without a request', async () => {
+    const registry = await setup(true)
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+
+    const result = await invoke<IssueResult>(registry, METHOD.getIssue, { key: 'not a key' })
+
+    expect(result).toMatchObject({ ok: false, error: 'invalid-key' })
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
@@ -156,6 +175,14 @@ describe('getIssue', () => {
 })
 
 describe('search', () => {
+  it('returns a typed invalid-jql failure for a null RPC payload', async () => {
+    const registry = await setup(true)
+
+    const result = await invoke<SearchResult>(registry, METHOD.search, null)
+
+    expect(result).toMatchObject({ ok: false, error: 'invalid-jql' })
+  })
+
   it('returns no-credentials when unconfigured', async () => {
     const registry = await setup(false)
     const result = await invoke<SearchResult>(registry, METHOD.search, { jql: 'project = X' })
@@ -180,8 +207,33 @@ describe('search', () => {
 
   it('returns empty rows for no matches', async () => {
     const registry = await setup(true)
-    vi.stubGlobal('fetch', vi.fn(async () => response(200, { issues: [] })))
+    vi.stubGlobal('fetch', vi.fn(async () => response(200, { issues: [], isLast: true })))
     const result = await invoke<SearchResult>(registry, METHOD.search, { jql: 'project = EMPTY' })
-    expect(result).toEqual({ ok: true, rows: [] })
+    expect(result).toEqual({ ok: true, issues: [], page: { isLast: true, nextPageToken: null } })
+  })
+
+  it('forwards Jira pagination tokens and returns the next page token', async () => {
+    const registry = await setup(true)
+    const fetchSpy = vi.fn(async () => response(200, {
+      issues: [],
+      isLast: false,
+      nextPageToken: 'next-token',
+    }))
+    vi.stubGlobal('fetch', fetchSpy)
+
+    const result = await invoke<SearchResult>(registry, METHOD.search, {
+      jql: 'project = KVG',
+      nextPageToken: 'current-token',
+    })
+
+    const [, request] = fetchSpy.mock.calls[0] as unknown as [string, RequestInit]
+    expect(JSON.parse(request.body as string)).toMatchObject({
+      jql: 'project = KVG',
+      nextPageToken: 'current-token',
+    })
+    expect(result).toMatchObject({
+      ok: true,
+      page: { isLast: false, nextPageToken: 'next-token' },
+    })
   })
 })

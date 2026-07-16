@@ -3,10 +3,11 @@ import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
 import { normalizeCredentials } from './lib/credentials'
 import type { JiraCredentials } from './lib/credentials'
 import { fetchIssue, searchIssues, testConnection } from './lib/jiraClient'
-import type { IssueResult, SearchResult, TestConnectionResult } from './lib/jiraTypes'
+import { isValidIssueKey } from './lib/issueKey'
 import { GLOBAL_KEY, METHOD } from './lib/protocol'
+import type { JiraBackendInput, JiraBackendOutput } from './lib/protocol'
 import { buildCredentialsToStore } from './lib/settingsForm'
-import type { CredentialFormInput, JiraSettingsSnapshot, SaveSettingsResult } from './lib/settingsForm'
+import type { JiraSettingsSnapshot } from './lib/settingsForm'
 
 // The backend owns every Jira HTTP call and is the only place the API token is
 // read (docs/adr/0002). Credentials are re-read on each call so a settings edit
@@ -24,16 +25,26 @@ function toSettingsSnapshot(credentials: JiraCredentials | null): JiraSettingsSn
 
 const NO_CREDENTIALS_MESSAGE = 'Add your Jira site, email and API token in the Jira settings.'
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
 export default defineBackendPlugin({
   activate(openforge, context) {
     context.subscriptions.add(
-      openforge.backend.registerMethod<null, JiraSettingsSnapshot>(METHOD.getSettings, {
+      openforge.backend.registerMethod<
+        JiraBackendInput<'getSettings'>,
+        JiraBackendOutput<'getSettings'>
+      >(METHOD.getSettings, {
         handler: async () => toSettingsSnapshot(await readCredentials(openforge)),
       }),
     )
 
     context.subscriptions.add(
-      openforge.backend.registerMethod<CredentialFormInput, SaveSettingsResult>(METHOD.saveSettings, {
+      openforge.backend.registerMethod<
+        JiraBackendInput<'saveSettings'>,
+        JiraBackendOutput<'saveSettings'>
+      >(METHOD.saveSettings, {
         handler: async (input) => {
           const existing = await readCredentials(openforge)
           const result = buildCredentialsToStore(input, existing?.apiToken ?? null)
@@ -53,35 +64,57 @@ export default defineBackendPlugin({
     )
 
     context.subscriptions.add(
-      openforge.backend.registerMethod<{ key: string }, IssueResult>(METHOD.getIssue, {
-        handler: async ({ key }) => {
-          const trimmed = typeof key === 'string' ? key.trim() : ''
-          if (trimmed.length === 0) {
-            return { ok: false, error: 'not-found', message: 'No issue key was provided.' }
+      openforge.backend.registerMethod<unknown, JiraBackendOutput<'getIssue'>>(METHOD.getIssue, {
+        input: {
+          type: 'object',
+          required: ['key'],
+          properties: { key: { type: 'string' } },
+        },
+        handler: async (input) => {
+          const key = isRecord(input) ? input.key : null
+          const normalized = typeof key === 'string' ? key.trim().toUpperCase() : ''
+          if (!isValidIssueKey(normalized)) {
+            return { ok: false, error: 'invalid-key', message: 'Enter a valid issue key like PROJ-123.' }
           }
           const creds = await readCredentials(openforge)
           if (!creds) return { ok: false, error: 'no-credentials', message: NO_CREDENTIALS_MESSAGE }
-          return fetchIssue(creds, trimmed)
+          return fetchIssue(creds, normalized)
         },
       }),
     )
 
     context.subscriptions.add(
-      openforge.backend.registerMethod<{ jql: string }, SearchResult>(METHOD.search, {
-        handler: async ({ jql }) => {
+      openforge.backend.registerMethod<unknown, JiraBackendOutput<'search'>>(METHOD.search, {
+        input: {
+          type: 'object',
+          required: ['jql'],
+          properties: {
+            jql: { type: 'string' },
+            nextPageToken: { type: ['string', 'null'] },
+          },
+        },
+        handler: async (input) => {
+          const jql = isRecord(input) ? input.jql : null
+          const nextPageToken = isRecord(input) ? input.nextPageToken : null
           const trimmed = typeof jql === 'string' ? jql.trim() : ''
           if (trimmed.length === 0) {
             return { ok: false, error: 'invalid-jql', message: 'No JQL query was provided.' }
           }
           const creds = await readCredentials(openforge)
           if (!creds) return { ok: false, error: 'no-credentials', message: NO_CREDENTIALS_MESSAGE }
-          return searchIssues(creds, trimmed)
+          return searchIssues(creds, {
+            jql: trimmed,
+            nextPageToken: typeof nextPageToken === 'string' ? nextPageToken.trim() || null : null,
+          })
         },
       }),
     )
 
     context.subscriptions.add(
-      openforge.backend.registerMethod<null, TestConnectionResult>(METHOD.testConnection, {
+      openforge.backend.registerMethod<
+        JiraBackendInput<'testConnection'>,
+        JiraBackendOutput<'testConnection'>
+      >(METHOD.testConnection, {
         handler: async () => {
           const creds = await readCredentials(openforge)
           if (!creds) return { ok: false, error: 'no-credentials', message: NO_CREDENTIALS_MESSAGE }

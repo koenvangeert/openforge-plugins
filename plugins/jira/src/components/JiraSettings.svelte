@@ -1,9 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import type { PluginSettingsSectionProps } from '@openforge-app/plugin-sdk/frontend'
-  import type { JiraSettingsSnapshot, SaveSettingsResult } from '../lib/settingsForm'
-  import type { TestConnectionResult } from '../lib/jiraTypes'
-  import { METHOD } from '../lib/protocol'
+  import { invokeJiraBackend } from '../lib/protocol'
 
   let { api }: PluginSettingsSectionProps = $props()
 
@@ -19,8 +17,7 @@
   onMount(() => {
     void (async () => {
       try {
-        await api.backend.whenReady()
-        const settings = await api.backend.invoke<JiraSettingsSnapshot>(METHOD.getSettings)
+        const settings = await invokeJiraBackend(api.backend, 'getSettings', null)
         site = settings.site
         email = settings.email
         hasStoredToken = settings.hasStoredToken
@@ -34,8 +31,7 @@
     status = null
 
     try {
-      await api.backend.whenReady()
-      const result = await api.backend.invoke<SaveSettingsResult>(METHOD.saveSettings, { site, email, apiToken })
+      const result = await invokeJiraBackend(api.backend, 'saveSettings', { site, email, apiToken })
       if (!result.ok) {
         status = { kind: 'error', message: result.message }
         return
@@ -55,8 +51,7 @@
     testing = true
     status = null
     try {
-      await api.backend.whenReady()
-      const result = await api.backend.invoke<TestConnectionResult>(METHOD.testConnection)
+      const result = await invokeJiraBackend(api.backend, 'testConnection', null)
       status = result.ok
         ? { kind: 'ok', message: `Connected as ${result.displayName}.` }
         : { kind: 'error', message: result.message }

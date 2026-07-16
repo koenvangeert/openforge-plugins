@@ -7,8 +7,8 @@ KVG-1219; credential trade-off recorded in
 
 ## Surfaces
 
-- **Rail view** (`views.register`) — runs a user-editable JQL query; the last
-  query is remembered in `storage.global`.
+- **Rail view** (`views.register`) — runs the active Project-owned Intake Filter,
+  supports raw JQL, and follows Jira continuation tokens without a silent cutoff.
 - **Settings section** (`settings.registerSection`) — Jira site, email and API
   token.
 - **Task-pane tab** (`taskPane.registerTab`) — _temporarily disabled_. Shows the
@@ -32,7 +32,7 @@ exposure). The backend reads credentials from `storage.global` and uses Basic
 auth (`base64(email:token)`) against Jira Cloud REST v3:
 
 - `GET /rest/api/3/issue/{key}?expand=renderedFields`
-- `POST /rest/api/3/search`
+- `POST /rest/api/3/search/jql`
 - `GET /rest/api/3/myself` (settings "Test connection")
 
 Backend methods return a discriminated result (`{ ok: true, … }` /

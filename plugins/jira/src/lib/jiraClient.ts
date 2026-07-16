@@ -7,7 +7,7 @@ import type {
   IssueResult,
   JiraErrorCode,
   JiraIssue,
-  JiraSearchRow,
+  SearchIssuesRequest,
   SearchResult,
   TestConnectionResult,
 } from './jiraTypes'
@@ -101,6 +101,7 @@ function normalizeIssue(creds: JiraCredentials, data: RawIssue): JiraIssue {
     key: data.key,
     summary: fields.summary ?? '(no summary)',
     status: fields.status?.name ?? 'Unknown',
+    priority: fields.priority?.name ?? null,
     issueType: fields.issuetype?.name ?? 'Unknown',
     assignee: fields.assignee?.displayName ?? null,
     updated: fields.updated ?? null,
@@ -112,6 +113,7 @@ function normalizeIssue(creds: JiraCredentials, data: RawIssue): JiraIssue {
 interface RawIssueFields {
   summary?: string | null
   status?: { name?: string | null } | null
+  priority?: { name?: string | null } | null
   issuetype?: { name?: string | null } | null
   assignee?: { displayName?: string | null } | null
   updated?: string | null
@@ -135,6 +137,7 @@ function isRawIssueFields(value: unknown): value is RawIssueFields {
   if (!isRecord(value)) return false
   if (!hasOptionalNullableString(value, 'summary') || !hasOptionalNullableString(value, 'updated')) return false
   if (value.status !== undefined && value.status !== null && !isNamedField(value.status)) return false
+  if (value.priority !== undefined && value.priority !== null && !isNamedField(value.priority)) return false
   if (value.issuetype !== undefined && value.issuetype !== null && !isNamedField(value.issuetype)) return false
   if (value.assignee !== undefined && value.assignee !== null) {
     if (!isRecord(value.assignee) || !hasOptionalNullableString(value.assignee, 'displayName')) return false
@@ -170,30 +173,42 @@ export async function fetchIssue(creds: JiraCredentials, key: string, fetchImpl:
 
 interface RawSearchResponse {
   issues: RawIssue[]
+  isLast: boolean
+  nextPageToken?: string
 }
 
 function isRawSearchResponse(value: unknown): value is RawSearchResponse {
-  return isRecord(value) && Array.isArray(value.issues) && value.issues.every(isRawIssue)
+  return isRecord(value)
+    && Array.isArray(value.issues)
+    && value.issues.every(isRawIssue)
+    && typeof value.isLast === 'boolean'
+    && (value.nextPageToken === undefined || typeof value.nextPageToken === 'string')
+    && (value.isLast || (typeof value.nextPageToken === 'string' && value.nextPageToken.length > 0))
 }
 
 /**
  * POST /rest/api/3/search/jql — Jira Cloud's current JQL search endpoint (the
  * classic /rest/api/3/search was removed by Atlassian in 2025). It requires an
- * explicit `fields` list and paginates with `nextPageToken`; v1 shows only the
- * first page (up to `maxResults`) and ignores the token. The success payload
- * still exposes `.issues`, so normalization is unchanged.
+ * explicit `fields` list and paginates with `nextPageToken`.
  */
 export async function searchIssues(
   creds: JiraCredentials,
-  jql: string,
+  input: SearchIssuesRequest,
   fetchImpl: FetchLike = fetch,
   maxResults = 50,
 ): Promise<SearchResult> {
   const url = `${creds.site}/rest/api/3/search/jql`
+  const body = {
+    jql: input.jql,
+    maxResults,
+    ...(input.nextPageToken ? { nextPageToken: input.nextPageToken } : {}),
+    fields: ['summary', 'status', 'priority', 'issuetype', 'assignee', 'description'],
+    expand: 'renderedFields',
+  }
   const request = await requestJira(fetchImpl, url, {
     method: 'POST',
     headers: jsonHeaders(creds),
-    body: JSON.stringify({ jql, maxResults, fields: ['summary', 'status', 'issuetype', 'assignee'] }),
+    body: JSON.stringify(body),
   })
   if (!request.ok) return request
   const { response } = request
@@ -205,18 +220,14 @@ export async function searchIssues(
   }
   const parsed = await decodeJson(response, isRawSearchResponse)
   if (!parsed.ok) return parsed
-  const rows: JiraSearchRow[] = parsed.data.issues.map((issue) => {
-    const fields = issue.fields ?? {}
-    return {
-      key: issue.key,
-      summary: fields.summary ?? '(no summary)',
-      status: fields.status?.name ?? 'Unknown',
-      issueType: fields.issuetype?.name ?? 'Unknown',
-      assignee: fields.assignee?.displayName ?? null,
-      url: browseUrl(creds, issue.key),
-    }
-  })
-  return { ok: true, rows }
+  return {
+    ok: true,
+    issues: parsed.data.issues.map((issue) => normalizeIssue(creds, issue)),
+    page: {
+      isLast: parsed.data.isLast,
+      nextPageToken: parsed.data.nextPageToken ?? null,
+    },
+  }
 }
 
 interface RawMyself {

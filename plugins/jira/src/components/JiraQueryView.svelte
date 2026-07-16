@@ -1,30 +1,53 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import type { PluginViewProps } from '@openforge-app/plugin-sdk/frontend'
-  import type { JiraErrorCode, JiraSearchRow } from '../lib/jiraTypes'
-  import { readLastJql, runQuery } from '../lib/jqlQuery'
-  import { REFRESH_EVENT } from '../lib/protocol'
+  import type { JiraErrorCode, JiraIssue } from '../lib/jiraTypes'
+  import { searchIntakeIssues } from '../lib/intakeController'
+  import { DEFAULT_INTAKE_FILTER, readIntakeFilters } from '../lib/intakeFilters'
+  import { HOST_EVENT, REFRESH_EVENT } from '../lib/protocol'
+
+  interface NavigationChanged {
+    activeProjectId: string | null
+  }
 
   let { api }: PluginViewProps = $props()
 
   let jql = $state('')
-  let rows = $state<JiraSearchRow[]>([])
+  let rows = $state<JiraIssue[]>([])
+  let nextPageToken = $state<string | null>(null)
   let loading = $state(false)
   let hasRun = $state(false)
   let error = $state<{ code: JiraErrorCode; message: string } | null>(null)
+  let querySequence = 0
+  let projectSequence = 0
 
-  async function run() {
+  async function run(pageToken: string | null = null) {
+    const sequence = ++querySequence
     loading = true
     error = null
-    const result = await runQuery(api, jql)
+    const result = await searchIntakeIssues(api, { jql, nextPageToken: pageToken })
+    if (sequence !== querySequence) return
     loading = false
     hasRun = true
     if (result.ok) {
-      rows = result.rows
+      rows = pageToken ? [...rows, ...result.issues] : result.issues
+      nextPageToken = result.page.nextPageToken
     } else {
-      rows = []
+      if (!pageToken) rows = []
       error = { code: result.error, message: result.message }
     }
+  }
+
+  async function loadProject(projectId: string | null) {
+    const sequence = ++projectSequence
+    let nextJql = DEFAULT_INTAKE_FILTER.jql
+    if (projectId) {
+      const filters = await readIntakeFilters(api, projectId)
+      nextJql = filters.filters.find(({ id }) => id === filters.activeFilterId)?.jql ?? nextJql
+    }
+    if (sequence !== projectSequence) return
+    jql = nextJql
+    await run()
   }
 
   function onKeydown(event: KeyboardEvent) {
@@ -36,12 +59,16 @@
   }
 
   onMount(() => {
-    void (async () => {
-      jql = await readLastJql(api)
-      if (jql.trim().length > 0) await run()
-    })()
-    const subscription = api.events.on(REFRESH_EVENT, () => void run())
-    return () => void subscription.dispose()
+    void loadProject(api.navigation.get().activeProjectId)
+    const refreshSubscription = api.events.on(REFRESH_EVENT, () => void run())
+    const navigationSubscription = api.events.onGlobal<NavigationChanged>(
+      HOST_EVENT.navigationChanged,
+      ({ activeProjectId }) => void loadProject(activeProjectId),
+    )
+    return () => {
+      void refreshSubscription.dispose()
+      void navigationSubscription.dispose()
+    }
   })
 </script>
 
@@ -94,5 +121,10 @@
         </li>
       {/each}
     </ul>
+    {#if nextPageToken}
+      <button class="btn btn-ghost btn-sm self-center" onclick={() => void run(nextPageToken)} disabled={loading}>
+        {loading ? 'Loading…' : 'Load more'}
+      </button>
+    {/if}
   {/if}
 </section>

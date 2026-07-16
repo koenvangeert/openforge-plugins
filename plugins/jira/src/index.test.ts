@@ -12,7 +12,7 @@ describe('jira plugin package metadata', () => {
     expect(packageJson.openforge.id).toBe('dev.kvg.jira')
     expect(packageJson.openforge.icon).toBe('kanban')
     expect(packageJson.openforge.requires).toEqual(
-      expect.arrayContaining(['views', 'settings', 'backend', 'storage', 'commands', 'system.openUrl']),
+      expect.arrayContaining(['views', 'settings', 'backend', 'storage', 'tasks', 'commands', 'system.openUrl']),
     )
   })
 })

@@ -25,6 +25,10 @@
       <dt class="text-base-content/60">Assignee</dt>
       <dd class="m-0">{issue.assignee ?? 'Unassigned'}</dd>
     </div>
+    <div>
+      <dt class="text-base-content/60">Priority</dt>
+      <dd class="m-0">{issue.priority ?? 'None'}</dd>
+    </div>
   </dl>
   {#if issue.descriptionHtml}
     <div class="markdown-body">{@html issue.descriptionHtml}</div>

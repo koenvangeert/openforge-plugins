@@ -110,6 +110,7 @@ describe('loadIssue', () => {
         key: 'PROJ-1',
         summary: 'S',
         status: 'Open',
+        priority: null,
         issueType: 'Task',
         assignee: null,
         updated: null,

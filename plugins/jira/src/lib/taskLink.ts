@@ -7,7 +7,7 @@ import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import { sanitizeHtml } from '@openforge-app/plugin-sdk/sanitize'
 import { extractIssueKeyHint } from './issueKey'
 import type { IssueResult, JiraIssue } from './jiraTypes'
-import { METHOD, TASK_KEY } from './protocol'
+import { invokeJiraBackend, TASK_KEY } from './protocol'
 
 type Api = Pick<FrontendOpenForgeAPI, 'storage' | 'backend' | 'tasks'>
 
@@ -61,8 +61,7 @@ export async function readCachedIssue(api: Api, taskId: string): Promise<JiraIss
  * sanitized result. On failure the backend's typed error is returned as-is.
  */
 export async function loadIssue(api: Api, taskId: string, key: string): Promise<IssueResult> {
-  await api.backend.whenReady()
-  const result = await api.backend.invoke<IssueResult>(METHOD.getIssue, { key })
+  const result = await invokeJiraBackend(api.backend, 'getIssue', { key })
   if (!result.ok) return result
   const issue: JiraIssue = { ...result.issue, descriptionHtml: sanitizeHtml(result.issue.descriptionHtml) }
   await api.storage.task(taskId).set(TASK_KEY.cachedIssue, toJson(issue))
