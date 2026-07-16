@@ -77,6 +77,17 @@ Jira Issue lives in Jira. The two are linked, never merged.
 _Avoid_: calling an OpenForge Task an "issue" or "ticket"; "card", "story" (a
 story is one issue type, not the category).
 
+**Jira Authority**:
+Jira is the only place where **Jira Issues** are created, changed, transitioned,
+or deleted. The Jira Plugin reads and opens Issues but never writes them.
+_Avoid_: write-back, two-way sync, inline Jira editing, Jira mutations.
+
+**Jira Connection**:
+The globally configured Jira site and user identity shared by the Jira Plugin
+across OpenForge **Projects**. Project-specific work discovery belongs to each
+Project's **Intake Filters**, not to separate Jira credentials.
+_Avoid_: per-Project Jira account, per-filter credentials.
+
 **Issue Key**:
 The human-readable Jira identifier such as `PROJ-123`. It can look identical to an
 OpenForge **Task id** (e.g. `KVG-1219`) but the two id systems are independent —
@@ -84,8 +95,62 @@ coincidental shape is not identity.
 _Avoid_: conflating with the **Task id**; "issue number", "ticket id".
 
 **Issue Link**:
-The stored association from one OpenForge **Task** to one **Issue Key**, held in
-`storage.task(taskId)`. Created explicitly by the user; may be pre-filled by
-scanning the Task's text for a key-shaped hint, but the hint is never authoritative.
+The stored association from one OpenForge **Task** to at most one **Issue Key**,
+held in `storage.task(taskId)`. One **Jira Issue** may be linked to several Tasks;
+the user explicitly confirms a same-project duplicate after a warning. A
+key-shaped hint scanned from Task text is never authoritative.
 _Avoid_: "mapping"/"sync" (nothing is written back into the Task or into Jira);
-assuming the Task id equals the Issue Key.
+assuming a one-to-one relationship or that the Task id equals the Issue Key.
+
+**Issue Link State**:
+The active **Project**'s count of OpenForge **Tasks** linked to a **Jira Issue**,
+shown as unlinked or as the number of linked Tasks.
+_Avoid_: Jira status, synchronization state, global link count.
+
+**Linked Issue Section**:
+The collapsible Jira Plugin section present in every OpenForge **Task**'s detail
+stack. It shows compact current Jira context and a path back to Jira when linked;
+otherwise it offers to create an **Issue Link**, including a confirmable
+key-shaped hint when one exists.
+_Avoid_: Jira tab, Task-pane tab, full Jira editor.
+
+**Issue Intake**:
+The user-initiated workflow that creates an OpenForge **Task** from a **Jira
+Issue** and records its **Issue Link**. It explicitly ends with either the
+created Task or, after user confirmation, a started OpenForge **Implementation
+Run**; OpenForge owns both lifecycles.
+_Avoid_: import, sync, Jira task, treating the Jira Issue as the OpenForge Task.
+
+**Intake Workspace**:
+The active OpenForge **Project**'s master-detail Jira Plugin surface where users
+find **Jira Issues**, compare them in a table, review one Issue's context, and
+begin **Issue Intake** for that Project.
+_Avoid_: Jira dashboard, backlog mirror, Issue editor, cross-project intake,
+target Project chooser, AI scoring, Kanban, reporting.
+
+**Intake Filter**:
+A named, Project-owned Jira query that selects the **Jira Issues** shown in the
+**Intake Workspace**. Exactly one Intake Filter is active at a time; direct
+**Issue Key** lookup remains available independently.
+_Avoid_: combined filter chips, global filter, client-side app filter.
+
+**Intake Context**:
+The concise Jira context carried into a new OpenForge **Task** during **Issue
+Intake**: the **Issue Key**, Jira summary, and Jira description. **Agent Jira
+Access** supplies current or extended Issue details when needed.
+_Avoid_: full Issue mirror, synchronized copy, copying every Jira field.
+
+**Agent Jira Access**:
+The independently configured ability of an **Agent Session** to retrieve the
+current **Jira Issue** using its **Issue Key**. It is available to the agent
+workflow but is not supplied by the Jira Plugin or its **Issue Link**.
+_Avoid_: Jira SDK, plugin backend access, assuming every agent has it configured.
+
+## Example dialogue
+
+> **Developer:** I found `PROJ-123` in Jira. Can I bring it into OpenForge?
+>
+> **Product expert:** Start **Issue Intake** for that **Jira Issue**. OpenForge
+> will create a new **Task**, record an **Issue Link** to `PROJ-123`, and can
+> start an **Implementation Run** after you confirm. The agent can use **Agent
+> Jira Access** to retrieve current details from the Issue Key.
