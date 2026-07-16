@@ -4,6 +4,8 @@
 /** Backend method names (registered via backend.registerMethod, called via api.backend.invoke). */
 export const METHOD = {
   getIssue: 'getIssue',
+  getSettings: 'getSettings',
+  saveSettings: 'saveSettings',
   search: 'search',
   testConnection: 'testConnection',
 } as const

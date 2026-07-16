@@ -1,6 +1,6 @@
 // Jira Cloud credentials. Stored in storage.global as plaintext JSON and read
-// ONLY in the backend to perform HTTP (see docs/adr/0002). The renderer's
-// settings form writes them; nothing else in the renderer reads them.
+// ONLY in the backend for settings persistence and HTTP (see docs/adr/0002).
+// The renderer receives only redacted settings metadata.
 
 export interface JiraCredentials {
   /** Normalized origin, e.g. https://acme.atlassian.net (no trailing slash, no path). */

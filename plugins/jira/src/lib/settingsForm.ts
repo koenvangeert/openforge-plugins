@@ -1,6 +1,6 @@
-// Pure validation/merge for the settings form, extracted so the error-prone
-// "leave the token blank to keep the existing one" branch is unit-testable
-// without rendering the Svelte component.
+// Pure validation/merge used only by the backend settings method. Keeping the
+// "leave the token blank to keep the existing one" branch behind that method
+// prevents stored tokens from crossing into renderer memory.
 
 import type { JiraCredentials } from './credentials'
 import { normalizeSite } from './credentials'
@@ -11,6 +11,16 @@ export interface CredentialFormInput {
   /** What the user typed into the token field; blank means "keep existing". */
   apiToken: string
 }
+
+export interface JiraSettingsSnapshot {
+  site: string
+  email: string
+  hasStoredToken: boolean
+}
+
+export type SaveSettingsResult =
+  | { ok: true; settings: JiraSettingsSnapshot }
+  | { ok: false; message: string }
 
 export type CredentialFormResult =
   | { ok: true; credentials: JiraCredentials }

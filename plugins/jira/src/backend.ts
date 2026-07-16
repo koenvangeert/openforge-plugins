@@ -5,6 +5,8 @@ import type { JiraCredentials } from './lib/credentials'
 import { fetchIssue, searchIssues, testConnection } from './lib/jiraClient'
 import type { IssueResult, SearchResult, TestConnectionResult } from './lib/jiraTypes'
 import { GLOBAL_KEY, METHOD } from './lib/protocol'
+import { buildCredentialsToStore } from './lib/settingsForm'
+import type { CredentialFormInput, JiraSettingsSnapshot, SaveSettingsResult } from './lib/settingsForm'
 
 // The backend owns every Jira HTTP call and is the only place the API token is
 // read (docs/adr/0002). Credentials are re-read on each call so a settings edit
@@ -14,10 +16,42 @@ async function readCredentials(openforge: BackendOpenForgeAPI): Promise<JiraCred
   return normalizeCredentials(raw)
 }
 
+function toSettingsSnapshot(credentials: JiraCredentials | null): JiraSettingsSnapshot {
+  return credentials
+    ? { site: credentials.site, email: credentials.email, hasStoredToken: true }
+    : { site: '', email: '', hasStoredToken: false }
+}
+
 const NO_CREDENTIALS_MESSAGE = 'Add your Jira site, email and API token in the Jira settings.'
 
 export default defineBackendPlugin({
   activate(openforge, context) {
+    context.subscriptions.add(
+      openforge.backend.registerMethod<null, JiraSettingsSnapshot>(METHOD.getSettings, {
+        handler: async () => toSettingsSnapshot(await readCredentials(openforge)),
+      }),
+    )
+
+    context.subscriptions.add(
+      openforge.backend.registerMethod<CredentialFormInput, SaveSettingsResult>(METHOD.saveSettings, {
+        handler: async (input) => {
+          const existing = await readCredentials(openforge)
+          const result = buildCredentialsToStore(input, existing?.apiToken ?? null)
+          if (!result.ok) return result
+
+          await openforge.storage.global.set(GLOBAL_KEY.credentials, {
+            site: result.credentials.site,
+            email: result.credentials.email,
+            apiToken: result.credentials.apiToken,
+          })
+          return {
+            ok: true,
+            settings: toSettingsSnapshot(result.credentials),
+          }
+        },
+      }),
+    )
+
     context.subscriptions.add(
       openforge.backend.registerMethod<{ key: string }, IssueResult>(METHOD.getIssue, {
         handler: async ({ key }) => {

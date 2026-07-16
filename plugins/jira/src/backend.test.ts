@@ -4,6 +4,7 @@ import type { TestingOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/tes
 import backendPlugin from './backend'
 import type { IssueResult, SearchResult } from './lib/jiraTypes'
 import { GLOBAL_KEY, METHOD } from './lib/protocol'
+import type { JiraSettingsSnapshot, SaveSettingsResult } from './lib/settingsForm'
 
 function response(status: number, body: unknown): Response {
   return {
@@ -33,9 +34,57 @@ const invoke = <T>(registry: TestingOpenForgeRegistryFake, method: string, paylo
 afterEach(() => vi.unstubAllGlobals())
 
 describe('backend method registration', () => {
-  it('registers getIssue, search and testConnection', async () => {
+  it('registers settings, issue, search and connection methods', async () => {
     const registry = await setup(false)
-    expect(registry.snapshot.backendMethods.map((m) => m.id).sort()).toEqual(['getIssue', 'search', 'testConnection'])
+    expect(registry.snapshot.backendMethods.map((m) => m.id).sort()).toEqual([
+      'getIssue',
+      'getSettings',
+      'saveSettings',
+      'search',
+      'testConnection',
+    ])
+  })
+})
+
+describe('getSettings', () => {
+  it('returns only redacted settings metadata', async () => {
+    const registry = await setup(true)
+
+    const result = await invoke<JiraSettingsSnapshot>(registry, METHOD.getSettings)
+
+    expect(result).toEqual({
+      site: 'https://acme.atlassian.net',
+      email: 'me@acme.com',
+      hasStoredToken: true,
+    })
+    expect(result).not.toHaveProperty('apiToken')
+  })
+})
+
+describe('saveSettings', () => {
+  it('keeps the stored token when the submitted token is blank', async () => {
+    const registry = await setup(true)
+
+    const result = await invoke<SaveSettingsResult>(registry, METHOD.saveSettings, {
+      site: 'new-acme.atlassian.net',
+      email: 'new@acme.com',
+      apiToken: '   ',
+    })
+
+    expect(result).toEqual({
+      ok: true,
+      settings: {
+        site: 'https://new-acme.atlassian.net',
+        email: 'new@acme.com',
+        hasStoredToken: true,
+      },
+    })
+    expect(result).not.toHaveProperty('settings.apiToken')
+    await expect(registry.storage.global.get(GLOBAL_KEY.credentials)).resolves.toEqual({
+      site: 'https://new-acme.atlassian.net',
+      email: 'new@acme.com',
+      apiToken: 'tok',
+    })
   })
 })
 

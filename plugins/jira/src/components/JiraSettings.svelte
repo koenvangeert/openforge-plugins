@@ -1,10 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import type { PluginSettingsSectionProps } from '@openforge-app/plugin-sdk/frontend'
-  import type { JsonValue } from '@openforge-app/plugin-sdk'
-  import { buildCredentialsToStore } from '../lib/settingsForm'
+  import type { JiraSettingsSnapshot, SaveSettingsResult } from '../lib/settingsForm'
   import type { TestConnectionResult } from '../lib/jiraTypes'
-  import { GLOBAL_KEY, METHOD } from '../lib/protocol'
+  import { METHOD } from '../lib/protocol'
 
   let { api }: PluginSettingsSectionProps = $props()
 
@@ -19,12 +18,14 @@
 
   onMount(() => {
     void (async () => {
-      const raw = await api.storage.global.get(GLOBAL_KEY.credentials)
-      if (raw && typeof raw === 'object') {
-        const record = raw as Record<string, unknown>
-        site = typeof record.site === 'string' ? record.site : ''
-        email = typeof record.email === 'string' ? record.email : ''
-        hasStoredToken = typeof record.apiToken === 'string' && record.apiToken.length > 0
+      try {
+        await api.backend.whenReady()
+        const settings = await api.backend.invoke<JiraSettingsSnapshot>(METHOD.getSettings)
+        site = settings.site
+        email = settings.email
+        hasStoredToken = settings.hasStoredToken
+      } catch (error) {
+        status = { kind: 'error', message: error instanceof Error ? error.message : 'Could not load Jira settings.' }
       }
     })()
   })
@@ -32,27 +33,22 @@
   async function save() {
     status = null
 
-    // Only pull the stored token back into the renderer when the field is left
-    // blank ("keep existing"); otherwise the token never re-enters renderer memory.
-    let existingToken: string | null = null
-    if (apiToken.trim().length === 0 && hasStoredToken) {
-      const existing = await api.storage.global.get(GLOBAL_KEY.credentials)
-      if (existing && typeof existing === 'object' && typeof (existing as Record<string, unknown>).apiToken === 'string') {
-        existingToken = (existing as Record<string, unknown>).apiToken as string
+    try {
+      await api.backend.whenReady()
+      const result = await api.backend.invoke<SaveSettingsResult>(METHOD.saveSettings, { site, email, apiToken })
+      if (!result.ok) {
+        status = { kind: 'error', message: result.message }
+        return
       }
-    }
 
-    const result = buildCredentialsToStore({ site, email, apiToken }, existingToken)
-    if (!result.ok) {
-      status = { kind: 'error', message: result.message }
-      return
+      site = result.settings.site
+      email = result.settings.email
+      apiToken = ''
+      hasStoredToken = result.settings.hasStoredToken
+      status = { kind: 'saved', message: 'Saved.' }
+    } catch (error) {
+      status = { kind: 'error', message: error instanceof Error ? error.message : 'Could not save Jira settings.' }
     }
-
-    await api.storage.global.set(GLOBAL_KEY.credentials, result.credentials as unknown as JsonValue)
-    site = result.credentials.site
-    apiToken = ''
-    hasStoredToken = true
-    status = { kind: 'saved', message: 'Saved.' }
   }
 
   async function test() {
