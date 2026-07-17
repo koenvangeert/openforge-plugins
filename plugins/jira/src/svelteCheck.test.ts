@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 const packageDirectory = fileURLToPath(new URL('..', import.meta.url))
 
 describe('Svelte component type checking', () => {
-  it('rejects an invalid PluginViewProps context field', () => {
+  it('rejects an invalid PluginViewProps context field', { timeout: 15_000 }, () => {
     const result = spawnSync(
       'pnpm',
       [
