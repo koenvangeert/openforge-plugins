@@ -1,12 +1,63 @@
+import type { ImplementationRun } from '@openforge-app/plugin-sdk'
+import type { Task } from '@openforge-app/plugin-sdk/domain'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import { sanitizeHtml } from '@openforge-app/plugin-sdk/sanitize'
 import { readIntakeFilters } from './intakeFilters'
 import { isValidIssueKey, validateJql } from './issueKey'
 import type { IssueResult, JiraIssue, SearchIssuesRequest, SearchResult } from './jiraTypes'
 import { invokeJiraBackend } from './protocol'
-import { readLinkedKey } from './taskLink'
+import { readLinkedKey, saveLinkedKey } from './taskLink'
 
 export type IntakeControllerApi = Pick<FrontendOpenForgeAPI, 'backend' | 'storage' | 'tasks'>
+export type IssueIntakeApi = Pick<FrontendOpenForgeAPI, 'storage' | 'tasks'>
+
+export interface IssueIntakeRequest {
+  projectId: string
+  issue: Pick<JiraIssue, 'key' | 'summary' | 'descriptionHtml'>
+  duplicateConfirmed?: boolean
+}
+
+export interface DuplicateConfirmationRequired {
+  outcome: 'confirmation-required'
+  projectId: string
+  issueKey: string
+  linkedTaskCount: number
+  linkedTaskIds: string[]
+  message: string
+}
+
+export interface IntakeTaskCreated {
+  outcome: 'task-created'
+  projectId: string
+  issueKey: string
+  task: Task
+}
+
+export interface IntakeImplementationStarted {
+  outcome: 'implementation-started'
+  projectId: string
+  issueKey: string
+  task: Task
+  run: ImplementationRun
+}
+
+export interface IntakePartialSuccess {
+  outcome: 'partial-success'
+  projectId: string
+  issueKey: string
+  task: Task
+  startError: {
+    stage: 'start-implementation'
+    message: string
+  }
+}
+
+export type CreateIntakeTaskResult = DuplicateConfirmationRequired | IntakeTaskCreated
+
+export type CreateAndStartIntakeTaskResult =
+  | DuplicateConfirmationRequired
+  | IntakeImplementationStarted
+  | IntakePartialSuccess
 
 export interface IssueLinkState {
   issueKey: string
@@ -15,6 +66,15 @@ export interface IssueLinkState {
 }
 
 export type IssueLinkStates = Record<string, IssueLinkState>
+
+export function buildIssueIntakePrompt(
+  issue: Pick<JiraIssue, 'key' | 'summary' | 'descriptionHtml'>,
+): string {
+  const issueKey = issue.key.trim().toUpperCase()
+  const heading = `${issueKey}: ${issue.summary.trim()}`
+  const description = sanitizeHtml(issue.descriptionHtml).trim()
+  return description ? `${heading}\n\n${description}` : heading
+}
 
 function sanitizeIssue(issue: JiraIssue): JiraIssue {
   return { ...issue, descriptionHtml: sanitizeHtml(issue.descriptionHtml) }
@@ -93,7 +153,7 @@ export async function searchActiveIntakeFilter(
 }
 
 export async function deriveIssueLinkStates(
-  api: IntakeControllerApi,
+  api: IssueIntakeApi,
   projectId: string,
   issueKeys: string[],
 ): Promise<IssueLinkStates> {
@@ -114,4 +174,68 @@ export async function deriveIssueLinkStates(
     states[link.issueKey].linkedTaskCount += 1
   }
   return states
+}
+
+function duplicateConfirmation(
+  projectId: string,
+  state: IssueLinkState,
+): DuplicateConfirmationRequired {
+  const taskLabel = state.linkedTaskCount === 1 ? 'Task' : 'Tasks'
+  return {
+    outcome: 'confirmation-required',
+    projectId,
+    issueKey: state.issueKey,
+    linkedTaskCount: state.linkedTaskCount,
+    linkedTaskIds: state.taskIds,
+    message: `${state.issueKey} already has ${state.linkedTaskCount} linked ${taskLabel} in the active Project. Confirm to create another Task.`,
+  }
+}
+
+/** Create a backlog Task and persist its task-scoped Issue Link. Jira is never mutated. */
+export async function createIntakeTask(
+  api: IssueIntakeApi,
+  request: IssueIntakeRequest,
+): Promise<CreateIntakeTaskResult> {
+  const issueKey = request.issue.key.trim().toUpperCase()
+  const states = await deriveIssueLinkStates(api, request.projectId, [issueKey])
+  const linkState = states[issueKey]
+  if (linkState.linkedTaskCount > 0 && !request.duplicateConfirmed) {
+    return duplicateConfirmation(request.projectId, linkState)
+  }
+
+  const task = await api.tasks.create({
+    projectId: request.projectId,
+    initialPrompt: buildIssueIntakePrompt({ ...request.issue, key: issueKey }),
+  })
+  await saveLinkedKey(api, task.id, issueKey)
+
+  return {
+    outcome: 'task-created',
+    projectId: request.projectId,
+    issueKey,
+    task,
+  }
+}
+
+/** Create and link a backlog Task, then request its native OpenForge Implementation Run. */
+export async function createAndStartIntakeTask(
+  api: IssueIntakeApi,
+  request: IssueIntakeRequest,
+): Promise<CreateAndStartIntakeTaskResult> {
+  const created = await createIntakeTask(api, request)
+  if (created.outcome === 'confirmation-required') return created
+
+  try {
+    const run = await api.tasks.startImplementation({ taskId: created.task.id })
+    return { ...created, outcome: 'implementation-started', run }
+  } catch (error) {
+    return {
+      ...created,
+      outcome: 'partial-success',
+      startError: {
+        stage: 'start-implementation',
+        message: error instanceof Error ? error.message : 'The Implementation Run could not be started.',
+      },
+    }
+  }
 }

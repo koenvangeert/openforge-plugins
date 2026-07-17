@@ -10,13 +10,15 @@ import type { IssueResult, JiraIssue } from './jiraTypes'
 import { invokeJiraBackend, TASK_KEY } from './protocol'
 
 type Api = Pick<FrontendOpenForgeAPI, 'storage' | 'backend' | 'tasks'>
+type StorageApi = Pick<FrontendOpenForgeAPI, 'storage'>
+type TasksApi = Pick<FrontendOpenForgeAPI, 'tasks'>
 
 function toJson(value: unknown): JsonValue {
   return value as JsonValue
 }
 
 /** Read the explicit Issue Key linked to this task, or null when unlinked. */
-export async function readLinkedKey(api: Api, taskId: string): Promise<string | null> {
+export async function readLinkedKey(api: StorageApi, taskId: string): Promise<string | null> {
   const raw = await api.storage.task(taskId).get(TASK_KEY.link)
   if (raw && typeof raw === 'object' && 'key' in raw) {
     const key = (raw as { key: unknown }).key
@@ -25,12 +27,12 @@ export async function readLinkedKey(api: Api, taskId: string): Promise<string | 
   return null
 }
 
-export async function saveLinkedKey(api: Api, taskId: string, key: string): Promise<void> {
+export async function saveLinkedKey(api: StorageApi, taskId: string, key: string): Promise<void> {
   await api.storage.task(taskId).set(TASK_KEY.link, toJson({ key }))
 }
 
 /** Remove the link and any cached issue for this task. */
-export async function clearLink(api: Api, taskId: string): Promise<void> {
+export async function clearLink(api: StorageApi, taskId: string): Promise<void> {
   await api.storage.task(taskId).delete(TASK_KEY.link)
   await api.storage.task(taskId).delete(TASK_KEY.cachedIssue)
 }
@@ -40,7 +42,7 @@ export async function clearLink(api: Api, taskId: string): Promise<void> {
  * Non-authoritative — the caller offers it as a pre-fill the user confirms.
  * Returns null if the task can't be read or no hint is present.
  */
-export async function suggestIssueKey(api: Api, taskId: string): Promise<string | null> {
+export async function suggestIssueKey(api: TasksApi, taskId: string): Promise<string | null> {
   try {
     const task = await api.tasks.get(taskId)
     return extractIssueKeyHint(task.initial_prompt, task.summary)
@@ -50,7 +52,7 @@ export async function suggestIssueKey(api: Api, taskId: string): Promise<string 
 }
 
 /** The last successfully loaded issue for instant paint before a refresh. */
-export async function readCachedIssue(api: Api, taskId: string): Promise<JiraIssue | null> {
+export async function readCachedIssue(api: StorageApi, taskId: string): Promise<JiraIssue | null> {
   const raw = await api.storage.task(taskId).get(TASK_KEY.cachedIssue)
   return raw ? (raw as unknown as JiraIssue) : null
 }

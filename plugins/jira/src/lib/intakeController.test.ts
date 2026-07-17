@@ -6,6 +6,9 @@ import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import { createMemoryPluginStorage } from '@openforge-app/plugin-sdk/testing'
 import type { IssueResult, SearchResult } from './jiraTypes'
 import {
+  buildIssueIntakePrompt,
+  createAndStartIntakeTask,
+  createIntakeTask,
   lookupIntakeIssue,
   deriveIssueLinkStates,
   searchActiveIntakeFilter,
@@ -64,6 +67,46 @@ function makeApi(
   }
 }
 
+const INTAKE_ISSUE = {
+  key: 'PROJ-7',
+  summary: 'Fix Issue Intake',
+  descriptionHtml: '<p>Keep the <strong>Jira description</strong>.</p>',
+}
+
+function makeIntakeApi(tasks: Task[] = []) {
+  const storage = createMemoryPluginStorage()
+  const listSpy = vi.fn(async ({ projectId }: { projectId?: string | null } = {}) => (
+    tasks.filter((task) => projectId == null || task.project_id === projectId)
+  ))
+  const createSpy = vi.fn(async ({ initialPrompt, projectId }: { initialPrompt: string; projectId: string }) => (
+    makeTaskWithProject(`T-${tasks.length + 1}`, projectId, initialPrompt)
+  ))
+  const startSpy = vi.fn(async ({ taskId }: { taskId: string }) => ({
+    taskId,
+    sessionId: 'S-1',
+    workspacePath: '/worktrees/T-1',
+  }))
+  const api: Api = {
+    storage,
+    backend: {
+      state: 'ready',
+      whenReady: async () => undefined,
+      onReady: () => ({ dispose: () => undefined }),
+      invoke: vi.fn() as FrontendOpenForgeAPI['backend']['invoke'],
+    },
+    tasks: {
+      list: listSpy,
+      create: createSpy,
+      startImplementation: startSpy,
+    } as unknown as FrontendOpenForgeAPI['tasks'],
+  }
+  return { api, listSpy, createSpy, startSpy }
+}
+
+function makeTaskWithProject(id: string, projectId: string, initialPrompt = ''): Task {
+  return { ...makeTask(id), project_id: projectId, initial_prompt: initialPrompt }
+}
+
 describe('lookupIntakeIssue', () => {
   it('normalizes a direct Issue Key and sanitizes the detail description', async () => {
     const backendResult: IssueResult = {
@@ -118,6 +161,125 @@ describe('deriveIssueLinkStates', () => {
       'PROJ-3': { issueKey: 'PROJ-3', linkedTaskCount: 0, taskIds: [] },
     })
     await expect(api.storage.project('P-1').get('issueLinkStates')).resolves.toBeNull()
+  })
+})
+
+describe('Issue Intake orchestration', () => {
+  it('builds the initial prompt from the Issue Key and summary followed by sanitized description', () => {
+    expect(buildIssueIntakePrompt({
+      ...INTAKE_ISSUE,
+      key: ' proj-7 ',
+      summary: ' Fix Issue Intake ',
+      descriptionHtml: '<p>Keep this.</p><script>discard()</script>',
+    })).toBe('PROJ-7: Fix Issue Intake\n\n<p>Keep this.</p>')
+  })
+
+  it('creates a linked backlog Task in the active Project without starting it', async () => {
+    const { api, listSpy, createSpy, startSpy } = makeIntakeApi()
+
+    const result = await createIntakeTask(api, { projectId: 'P-active', issue: INTAKE_ISSUE })
+
+    expect(result).toMatchObject({
+      outcome: 'task-created',
+      projectId: 'P-active',
+      issueKey: 'PROJ-7',
+      task: { id: 'T-1', status: 'backlog', project_id: 'P-active' },
+    })
+    expect(listSpy).toHaveBeenCalledWith({ projectId: 'P-active' })
+    expect(createSpy).toHaveBeenCalledWith({
+      projectId: 'P-active',
+      initialPrompt: 'PROJ-7: Fix Issue Intake\n\n<p>Keep the <strong>Jira description</strong>.</p>',
+    })
+    expect(startSpy).not.toHaveBeenCalled()
+    await expect(api.storage.task('T-1').get(TASK_KEY.link)).resolves.toEqual({ key: 'PROJ-7' })
+  })
+
+  it('ignores linked Tasks outside the active Project', async () => {
+    const otherProjectTask = makeTaskWithProject('T-other', 'P-other')
+    const { api, createSpy } = makeIntakeApi([otherProjectTask])
+    await api.storage.task('T-other').set(TASK_KEY.link, { key: 'PROJ-7' })
+
+    const result = await createIntakeTask(api, { projectId: 'P-active', issue: INTAKE_ISSUE })
+
+    expect(result.outcome).toBe('task-created')
+    expect(createSpy).toHaveBeenCalledWith(expect.objectContaining({ projectId: 'P-active' }))
+  })
+
+  it('requires confirmation before creating another Task for the same Issue in the active Project', async () => {
+    const linkedTask = makeTaskWithProject('T-existing', 'P-active')
+    const { api, createSpy } = makeIntakeApi([linkedTask])
+    await api.storage.task('T-existing').set(TASK_KEY.link, { key: 'PROJ-7' })
+
+    const result = await createIntakeTask(api, { projectId: 'P-active', issue: INTAKE_ISSUE })
+
+    expect(result).toEqual({
+      outcome: 'confirmation-required',
+      projectId: 'P-active',
+      issueKey: 'PROJ-7',
+      linkedTaskCount: 1,
+      linkedTaskIds: ['T-existing'],
+      message: 'PROJ-7 already has 1 linked Task in the active Project. Confirm to create another Task.',
+    })
+    expect(createSpy).not.toHaveBeenCalled()
+  })
+
+  it('allows another linked Task after duplicate confirmation', async () => {
+    const linkedTask = makeTaskWithProject('T-existing', 'P-active')
+    const { api, createSpy } = makeIntakeApi([linkedTask])
+    await api.storage.task('T-existing').set(TASK_KEY.link, { key: 'PROJ-7' })
+
+    const result = await createIntakeTask(api, {
+      projectId: 'P-active',
+      issue: INTAKE_ISSUE,
+      duplicateConfirmed: true,
+    })
+
+    expect(result.outcome).toBe('task-created')
+    expect(createSpy).toHaveBeenCalledOnce()
+    await expect(api.storage.task('T-2').get(TASK_KEY.link)).resolves.toEqual({ key: 'PROJ-7' })
+  })
+
+  it('starts implementation only after creating and linking the Task', async () => {
+    const { api, startSpy } = makeIntakeApi()
+    startSpy.mockImplementation(async ({ taskId }) => {
+      await expect(api.storage.task(taskId).get(TASK_KEY.link)).resolves.toEqual({ key: 'PROJ-7' })
+      return { taskId, sessionId: 'S-1', workspacePath: '/worktrees/T-1' }
+    })
+
+    const result = await createAndStartIntakeTask(api, { projectId: 'P-active', issue: INTAKE_ISSUE })
+
+    expect(startSpy).toHaveBeenCalledWith({ taskId: 'T-1' })
+    expect(result).toMatchObject({
+      outcome: 'implementation-started',
+      task: { id: 'T-1' },
+      run: { taskId: 'T-1', sessionId: 'S-1', workspacePath: '/worktrees/T-1' },
+    })
+  })
+
+  it('does not create or start from the Create and Start operation until a duplicate is confirmed', async () => {
+    const linkedTask = makeTaskWithProject('T-existing', 'P-active')
+    const { api, createSpy, startSpy } = makeIntakeApi([linkedTask])
+    await api.storage.task('T-existing').set(TASK_KEY.link, { key: 'PROJ-7' })
+
+    const result = await createAndStartIntakeTask(api, { projectId: 'P-active', issue: INTAKE_ISSUE })
+
+    expect(result.outcome).toBe('confirmation-required')
+    expect(createSpy).not.toHaveBeenCalled()
+    expect(startSpy).not.toHaveBeenCalled()
+  })
+
+  it('returns partial success and keeps the linked backlog Task when starting fails', async () => {
+    const { api, startSpy } = makeIntakeApi()
+    startSpy.mockRejectedValueOnce(new Error('No provider is configured.'))
+
+    const result = await createAndStartIntakeTask(api, { projectId: 'P-active', issue: INTAKE_ISSUE })
+
+    expect(result).toMatchObject({
+      outcome: 'partial-success',
+      task: { id: 'T-1', status: 'backlog' },
+      startError: { stage: 'start-implementation', message: 'No provider is configured.' },
+    })
+    await expect(api.storage.task('T-1').get(TASK_KEY.link)).resolves.toEqual({ key: 'PROJ-7' })
   })
 })
 

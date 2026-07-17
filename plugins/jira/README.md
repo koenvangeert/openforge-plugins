@@ -39,6 +39,13 @@ Backend methods return a discriminated result (`{ ok: true, … }` /
 `{ ok: false, error, message }`) so each failure state (no/invalid credentials,
 issue-not-found, network, invalid JQL) renders distinctly.
 
+`lib/intakeController.ts` exposes reusable `createIntakeTask` and
+`createAndStartIntakeTask` operations for the Intake Workspace. Both scope
+duplicate checks and Task creation to the active Project, then store the Issue
+Link in task-scoped plugin storage. The start operation links the created Task
+before requesting its native OpenForge Implementation Run and returns a typed
+partial-success result if that request fails.
+
 Issue descriptions are Jira's rendered HTML (`renderedFields.description`),
 sanitized in the renderer with `@openforge-app/plugin-sdk/sanitize` before
 `{@html}`.
