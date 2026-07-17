@@ -11,11 +11,10 @@ KVG-1219; credential trade-off recorded in
   supports raw JQL, and follows Jira continuation tokens without a silent cutoff.
 - **Settings section** (`settings.registerSection`) — Jira site, email and API
   token.
-- **Task-pane tab** (`taskPane.registerTab`) — _temporarily disabled_. Shows the
-  Jira issue linked to the open Task (explicit link at `storage.task(taskId)`,
-  pre-filled with a non-authoritative key-shaped hint scanned from the Task's
-  text). The component (`JiraTaskTab.svelte`) and controller (`lib/taskLink.ts`)
-  remain in the tree; re-register it in `src/index.ts` to bring it back.
+- **Linked Issue Section** (`taskUI.registerSection`) — present in every Task's
+  detail stack. It shows compact, read-only Jira context for the explicit Issue
+  Link at `storage.task(taskId)`, or an unlinked state with a user-confirmed
+  key-shaped hint scanned from Task text.
 
 ## Styling
 
@@ -50,8 +49,10 @@ Issue descriptions are Jira's rendered HTML (`renderedFields.description`),
 sanitized in the renderer with `@openforge-app/plugin-sdk/sanitize` before
 `{@html}`.
 
-Refresh is on-open plus a manual **Refresh** command/button (no background
-polling); the last loaded issue is cached in `storage.task`.
+The Linked Issue Section refreshes when opened and through its own **Refresh**
+action only (no background polling); the last loaded issue and successful
+refresh time are cached in `storage.task`. The global **Refresh Jira** command
+refreshes the Intake Workspace, not Task sections.
 
 ## Credentials & security
 

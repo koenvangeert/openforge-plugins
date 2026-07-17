@@ -20,6 +20,7 @@ describe('jira plugin package metadata', () => {
         'settings',
         'storage',
         'system.openUrl',
+        'taskPane',
         'tasks',
         'views',
       ]),
@@ -28,13 +29,14 @@ describe('jira plugin package metadata', () => {
 })
 
 describe('jira plugin activation', () => {
-  it('registers the view, settings section and refresh command (task-pane tab disabled for now)', async () => {
+  it('registers the Linked Issue Section without registering a task UI tab', async () => {
     const registry = createOpenForgeRegistryFake({ pluginId: 'dev.kvg.jira', projectId: 'P-1' })
     await registry.activateFrontend(plugin)
 
     expect(plugin[OPENFORGE_FRONTEND_PLUGIN_MARKER]).toBe(true)
     expect(registry.snapshot.views).toMatchObject([{ id: 'query', icon: 'file-text', placement: 'rail' }])
     expect(registry.snapshot.taskPaneTabs).toEqual([])
+    expect(registry.snapshot.taskUISections).toMatchObject([{ id: 'linked-issue' }])
     expect(registry.snapshot.settingsSections).toMatchObject([{ id: 'credentials' }])
     expect(registry.snapshot.commands).toMatchObject([{ id: 'refresh' }])
   })

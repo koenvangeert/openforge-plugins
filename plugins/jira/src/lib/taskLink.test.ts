@@ -26,6 +26,7 @@ function makeTask(overrides: Partial<Task>): Task {
     worktree_source: null,
     worktree_branch: null,
     handoff_notes_enabled: true,
+    source_ticket_url: null,
     depends_on: [],
     project_id: 'P-1',
     created_at: 0,
@@ -75,6 +76,26 @@ describe('link storage', () => {
     await clearLink(api, TASK_ID)
     expect(await readLinkedKey(api, TASK_ID)).toBeNull()
     expect(await readCachedIssue(api, TASK_ID)).toBeNull()
+  })
+
+  it('reads the legacy direct-Issue cache until the next refresh migrates it', async () => {
+    const api = makeApi()
+    await api.storage.task(TASK_ID).set(TASK_KEY.cachedIssue, {
+      key: 'PROJ-9',
+      summary: 'Legacy cache',
+      status: 'Open',
+      priority: null,
+      issueType: 'Task',
+      assignee: null,
+      updated: null,
+      descriptionHtml: '',
+      url: 'https://acme.atlassian.net/browse/PROJ-9',
+    })
+
+    await expect(readCachedIssue(api, TASK_ID)).resolves.toMatchObject({
+      issue: { key: 'PROJ-9' },
+      refreshedAt: null,
+    })
   })
 })
 
@@ -129,7 +150,8 @@ describe('loadIssue', () => {
       expect(result.issue.descriptionHtml).not.toContain('onerror')
     }
     const cached = await readCachedIssue(api, TASK_ID)
-    expect(cached?.descriptionHtml).not.toContain('<script>')
+    expect(cached?.issue.descriptionHtml).not.toContain('<script>')
+    expect(cached?.refreshedAt).toEqual(expect.any(String))
   })
 
   it('passes a backend not-found error through unchanged', async () => {
