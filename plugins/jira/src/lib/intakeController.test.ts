@@ -4,12 +4,11 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Task } from '@openforge-app/plugin-sdk/domain'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import { createMemoryPluginStorage } from '@openforge-app/plugin-sdk/testing'
-import type { IssueResult, SearchResult } from './jiraTypes'
+import type { SearchResult } from './jiraTypes'
 import {
   buildIssueIntakePrompt,
   createAndStartIntakeTask,
   createIntakeTask,
-  lookupIntakeIssue,
   deriveIssueLinkStates,
   searchActiveIntakeFilter,
   searchIntakeIssues,
@@ -106,43 +105,6 @@ function makeIntakeApi(tasks: Task[] = []) {
 function makeTaskWithProject(id: string, projectId: string, initialPrompt = ''): Task {
   return { ...makeTask(id), project_id: projectId, initial_prompt: initialPrompt }
 }
-
-describe('lookupIntakeIssue', () => {
-  it('normalizes a direct Issue Key and sanitizes the detail description', async () => {
-    const backendResult: IssueResult = {
-      ok: true,
-      issue: {
-        key: 'PROJ-1',
-        summary: 'Issue',
-        status: 'Open',
-        priority: 'High',
-        assignee: null,
-        issueType: 'Bug',
-        updated: null,
-        descriptionHtml: '<p>Safe</p><script>bad()</script>',
-        url: 'https://acme.atlassian.net/browse/PROJ-1',
-      },
-    }
-    const { api, invokeSpy } = makeApi(async () => backendResult)
-
-    const result = await lookupIntakeIssue(api, ' proj-1 ')
-
-    expect(invokeSpy).toHaveBeenCalledWith(METHOD.getIssue, { key: 'PROJ-1' })
-    expect(result).toMatchObject({ ok: true, issue: { descriptionHtml: '<p>Safe</p>' } })
-  })
-
-  it('reports backend transport failures as a typed lookup result', async () => {
-    const { api } = makeApi(async () => {
-      throw new Error('Backend method not found for dev.kvg.jira.getIssue')
-    })
-
-    await expect(lookupIntakeIssue(api, 'PROJ-1')).resolves.toEqual({
-      ok: false,
-      error: 'unknown',
-      message: 'Backend method not found for dev.kvg.jira.getIssue',
-    })
-  })
-})
 
 describe('deriveIssueLinkStates', () => {
   it('counts task-scoped Issue Links from the active Project without storing a sync model', async () => {

@@ -28,18 +28,20 @@
     "id": "dev.kvg.jira",
     "apiVersion": 1,
     "displayName": "Jira",
-    "description": "Link OpenForge tasks to Jira Cloud issues and browse issues by JQL",
-    "icon": "kanban",
+    "description": "Discover Jira Cloud issues and create linked OpenForge tasks",
+    "icon": "file-text",
     "frontend": "./dist/frontend.js",
     "backend": "./dist/backend.js",
     "requires": [
-      "views",
-      "settings",
       "backend",
-      "storage",
-      "tasks",
       "commands",
-      "system.openUrl"
+      "events",
+      "navigation",
+      "settings",
+      "storage",
+      "system.openUrl",
+      "tasks",
+      "views"
     ]
   }
 }

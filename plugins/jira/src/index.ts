@@ -5,12 +5,13 @@ import { REFRESH_EVENT } from './lib/protocol'
 
 export default defineFrontendPlugin({
   activate(openforge, context) {
-    // Rail view: a user-editable JQL query over Jira Cloud.
+    // Active-Project Intake Workspace: Jira discovery, concise context, and
+    // OpenForge-owned Issue Intake. Jira remains read-only.
     context.subscriptions.add(
       openforge.views.register({
         id: 'query',
         title: 'Jira',
-        icon: 'kanban',
+        icon: 'file-text',
         placement: 'rail',
         order: 40,
         component: JiraQueryView,

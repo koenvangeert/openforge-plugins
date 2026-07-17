@@ -1,0 +1,94 @@
+<script lang="ts">
+  import type { JiraIssue } from '../lib/jiraTypes'
+  import type { IssueLinkStates } from '../lib/intakeController'
+
+  interface Props {
+    rows: JiraIssue[]
+    linkStates: IssueLinkStates
+    selectedKey: string | null
+    loading: boolean
+    hasRun: boolean
+    errorMessage: string | null
+    pageNumber: number
+    nextPageToken: string | null
+    onSelect: (issue: JiraIssue) => void
+    onNextPage: () => void
+  }
+
+  let {
+    rows,
+    linkStates,
+    selectedKey,
+    loading,
+    hasRun,
+    errorMessage,
+    pageNumber,
+    nextPageToken,
+    onSelect,
+    onNextPage,
+  }: Props = $props()
+
+  function selectFromKeyboard(event: KeyboardEvent, issue: JiraIssue) {
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    event.preventDefault()
+    onSelect(issue)
+  }
+</script>
+
+{#if errorMessage}
+  <div class="alert alert-error m-4 text-sm" role="alert">{errorMessage}</div>
+{:else if loading && rows.length === 0}
+  <div class="flex items-center gap-2 p-5 text-sm text-base-content/60" role="status">
+    <span class="loading loading-spinner loading-sm" aria-hidden="true"></span>
+    Loading Jira Issues…
+  </div>
+{:else if hasRun && rows.length === 0}
+  <div class="flex flex-1 items-center justify-center p-6 text-center text-base-content/60">
+    No Issues match the active Intake Filter.
+  </div>
+{:else if rows.length > 0}
+  <div class="min-h-0 flex-1 overflow-auto">
+    <table class="table w-full">
+      <thead>
+        <tr>
+          <th>Issue Key</th>
+          <th>Summary</th>
+          <th>Status</th>
+          <th>Priority</th>
+          <th>Assignee</th>
+          <th>OpenForge</th>
+        </tr>
+      </thead>
+      <tbody>
+        {#each rows as row (row.key)}
+          <tr
+            class="cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary {selectedKey === row.key ? 'bg-primary/10' : ''}"
+            aria-selected={selectedKey === row.key}
+            tabindex="0"
+            onclick={() => onSelect(row)}
+            onkeydown={(event) => selectFromKeyboard(event, row)}
+          >
+            <td><span class="font-medium text-primary">{row.key}</span></td>
+            <td class="max-w-sm truncate">{row.summary}</td>
+            <td><span class="badge badge-ghost badge-sm whitespace-nowrap">{row.status}</span></td>
+            <td>{row.priority ?? '—'}</td>
+            <td>{row.assignee ?? 'Unassigned'}</td>
+            <td>
+              {#if (linkStates[row.key]?.linkedTaskCount ?? 0) > 0}
+                <span class="badge badge-info badge-sm whitespace-nowrap">
+                  {linkStates[row.key].linkedTaskCount} linked
+                </span>
+              {:else}
+                <span class="text-base-content/50">Unlinked</span>
+              {/if}
+            </td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
+  </div>
+  <div class="flex shrink-0 items-center justify-between border-t border-base-300 px-4 py-2">
+    <span class="text-sm text-base-content/60">Page {pageNumber}</span>
+    <button class="btn btn-ghost btn-sm" onclick={onNextPage} disabled={!nextPageToken || loading}>Next page</button>
+  </div>
+{/if}

@@ -3,8 +3,8 @@ import type { Task } from '@openforge-app/plugin-sdk/domain'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import { sanitizeHtml } from '@openforge-app/plugin-sdk/sanitize'
 import { readIntakeFilters } from './intakeFilters'
-import { isValidIssueKey, validateJql } from './issueKey'
-import type { IssueResult, JiraIssue, SearchIssuesRequest, SearchResult } from './jiraTypes'
+import { validateJql } from './issueKey'
+import type { JiraIssue, SearchIssuesRequest, SearchResult } from './jiraTypes'
 import { invokeJiraBackend } from './protocol'
 import { readLinkedKey, saveLinkedKey } from './taskLink'
 
@@ -101,21 +101,6 @@ function backendTransportFailure(error: unknown): Extract<SearchResult, { ok: fa
     error: 'unknown',
     message: error instanceof Error ? error.message : 'Could not invoke the Jira backend.',
   }
-}
-
-export async function lookupIntakeIssue(api: IntakeControllerApi, input: string): Promise<IssueResult> {
-  const key = input.trim().toUpperCase()
-  if (!isValidIssueKey(key)) {
-    return { ok: false, error: 'invalid-key', message: 'Enter a valid issue key like PROJ-123.' }
-  }
-
-  let result: IssueResult
-  try {
-    result = await invokeJiraBackend(api.backend, 'getIssue', { key })
-  } catch (error) {
-    return backendTransportFailure(error)
-  }
-  return result.ok ? { ok: true, issue: sanitizeIssue(result.issue) } : result
 }
 
 export async function searchIntakeIssues(
