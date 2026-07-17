@@ -93,7 +93,7 @@ collides with core (`com.openforge.*`). Declare only the capabilities you use in
   "type": "module",
   "scripts": {
     "build": "vite build && vite build --config vite.backend.config.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run"
   },
   "dependencies": {
@@ -107,6 +107,7 @@ collides with core (`com.openforge.*`). Declare only the capabilities you use in
     "@testing-library/svelte": "catalog:",
     "@types/node": "catalog:",
     "svelte": "catalog:",
+    "svelte-check": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"
