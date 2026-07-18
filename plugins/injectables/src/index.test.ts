@@ -8,4 +8,16 @@ describe('injectables plugin activation', () => {
     await registry.activateFrontend(plugin)
     expect(registry.getSnapshot().views).toContainEqual(expect.objectContaining({ id: 'injectables' }))
   })
+
+  it('registers the injection-point picker at all three locations', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.injectables', projectId: 'P-1' })
+    await registry.activateFrontend(plugin)
+    expect(registry.getSnapshot().injectionPoints).toEqual(
+      expect.arrayContaining([
+        { id: 'picker-createTaskPrompt', location: 'createTaskPrompt' },
+        { id: 'picker-agentSession', location: 'agentSession' },
+        { id: 'picker-backlogPrompt', location: 'backlogPrompt' },
+      ]),
+    )
+  })
 })

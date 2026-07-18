@@ -1,5 +1,6 @@
 import { defineFrontendPlugin } from '@openforge-app/plugin-sdk/frontend'
 import InjectablesView from './InjectablesView.svelte'
+import InjectionTrigger from './InjectionTrigger.svelte'
 
 export default defineFrontendPlugin({
   activate(openforge, context) {
@@ -12,5 +13,11 @@ export default defineFrontendPlugin({
       shortcut: 'Cmd+L',
       component: InjectablesView,
     }))
+
+    for (const location of ['createTaskPrompt', 'agentSession', 'backlogPrompt'] as const) {
+      context.subscriptions.add(
+        openforge.injectionPoints.register({ id: `picker-${location}`, location, component: InjectionTrigger }),
+      )
+    }
   },
 })
