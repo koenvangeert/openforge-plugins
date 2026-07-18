@@ -86,7 +86,7 @@
   }
   let { api, projectId, open, onClose, onSelect }: Props = $props()
 
-  const catalog = useInjectableCatalog(api, () => projectId)
+  const catalog = useInjectableCatalog(() => api, () => projectId)
 
   let query = $state('')
   let groupBy = $state<InjectableGroupBy>('origin')

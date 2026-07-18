@@ -7,7 +7,7 @@ import type { Injectable, Snippet } from './injectableDomain'
  * into the shared `Injectable` view model) to `loadInjectableCatalog` so the fetch
  * sequence lives in one place, not duplicated between the Skills tab and the picker.
  */
-export function useInjectableCatalog(api: CatalogApi, getProjectId: () => string | null) {
+export function useInjectableCatalog(getApi: () => CatalogApi, getProjectId: () => string | null) {
   let injectables = $state<Injectable[]>([])
   let snippets = $state<Snippet[]>([])
   let loading = $state(false)
@@ -17,7 +17,7 @@ export function useInjectableCatalog(api: CatalogApi, getProjectId: () => string
     loading = true
     error = null
     try {
-      const result = await loadInjectableCatalog(api, getProjectId())
+      const result = await loadInjectableCatalog(getApi(), getProjectId())
       injectables = result.injectables
       snippets = result.snippets
     } catch (e) {
