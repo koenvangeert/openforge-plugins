@@ -15,7 +15,7 @@ interface ListSkillsRequest {
 }
 
 interface SaveSkillContentRequest {
-  projectId: string
+  projectId: string | null
   name: string
   level: SkillLevel
   sourceDir: string
@@ -216,7 +216,7 @@ async function saveSkillContent(api: BackendOpenForgeAPI, request: SaveSkillCont
   }
 
   const root = request.level === 'project'
-    ? (await api.projects.get(request.projectId))?.path
+    ? (request.projectId ? (await api.projects.get(request.projectId))?.path : undefined)
     : homedir()
   if (!root) {
     throw new Error(`Project not found: ${request.projectId}`)
@@ -261,7 +261,7 @@ async function deleteSkill(api: BackendOpenForgeAPI, request: DeleteSkillRequest
   }
 
   const root = request.level === 'project'
-    ? (await api.projects.get(request.projectId))?.path
+    ? (request.projectId ? (await api.projects.get(request.projectId))?.path : undefined)
     : homedir()
   if (!root) {
     throw new Error(`Project not found: ${request.projectId}`)
@@ -285,7 +285,7 @@ async function deleteSkill(api: BackendOpenForgeAPI, request: DeleteSkillRequest
 
 export default defineBackendPlugin({
   activate(openforge, context) {
-    context.subscriptions.add(openforge.backend.registerMethod<ListSkillsRequest, SkillInfo[]>('listSkills', {
+    context.subscriptions.add(openforge.backend.registerMethod<ListSkillsRequest, SkillInfo[]>(METHOD.listSkills, {
       input: {
         type: 'object',
         required: ['projectId'],
@@ -294,12 +294,12 @@ export default defineBackendPlugin({
       handler: (request) => listSkills(openforge, request),
     }))
 
-    context.subscriptions.add(openforge.backend.registerMethod<SaveSkillContentRequest, void>('saveSkillContent', {
+    context.subscriptions.add(openforge.backend.registerMethod<SaveSkillContentRequest, void>(METHOD.saveSkillContent, {
       input: {
         type: 'object',
-        required: ['projectId', 'name', 'level', 'sourceDir', 'content'],
+        required: ['name', 'level', 'sourceDir', 'content'],
         properties: {
-          projectId: { type: 'string' },
+          projectId: { type: ['string', 'null'] },
           name: { type: 'string' },
           level: { enum: ['project', 'user'] },
           sourceDir: { type: 'string' },
@@ -312,12 +312,12 @@ export default defineBackendPlugin({
       handler: (request) => saveSkillContent(openforge, request),
     }))
 
-    context.subscriptions.add(openforge.backend.registerMethod<DeleteSkillRequest, void>('deleteSkill', {
+    context.subscriptions.add(openforge.backend.registerMethod<DeleteSkillRequest, void>(METHOD.deleteSkill, {
       input: {
         type: 'object',
-        required: ['projectId', 'name', 'level', 'sourceDir'],
+        required: ['name', 'level', 'sourceDir'],
         properties: {
-          projectId: { type: 'string' },
+          projectId: { type: ['string', 'null'] },
           name: { type: 'string' },
           level: { enum: ['project', 'user'] },
           sourceDir: { type: 'string' },

@@ -10,8 +10,9 @@ function makeApi(catalog: CommandInfo[], snippets: Snippet[] = []) {
     if (method === METHOD.listSnippets) return snippets
     throw new Error(`Unexpected method invoked: ${method}`)
   })
-  const api = { commands: { listCatalog }, backend: { invoke } } as unknown as CatalogApi
-  return { api, listCatalog, invoke }
+  const whenReady = vi.fn(async () => undefined)
+  const api = { commands: { listCatalog }, backend: { whenReady, invoke } } as unknown as CatalogApi
+  return { api, listCatalog, invoke, whenReady }
 }
 
 const skill = (name: string): CommandInfo => ({
@@ -49,5 +50,22 @@ describe('loadInjectableCatalog', () => {
 
     expect((await loadInjectableCatalog(api, 'P-2')).injectables).toHaveLength(0)
     expect((await loadInjectableCatalog(api, 'P-1')).injectables.map((i) => i.name)).toEqual(['scoped'])
+  })
+
+  it('awaits backend.whenReady before invoking listSnippets', async () => {
+    const calls: string[] = []
+    const listCatalog = vi.fn(async () => [])
+    const whenReady = vi.fn(async () => {
+      calls.push('whenReady')
+    })
+    const invoke = vi.fn(async () => {
+      calls.push('invoke')
+      return []
+    })
+    const api = { commands: { listCatalog }, backend: { whenReady, invoke } } as unknown as CatalogApi
+
+    await loadInjectableCatalog(api, null)
+
+    expect(calls).toEqual(['whenReady', 'invoke'])
   })
 })

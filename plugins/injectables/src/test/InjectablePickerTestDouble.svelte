@@ -1,11 +1,20 @@
 <script lang="ts">
+  import { receivedPickerProps } from './injectablePickerTestDoubleState'
+
   interface Props {
+    api: unknown
+    projectId: string | null
     open: boolean
     onClose: () => void
     onSelect: (injectable: { invocationText: string }) => void
   }
 
-  let { open, onClose, onSelect }: Props = $props()
+  let { api, projectId, open, onClose, onSelect }: Props = $props()
+
+  $effect(() => {
+    receivedPickerProps.api = api
+    receivedPickerProps.projectId = projectId
+  })
 </script>
 
 {#if open}

@@ -18,6 +18,7 @@ export async function loadInjectableCatalog(
   api: CatalogApi,
   projectId: string | null,
 ): Promise<{ injectables: Injectable[]; snippets: Snippet[] }> {
+  await api.backend.whenReady()
   const [commands, snippets] = await Promise.all([
     api.commands.listCatalog({ projectId }),
     api.backend.invoke<Snippet[]>(METHOD.listSnippets, null),

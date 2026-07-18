@@ -23,8 +23,9 @@ function makeApi(catalog: CommandInfo[] = [], snippets: Snippet[] = []) {
     if (method === METHOD.listSnippets) return snippets
     throw new Error(`Unexpected method invoked: ${method}`)
   })
-  const api = { commands: { listCatalog }, backend: { invoke } } as unknown as CatalogApi
-  return { api, listCatalog, invoke }
+  const whenReady = vi.fn(async () => undefined)
+  const api = { commands: { listCatalog }, backend: { whenReady, invoke } } as unknown as CatalogApi
+  return { api, listCatalog, invoke, whenReady }
 }
 
 describe('useInjectableCatalog', () => {

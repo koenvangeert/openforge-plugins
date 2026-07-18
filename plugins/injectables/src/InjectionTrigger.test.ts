@@ -10,14 +10,15 @@ vi.mock('./InjectablePicker.svelte', async () => ({
 }))
 
 import InjectionTrigger from './InjectionTrigger.svelte'
+import { receivedPickerProps } from './test/injectablePickerTestDoubleState'
 
-function renderTrigger(onInsert = vi.fn()) {
+function renderTrigger(onInsert = vi.fn(), api: unknown = {}, projectId: string | null = 'P-1') {
   render(InjectionTrigger, {
     props: {
-      api: {},
+      api,
       context: {},
       location: 'createTaskPrompt',
-      projectId: 'P-1',
+      projectId,
       taskId: null,
       onInsert,
     } as never,
@@ -39,6 +40,16 @@ describe('InjectionTrigger', () => {
     await fireEvent.click(screen.getByTestId('injection-trigger'))
 
     expect(screen.getByTestId('picker-select')).toBeTruthy()
+  })
+
+  it('forwards its api and projectId props through to the picker', async () => {
+    const api = { marker: 'trigger-api' }
+    renderTrigger(vi.fn(), api, 'P-7')
+
+    await fireEvent.click(screen.getByTestId('injection-trigger'))
+
+    expect(receivedPickerProps.api).toBe(api)
+    expect(receivedPickerProps.projectId).toBe('P-7')
   })
 
   it('inserts the selected injectable text and closes the picker', async () => {

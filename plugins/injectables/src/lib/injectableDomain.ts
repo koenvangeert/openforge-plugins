@@ -1,7 +1,7 @@
 /**
- * A personal, reusable text snippet shown in the injectable picker. Owned by the
- * skills plugin (persisted in its `storage.global`); the app's ⌘⇧I picker reads
- * the same records. Inserts its literal `body` verbatim.
+ * A personal, reusable text snippet shown in the injectable picker. Owned by this
+ * plugin and persisted to the filesystem via its backend snippet methods. Inserts
+ * its literal `body` verbatim.
  */
 export interface Snippet {
   id: string;
