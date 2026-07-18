@@ -30,6 +30,10 @@
     type TreeKeyResult,
   } from './lib/injectables'
   import { METHOD } from './lib/protocol'
+  import Sparkles from '@lucide/svelte/icons/sparkles'
+  import SquareTerminal from '@lucide/svelte/icons/square-terminal'
+  import NotebookText from '@lucide/svelte/icons/notebook-text'
+  import Plus from '@lucide/svelte/icons/plus'
   import type {
     Injectable,
     InjectableGroupBy,
@@ -55,13 +59,16 @@
     'manual-only': '✋',
   }
   const SNIPPET_BADGE = 'badge-info'
-  // Per-kind marker shown in place of the app's Lucide icons (this plugin package has no
-  // icon-font/SVG-icon dependency yet — InjectablesView.svelte follows the same
-  // icon-free convention).
-  const KIND_MARK: Record<Injectable['kind'], string> = {
-    snippet: '📝',
-    skill: '✨',
-    command: '⌘',
+  // Per-kind icon + accent colour (mirrors the app picker's Lucide icon mapping).
+  const KIND_ICON: Record<Injectable['kind'], typeof Sparkles> = {
+    snippet: NotebookText,
+    skill: Sparkles,
+    command: SquareTerminal,
+  }
+  const KIND_ICON_CLASS: Record<Injectable['kind'], string> = {
+    snippet: 'text-info',
+    skill: 'text-primary/80',
+    command: 'opacity-60',
   }
 
   function sectionLabel(key: string): string {
@@ -661,7 +668,7 @@
         </button>
         {#if group.key === 'snippet'}
           <button class="btn btn-xs btn-ghost gap-1" tabindex={-1} onclick={startCreate} type="button">
-            <span aria-hidden="true">+</span><span>New snippet</span>
+            <Plus size={12} /><span>New snippet</span>
           </button>
         {/if}
       </div>
@@ -671,6 +678,7 @@
         {:else}
           <div class="mt-0.5 flex flex-col">
             {#each group.items as item (item.id)}
+              {@const Icon = KIND_ICON[item.kind]}
               <button
                 data-injectable-id={item.id}
                 class="flex w-full flex-col gap-0.5 rounded-md py-2 pl-8 pr-2 text-left hover:bg-base-200"
@@ -682,7 +690,7 @@
                 ondblclick={() => insert(item)}
                 type="button">
                 <span class="flex items-center gap-2">
-                  <span aria-hidden="true" class="shrink-0 text-xs opacity-70">{KIND_MARK[item.kind]}</span>
+                  <Icon size={14} class="shrink-0 {KIND_ICON_CLASS[item.kind]}" />
                   <span class="text-sm font-semibold">
                     {#if item.kind !== 'snippet'}<span class="opacity-40">/</span>{/if}{item.name}
                   </span>
@@ -806,11 +814,12 @@
 
         <div bind:this={detailEl} tabindex="-1" class="flex min-w-0 flex-1 flex-col border-l border-base-300">
           {#if selected}
+            {@const Icon = KIND_ICON[selected.kind]}
             <!-- Detail header: identity (left, primary) + actions (right) -->
             <div class="flex items-start justify-between gap-4 border-b border-base-300 px-5 py-3">
               <div class="min-w-0">
                 <div class="flex items-center gap-2">
-                  <span aria-hidden="true" class="shrink-0 text-lg">{KIND_MARK[selected.kind]}</span>
+                  <Icon size={18} class="shrink-0 {KIND_ICON_CLASS[selected.kind]}" />
                   <h3 class="truncate text-lg font-bold leading-tight">
                     {#if selected.kind !== 'snippet'}<span class="opacity-40">/</span>{/if}{selected.name}
                   </h3>
@@ -928,7 +937,7 @@
             <!-- New snippet form (reuses the inline editor) -->
             <div class="flex items-start justify-between gap-4 border-b border-base-300 px-5 py-3">
               <div class="flex min-w-0 items-center gap-2">
-                <span aria-hidden="true" class="shrink-0 text-lg">{KIND_MARK.snippet}</span>
+                <NotebookText size={18} class="shrink-0 text-info" />
                 <h3 class="truncate text-lg font-bold leading-tight">New snippet</h3>
               </div>
               <button

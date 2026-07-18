@@ -8,9 +8,12 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@lucide/svelte": "^1.25.0",
     "@openforge-app/plugin-sdk": "link:../../../openforge/packages/plugin-sdk"
   },
-  "peerDependencies": { "svelte": "^5.0.0" },
+  "peerDependencies": {
+    "svelte": "^5.0.0"
+  },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "catalog:",
     "@testing-library/svelte": "catalog:",
@@ -29,6 +32,14 @@
     "icon": "sparkles",
     "frontend": "./dist/frontend.js",
     "backend": "./dist/backend.js",
-    "requires": ["views", "backend", "projects", "system.openUrl", "context", "commands", "injectionPoints"]
+    "requires": [
+      "views",
+      "backend",
+      "projects",
+      "system.openUrl",
+      "context",
+      "commands",
+      "injectionPoints"
+    ]
   }
 }
