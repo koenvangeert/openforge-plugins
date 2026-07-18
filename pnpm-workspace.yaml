@@ -13,7 +13,13 @@ packages:
 # because pnpm does not yet support the link: protocol inside a catalog
 # (ERR_PNPM_CATALOG_ENTRY_INVALID_SPEC). See docs/adr/0001.
 catalog:
-  svelte: ^5.56.3
+  # EXACT pin (no caret): plugin frontend bundles externalize `svelte/internal/*`
+  # and resolve it at runtime to the host's shared Svelte instance
+  # (plugin://host-runtime/svelte). That internal API is private and version-locked,
+  # so the version a plugin COMPILES against must exactly equal the version the host
+  # SHIPS — a caret range let this float to 5.56.5 against a 5.56.4 host and threw
+  # `effect_orphan` on mount. Keep this equal to `svelte` in ../openforge/package.json.
+  svelte: 5.56.5
   svelte-check: ^4.7.2
   '@sveltejs/vite-plugin-svelte': ^7.1.2
   '@testing-library/svelte': ^5.3.1
