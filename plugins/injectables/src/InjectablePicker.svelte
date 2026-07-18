@@ -578,6 +578,21 @@
       }
     }
   }
+
+  // Render the picker's overlay at <body> instead of inline. The trigger lives inside a
+  // host dialog whose daisyUI `.modal-box` sets `translate`/`scale` — those establish a
+  // containing block, so a nested `position: fixed` overlay is scoped to (and clipped by)
+  // that box instead of the viewport. Moving the node to <body> escapes it. Safe in
+  // Svelte 5: it attaches delegated listeners to `document` as well as the mount root
+  // specifically so manually-portaled nodes keep receiving clicks/keys.
+  function portalToBody(node: HTMLElement) {
+    document.body.appendChild(node)
+    return {
+      destroy() {
+        node.remove()
+      },
+    }
+  }
 </script>
 
 {#snippet nameBodyEditor()}
@@ -722,6 +737,7 @@
 {/snippet}
 
 {#if open}
+  <div use:portalToBody style="display: contents">
   <Modal
     {onClose}
     onKeydown={pickerKeydown}
@@ -1018,4 +1034,5 @@
       </div>
     </Modal>
   {/if}
+  </div>
 {/if}

@@ -170,10 +170,10 @@ describe('InjectablePicker', () => {
   })
 
   it('clicking the already-selected row again closes the preview', async () => {
-    const { getByText, queryByText, container } = render(InjectablePicker, { props: props() })
+    const { getByText, queryByText } = render(InjectablePicker, { props: props() })
     await fireEvent.click(getByText('refactor'))
     expect(queryByText('Insert into prompt')).not.toBeNull()
-    const row = container.querySelector('[data-injectable-id="project:skill:refactor"]')!
+    const row = document.querySelector('[data-injectable-id="project:skill:refactor"]')!
     await fireEvent.click(row)
     expect(queryByText('Insert into prompt')).toBeNull()
   })
@@ -420,25 +420,25 @@ describe('InjectablePicker', () => {
   })
 
   it('one Tab from the search input moves focus straight to the first list row', async () => {
-    const { getByPlaceholderText, container } = render(InjectablePicker, { props: props() })
+    const { getByPlaceholderText } = render(InjectablePicker, { props: props() })
     const input = getByPlaceholderText('Search injectables…')
     await fireEvent.keyDown(input, { key: 'Tab' })
     // The first row is the leading group header.
-    const firstRow = container.querySelector('[data-injectable-id]')
+    const firstRow = document.querySelector('[data-injectable-id]')
     expect(document.activeElement).toBe(firstRow)
     expect(firstRow?.getAttribute('data-injectable-id')).toBe('group:snippet')
   })
 
   it('arrow navigation moves DOM focus onto the active row', async () => {
-    const { getByPlaceholderText, container } = render(InjectablePicker, { props: props() })
+    const { getByPlaceholderText } = render(InjectablePicker, { props: props() })
     const input = getByPlaceholderText('Search injectables…')
     await fireEvent.keyDown(input, { key: 'ArrowDown' })
-    expect(document.activeElement).toBe(container.querySelector('[data-injectable-id="group:snippet"]'))
+    expect(document.activeElement).toBe(document.querySelector('[data-injectable-id="group:snippet"]'))
   })
 
   it('⌘ filter change keeps focus in the list, re-homing when the active row is filtered out', async () => {
-    const { container } = render(InjectablePicker, { props: props() })
-    const snippetRow = container.querySelector('[data-injectable-id="snippet:s1"]') as HTMLElement
+    render(InjectablePicker, { props: props() })
+    const snippetRow = document.querySelector('[data-injectable-id="snippet:s1"]') as HTMLElement
     snippetRow.focus()
     expect(document.activeElement).toBe(snippetRow)
     // ⌘2 → Snippets (row survives), ⌘2 → Personal (snippet row removed → focus re-homes
@@ -447,53 +447,53 @@ describe('InjectablePicker', () => {
     await fireEvent.keyDown(snippetRow, { key: '2', metaKey: true })
     await waitFor(() =>
       expect(document.activeElement).toBe(
-        container.querySelector('[data-injectable-id="group:personal"]'),
+        document.querySelector('[data-injectable-id="group:personal"]'),
       ),
     )
   })
 
   it('ArrowLeft on an item collapses its group and moves to the header; ArrowRight re-expands', async () => {
-    const { getByPlaceholderText, container } = render(InjectablePicker, { props: props() })
+    const { getByPlaceholderText } = render(InjectablePicker, { props: props() })
     const input = getByPlaceholderText('Search injectables…')
     // Move down to the snippet item (group:snippet → snippet:s1), then Left.
     await fireEvent.keyDown(input, { key: 'ArrowDown' })
     await fireEvent.keyDown(input, { key: 'ArrowDown' })
-    expect(document.activeElement).toBe(container.querySelector('[data-injectable-id="snippet:s1"]'))
+    expect(document.activeElement).toBe(document.querySelector('[data-injectable-id="snippet:s1"]'))
     await fireEvent.keyDown(input, { key: 'ArrowLeft' })
     // Group collapsed → the item row is gone and focus is on the header.
-    await waitFor(() => expect(container.querySelector('[data-injectable-id="snippet:s1"]')).toBeNull())
-    expect(document.activeElement).toBe(container.querySelector('[data-injectable-id="group:snippet"]'))
+    await waitFor(() => expect(document.querySelector('[data-injectable-id="snippet:s1"]')).toBeNull())
+    expect(document.activeElement).toBe(document.querySelector('[data-injectable-id="group:snippet"]'))
     // ArrowRight re-expands and the item reappears.
     await fireEvent.keyDown(input, { key: 'ArrowRight' })
     await waitFor(() =>
-      expect(container.querySelector('[data-injectable-id="snippet:s1"]')).not.toBeNull(),
+      expect(document.querySelector('[data-injectable-id="snippet:s1"]')).not.toBeNull(),
     )
   })
 
   it('Tab from a list row moves focus into the detail panel; Shift+Tab returns to the row', async () => {
-    const { getByText, container } = render(InjectablePicker, { props: props() })
+    const { getByText } = render(InjectablePicker, { props: props() })
     await fireEvent.click(getByText('pr-boilerplate'))
-    const row = container.querySelector('[data-injectable-id="snippet:s1"]') as HTMLElement
+    const row = document.querySelector('[data-injectable-id="snippet:s1"]') as HTMLElement
     row.focus()
     await fireEvent.keyDown(row, { key: 'Tab' })
-    const detail = container.querySelector('.border-l') as HTMLElement
+    const detail = document.querySelector('.border-l') as HTMLElement
     expect(detail.contains(document.activeElement)).toBe(true)
     await fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Tab', shiftKey: true })
     expect(document.activeElement).toBe(row)
   })
 
   it('keyboard nav keeps the list full-width; Space toggles the detail panel', async () => {
-    const { getByPlaceholderText, container, queryByText } = render(InjectablePicker, { props: props() })
+    const { getByPlaceholderText, queryByText } = render(InjectablePicker, { props: props() })
     const input = getByPlaceholderText('Search injectables…')
     await fireEvent.keyDown(input, { key: 'ArrowDown' }) // group:snippet
     await fireEvent.keyDown(input, { key: 'ArrowDown' }) // snippet:s1 (item)
     // Navigation does NOT auto-open the detail pane.
     expect(queryByText('Insert into prompt')).toBeNull()
-    const row = container.querySelector('[data-injectable-id="snippet:s1"]') as HTMLElement
+    const row = document.querySelector('[data-injectable-id="snippet:s1"]') as HTMLElement
     await fireEvent.keyDown(row, { key: ' ' })
     expect(queryByText('Insert into prompt')).not.toBeNull() // Space opened it
     await fireEvent.keyDown(
-      container.querySelector('[data-injectable-id="snippet:s1"]') as HTMLElement,
+      document.querySelector('[data-injectable-id="snippet:s1"]') as HTMLElement,
       { key: ' ' },
     )
     expect(queryByText('Insert into prompt')).toBeNull() // Space closed it
