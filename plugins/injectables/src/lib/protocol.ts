@@ -1,5 +1,4 @@
 export const METHOD = {
-  listSkills: 'listSkills',
   saveSkillContent: 'saveSkillContent',
   deleteSkill: 'deleteSkill',
   listSnippets: 'listSnippets',

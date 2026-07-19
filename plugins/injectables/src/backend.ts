@@ -1,18 +1,14 @@
-import { readdir, readFile, writeFile, mkdir, rm } from 'node:fs/promises'
+import { writeFile, mkdir, rm } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, extname, join, sep } from 'node:path'
 import { defineBackendPlugin } from '@openforge-app/plugin-sdk/backend'
 import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
-import { parseSkillFrontmatter, SKILL_SOURCE_DIRS, type SkillInfo, type SkillSourceDir } from './lib/skillDomain'
+import { SKILL_SOURCE_DIRS, type SkillInfo, type SkillSourceDir } from './lib/skillDomain'
 import { METHOD } from './lib/protocol'
 import { createSnippet, deleteSnippet, listSnippets, snippetsFilePath, updateSnippet, type SnippetInput } from './backend/snippetFileStore'
 import type { Snippet } from './lib/injectableDomain'
 
 type SkillLevel = SkillInfo['level']
-
-interface ListSkillsRequest {
-  projectId: string
-}
 
 interface SaveSkillContentRequest {
   projectId: string | null
@@ -46,125 +42,6 @@ function skillSourceDir(root: string, sourceDir: string, level: SkillLevel): str
 
 function isSupportedSkillSourceDir(sourceDir: string): sourceDir is SkillSourceDir {
   return (SKILL_SOURCE_DIRS as readonly string[]).includes(sourceDir)
-}
-
-async function scanSkillDirectory(dir: string, level: SkillLevel, sourceDir: string): Promise<SkillInfo[]> {
-  const skills: SkillInfo[] = []
-  let entries
-  try {
-    entries = await readdir(dir, { withFileTypes: true })
-  } catch {
-    return skills
-  }
-
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue
-    const skillFile = join(dir, entry.name, 'SKILL.md')
-    let content: string
-    try {
-      content = await readFile(skillFile, 'utf8')
-    } catch {
-      continue
-    }
-
-    const frontmatter = parseSkillFrontmatter(content)
-    skills.push({
-      name: frontmatter.name ?? entry.name,
-      description: frontmatter.description,
-      agent: null,
-      template: content,
-      level,
-      source_dir: sourceDir,
-      source_path: entry.name,
-      file_name: null,
-      relative_path: `${entry.name}/SKILL.md`,
-    })
-  }
-
-  return skills
-}
-
-async function scanPiSkillDirectory(dir: string, level: SkillLevel): Promise<SkillInfo[]> {
-  const skills = await scanSkillDirectory(dir, level, '.pi')
-  let entries
-  try {
-    entries = await readdir(dir, { withFileTypes: true })
-  } catch {
-    return skills
-  }
-
-  for (const entry of entries) {
-    if (!entry.isFile() || extname(entry.name) !== '.md') continue
-    const filePath = join(dir, entry.name)
-    let content: string
-    try {
-      content = await readFile(filePath, 'utf8')
-    } catch {
-      continue
-    }
-
-    const frontmatter = parseSkillFrontmatter(content)
-    const fallbackName = entry.name.slice(0, -extname(entry.name).length)
-    skills.push({
-      name: frontmatter.name ?? fallbackName,
-      description: frontmatter.description,
-      agent: null,
-      template: content,
-      level,
-      source_dir: '.pi',
-      source_path: entry.name,
-      file_name: entry.name,
-      relative_path: entry.name,
-    })
-  }
-
-  return skills
-}
-
-async function scanSkillRoot(root: string, level: SkillLevel): Promise<SkillInfo[]> {
-  const skills: SkillInfo[] = []
-  for (const sourceDir of SKILL_SOURCE_DIRS) {
-    const dir = skillSourceDir(root, sourceDir, level)
-    if (sourceDir === '.pi') {
-      skills.push(...await scanPiSkillDirectory(dir, level))
-    } else {
-      skills.push(...await scanSkillDirectory(dir, level, sourceDir))
-    }
-  }
-  return skills
-}
-
-function compareSkillSource(left: SkillInfo, right: SkillInfo): number {
-  const nameOrder = left.name.localeCompare(right.name)
-  if (nameOrder !== 0) return nameOrder
-
-  if (left.level !== right.level) return left.level === 'project' ? -1 : 1
-
-  const leftSourceIndex = SKILL_SOURCE_DIRS.indexOf(left.source_dir as SkillSourceDir)
-  const rightSourceIndex = SKILL_SOURCE_DIRS.indexOf(right.source_dir as SkillSourceDir)
-  const sourceOrder = (leftSourceIndex === -1 ? SKILL_SOURCE_DIRS.length : leftSourceIndex) -
-    (rightSourceIndex === -1 ? SKILL_SOURCE_DIRS.length : rightSourceIndex)
-  if (sourceOrder !== 0) return sourceOrder
-
-  const sourcePathOrder = left.source_path.localeCompare(right.source_path)
-  if (sourcePathOrder !== 0) return sourcePathOrder
-
-  const fileNameOrder = (left.file_name ? 1 : 0) - (right.file_name ? 1 : 0)
-  if (fileNameOrder !== 0) return fileNameOrder
-
-  return left.relative_path.localeCompare(right.relative_path)
-}
-
-async function listSkills(api: BackendOpenForgeAPI, request: ListSkillsRequest): Promise<SkillInfo[]> {
-  const skills: SkillInfo[] = []
-  const project = await api.projects.get(request.projectId)
-  if (project) {
-    skills.push(...await scanSkillRoot(project.path, 'project'))
-  }
-
-  skills.push(...await scanSkillRoot(homedir(), 'user'))
-
-  return skills.sort(compareSkillSource)
 }
 
 function isValidRootMarkdownSkillFileName(fileName: string): boolean {
@@ -285,15 +162,6 @@ async function deleteSkill(api: BackendOpenForgeAPI, request: DeleteSkillRequest
 
 export default defineBackendPlugin({
   activate(openforge, context) {
-    context.subscriptions.add(openforge.backend.registerMethod<ListSkillsRequest, SkillInfo[]>(METHOD.listSkills, {
-      input: {
-        type: 'object',
-        required: ['projectId'],
-        properties: { projectId: { type: 'string' } },
-      },
-      handler: (request) => listSkills(openforge, request),
-    }))
-
     context.subscriptions.add(openforge.backend.registerMethod<SaveSkillContentRequest, void>(METHOD.saveSkillContent, {
       input: {
         type: 'object',

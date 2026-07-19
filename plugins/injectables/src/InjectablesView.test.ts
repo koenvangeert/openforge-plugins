@@ -136,4 +136,26 @@ describe('InjectablesView', () => {
 
     await waitFor(() => expect(getSnippets()).toHaveLength(0))
   })
+
+  it('preserves a single-project snippet scope when editing and saving', async () => {
+    // Scoped to project P-1 (the projectId renderView defaults to) — not "all projects".
+    const { api, invoke, getSnippets } = makeApi(
+      [],
+      [{ id: 'snip-1', name: 'Scoped', body: 'original body', allProjects: false, projectIds: ['P-1'] }],
+    )
+
+    renderView(api)
+
+    // The lone snippet auto-selects, so Edit is already available.
+    await fireEvent.click(await screen.findByText('Edit'))
+    await fireEvent.input(screen.getByPlaceholderText(/Body/), { target: { value: 'edited body' } })
+    await fireEvent.click(screen.getByText('Save'))
+
+    await waitFor(() => expect(getSnippets()[0]?.body).toBe('edited body'))
+    expect(getSnippets()[0]).toMatchObject({ allProjects: false, projectIds: ['P-1'] })
+    expect(invoke).toHaveBeenCalledWith(
+      METHOD.updateSnippet,
+      expect.objectContaining({ allProjects: false, projectIds: ['P-1'] }),
+    )
+  })
 })

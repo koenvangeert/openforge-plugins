@@ -30,6 +30,7 @@
   type Mode = 'view' | 'edit-skill' | 'new-snippet' | 'edit-snippet'
 
   let injectables = $state<Injectable[]>([])
+  let snippets = $state<Snippet[]>([])
   let loading = $state(false)
   let error = $state<string | null>(null)
   let search = $state('')
@@ -46,6 +47,10 @@
   let snippetName = $state('')
   let snippetBody = $state('')
   let snippetAllProjects = $state(true)
+  // The snippet's persisted project scope, seeded from the real record on edit so a
+  // save that leaves the "all projects" checkbox untouched preserves it verbatim
+  // (rather than collapsing a multi-project scope down to just the current project).
+  let snippetProjectIds = $state<string[]>([])
 
   let previousProjectId: string | null | undefined = undefined
   let loadRequestId = 0
@@ -69,6 +74,7 @@
       const result = await loadInjectableCatalog(api, projectId)
       if (requestId !== loadRequestId) return
       injectables = result.injectables
+      snippets = result.snippets
       if (!injectables.some((i) => i.id === selectedId)) {
         selectedId = injectables[0]?.id ?? null
       }
@@ -76,6 +82,7 @@
       if (requestId !== loadRequestId) return
       error = e instanceof Error ? e.message : String(e)
       injectables = []
+      snippets = []
     } finally {
       if (requestId === loadRequestId) loading = false
     }
@@ -112,6 +119,7 @@
     snippetName = ''
     snippetBody = ''
     snippetAllProjects = true
+    snippetProjectIds = []
     actionError = null
   }
 
@@ -120,7 +128,10 @@
     mode = 'edit-snippet'
     snippetName = selected.name
     snippetBody = selected.content ?? selected.invocationText
-    snippetAllProjects = true
+    const id = snippetDbId(selected)
+    const raw = id ? snippets.find((s) => s.id === id) : undefined
+    snippetAllProjects = raw?.allProjects ?? true
+    snippetProjectIds = raw?.projectIds ?? []
     actionError = null
   }
 
@@ -140,8 +151,17 @@
     if (busy) return
     busy = true
     actionError = null
-    // Simplified scope: all projects, or scoped to the current project when off.
-    const projectIds = snippetAllProjects ? [] : projectId ? [projectId] : []
+    // Simplified scope: all projects, or scoped to a project set. When toggling off
+    // "all projects" preserves the snippet's existing persisted scope (seeded in
+    // startEditSnippet); only a brand-new/previously-all-projects snippet falls back to
+    // just the current project.
+    const projectIds = snippetAllProjects
+      ? []
+      : snippetProjectIds.length > 0
+        ? snippetProjectIds
+        : projectId
+          ? [projectId]
+          : []
     try {
       if (mode === 'edit-snippet' && selected) {
         const id = snippetDbId(selected)
