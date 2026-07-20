@@ -17,6 +17,7 @@
     onSelect: (issue: JiraIssue) => void
     onNextPage: () => void
     onStatusSort: (direction: SortDirection) => void
+    onOpenTask: (taskId: string) => void
   }
 
   let {
@@ -33,6 +34,7 @@
     onSelect,
     onNextPage,
     onStatusSort,
+    onOpenTask,
   }: Props = $props()
 
   let nextStatusSortDirection = $derived<SortDirection>(statusSortDirection === 'asc' ? 'desc' : 'asc')
@@ -41,9 +43,16 @@
     : statusSortDirection === 'desc' ? 'descending' : 'none')
 
   function selectFromKeyboard(event: KeyboardEvent, issue: JiraIssue) {
+    // Ignore keystrokes bubbling up from an interactive cell (e.g. the linked-Task link).
+    if (event.target !== event.currentTarget) return
     if (event.key !== 'Enter' && event.key !== ' ') return
     event.preventDefault()
     onSelect(issue)
+  }
+
+  function openTask(event: MouseEvent, taskId: string) {
+    event.stopPropagation()
+    onOpenTask(taskId)
   }
 </script>
 
@@ -56,7 +65,7 @@
   </div>
 {:else if hasRun && rows.length === 0}
   <div class="flex flex-1 items-center justify-center p-6 text-center text-base-content/60">
-    No Issues match the active Intake Filter.
+    No Issues match the current JQL query.
   </div>
 {:else if rows.length > 0}
   <div class="min-h-0 flex-1 overflow-auto">
@@ -83,6 +92,7 @@
       </thead>
       <tbody>
         {#each rows as row (row.key)}
+          {@const linkedTasks = linkStates[row.key]?.tasks ?? []}
           <tr
             class="cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary {selectedKey === row.key ? 'bg-primary/10' : ''}"
             aria-selected={selectedKey === row.key}
@@ -96,10 +106,19 @@
             <td>{row.priority ?? '—'}</td>
             <td>{row.assignee ?? 'Unassigned'}</td>
             <td>
-              {#if (linkStates[row.key]?.linkedTaskCount ?? 0) > 0}
-                <span class="badge badge-info badge-sm whitespace-nowrap">
-                  {linkStates[row.key].linkedTaskCount} linked
-                </span>
+              {#if linkedTasks.length === 1}
+                <button
+                  type="button"
+                  class="link link-primary block max-w-[14rem] truncate text-left"
+                  title={linkedTasks[0].title}
+                  onclick={(event) => openTask(event, linkedTasks[0].id)}
+                >{linkedTasks[0].title}</button>
+              {:else if linkedTasks.length > 1}
+                <button
+                  type="button"
+                  class="badge badge-info badge-sm whitespace-nowrap"
+                  onclick={(event) => openTask(event, linkedTasks[0].id)}
+                >{linkedTasks.length} linked</button>
               {:else}
                 <span class="text-base-content/50">Unlinked</span>
               {/if}

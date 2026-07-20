@@ -85,8 +85,8 @@ _Avoid_: write-back, two-way sync, inline Jira editing, Jira mutations.
 **Jira Connection**:
 The globally configured Jira site and user identity shared by the Jira Plugin
 across OpenForge **Projects**. Project-specific work discovery belongs to each
-Project's **Intake Filters**, not to separate Jira credentials.
-_Avoid_: per-Project Jira account, per-filter credentials.
+Project's **Intake Query**, not to separate Jira credentials.
+_Avoid_: per-Project Jira account, per-query credentials.
 
 **Issue Key**:
 The human-readable Jira identifier such as `PROJ-123`. It can look identical to an
@@ -128,11 +128,12 @@ begin **Issue Intake** for that Project.
 _Avoid_: Jira dashboard, backlog mirror, Issue editor, cross-project intake,
 target Project chooser, AI scoring, Kanban, reporting.
 
-**Intake Filter**:
-A named, Project-owned Jira query that selects the **Jira Issues** shown in the
-**Intake Workspace**. Exactly one Intake Filter is active at a time; direct
-**Issue Key** lookup remains available independently.
-_Avoid_: combined filter chips, global filter, client-side app filter.
+**Intake Query**:
+The single, Project-owned JQL query that selects the **Jira Issues** shown in the
+**Intake Workspace**. Each Project remembers its own query; the user edits it in a
+plain JQL input field and applies it.
+_Avoid_: named/saved filters, a filter picker, combined filter chips, global
+filter, client-side app filter.
 
 **Intake Context**:
 The concise Jira context carried into a new OpenForge **Task** during **Issue

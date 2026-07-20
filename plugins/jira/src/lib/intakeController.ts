@@ -1,8 +1,7 @@
 import type { ImplementationRun } from '@openforge-app/plugin-sdk'
-import type { Task } from '@openforge-app/plugin-sdk/domain'
+import type { BoardStatus, Task } from '@openforge-app/plugin-sdk/domain'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import { sanitizeHtml } from '@openforge-app/plugin-sdk/sanitize'
-import { readIntakeFilters } from './intakeFilters'
 import { validateJql } from './issueKey'
 import type { JiraIssue, SearchIssuesRequest, SearchResult } from './jiraTypes'
 import { invokeJiraBackend } from './protocol'
@@ -59,13 +58,39 @@ export type CreateAndStartIntakeTaskResult =
   | IntakeImplementationStarted
   | IntakePartialSuccess
 
+/** The subset of a linked Task the Intake UI renders and navigates to. */
+export interface LinkedTaskSummary {
+  id: string
+  /** Resolved display title (never null); see {@link taskDisplayTitle}. */
+  title: string
+  status: BoardStatus
+  updatedAt: number
+}
+
 export interface IssueLinkState {
   issueKey: string
-  linkedTaskCount: number
-  taskIds: string[]
+  /** Linked Tasks in the active Project, most recently updated first. */
+  tasks: LinkedTaskSummary[]
 }
 
 export type IssueLinkStates = Record<string, IssueLinkState>
+
+/** Resolve a Task's display title: explicit title, else first non-empty prompt line, else id. */
+export function taskDisplayTitle(task: Pick<Task, 'id' | 'title' | 'initial_prompt'>): string {
+  const explicit = task.title?.trim()
+  if (explicit) return explicit
+  const firstLine = task.initial_prompt.split('\n').map((line) => line.trim()).find(Boolean)
+  return firstLine ?? task.id
+}
+
+/** Project a Task down to the fields the Intake UI renders for a linked Task. */
+export function toLinkedTaskSummary(task: Task): LinkedTaskSummary {
+  return { id: task.id, title: taskDisplayTitle(task), status: task.status, updatedAt: task.updated_at }
+}
+
+function byMostRecentlyUpdated(a: LinkedTaskSummary, b: LinkedTaskSummary): number {
+  return b.updatedAt - a.updatedAt
+}
 
 export function buildIssueIntakePrompt(
   issue: Pick<JiraIssue, 'key' | 'summary' | 'descriptionHtml'>,
@@ -124,19 +149,6 @@ export async function searchIntakeIssues(
   return { ...result, issues: result.issues.map(sanitizeIssue) }
 }
 
-export async function searchActiveIntakeFilter(
-  api: IntakeControllerApi,
-  projectId: string,
-  nextPageToken: string | null = null,
-): Promise<SearchResult> {
-  const state = await readIntakeFilters(api, projectId)
-  const activeFilter = state.filters.find(({ id }) => id === state.activeFilterId)
-  if (!activeFilter) {
-    return { ok: false, error: 'unknown', message: 'The active Intake Filter could not be loaded.' }
-  }
-  return searchIntakeIssues(api, { jql: activeFilter.jql, nextPageToken })
-}
-
 export async function deriveIssueLinkStates(
   api: IssueIntakeApi,
   projectId: string,
@@ -145,18 +157,20 @@ export async function deriveIssueLinkStates(
   const keys = [...new Set(issueKeys.map((key) => key.trim().toUpperCase()))]
   const states: IssueLinkStates = {}
   for (const issueKey of keys) {
-    states[issueKey] = { issueKey, linkedTaskCount: 0, taskIds: [] }
+    states[issueKey] = { issueKey, tasks: [] }
   }
   const tasks = await api.tasks.list({ projectId })
   const links = await Promise.all(tasks.map(async (task) => ({
-    taskId: task.id,
+    task,
     issueKey: (await readLinkedKey(api, task.id))?.toUpperCase() ?? null,
   })))
 
   for (const link of links) {
     if (!link.issueKey || !(link.issueKey in states)) continue
-    states[link.issueKey].taskIds.push(link.taskId)
-    states[link.issueKey].linkedTaskCount += 1
+    states[link.issueKey].tasks.push(toLinkedTaskSummary(link.task))
+  }
+  for (const issueKey of keys) {
+    states[issueKey].tasks.sort(byMostRecentlyUpdated)
   }
   return states
 }
@@ -165,14 +179,15 @@ function duplicateConfirmation(
   projectId: string,
   state: IssueLinkState,
 ): DuplicateConfirmationRequired {
-  const taskLabel = state.linkedTaskCount === 1 ? 'Task' : 'Tasks'
+  const linkedTaskCount = state.tasks.length
+  const taskLabel = linkedTaskCount === 1 ? 'Task' : 'Tasks'
   return {
     outcome: 'confirmation-required',
     projectId,
     issueKey: state.issueKey,
-    linkedTaskCount: state.linkedTaskCount,
-    linkedTaskIds: state.taskIds,
-    message: `${state.issueKey} already has ${state.linkedTaskCount} linked ${taskLabel} in the active Project. Confirm to create another Task.`,
+    linkedTaskCount,
+    linkedTaskIds: state.tasks.map((task) => task.id),
+    message: `${state.issueKey} already has ${linkedTaskCount} linked ${taskLabel} in the active Project. Confirm to create another Task.`,
   }
 }
 
@@ -184,7 +199,7 @@ export async function createIntakeTask(
   const issueKey = request.issue.key.trim().toUpperCase()
   const states = await deriveIssueLinkStates(api, request.projectId, [issueKey])
   const linkState = states[issueKey]
-  if (linkState.linkedTaskCount > 0 && !request.duplicateConfirmed) {
+  if (linkState.tasks.length > 0 && !request.duplicateConfirmed) {
     return duplicateConfirmation(request.projectId, linkState)
   }
 

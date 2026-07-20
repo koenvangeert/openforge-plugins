@@ -7,8 +7,8 @@ KVG-1219; credential trade-off recorded in
 
 ## Surfaces
 
-- **Rail view** (`views.register`) — runs the active Project-owned Intake Filter,
-  supports raw JQL, and follows Jira continuation tokens without a silent cutoff.
+- **Rail view** (`views.register`) — runs the Project-owned Intake Query from a
+  plain JQL input field, and follows Jira continuation tokens without a silent cutoff.
 - **Settings section** (`settings.registerSection`) — Jira site, email and API
   token.
 - **Linked Issue Section** (`taskUI.registerSection`) — present in every Task's

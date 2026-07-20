@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick } from 'svelte'
   import type { JiraIssue } from '../lib/jiraTypes'
-  import type { DuplicateConfirmationRequired, IssueLinkState } from '../lib/intakeController'
+  import type { DuplicateConfirmationRequired, IssueLinkState, LinkedTaskSummary } from '../lib/intakeController'
 
   type IntakeAction = 'create' | 'create-start'
   type IntakeNotice = { tone: 'success' | 'error'; message: string }
@@ -14,6 +14,7 @@
     duplicateWarning: (DuplicateConfirmationRequired & { action: IntakeAction }) | null
     focusRequest: number
     onOpenJira: (url: string) => void
+    onOpenTask: (taskId: string) => void
     onIntake: (action: IntakeAction, duplicateConfirmed?: boolean) => Promise<void>
     onCancelDuplicate: () => void
   }
@@ -26,9 +27,16 @@
     duplicateWarning,
     focusRequest,
     onOpenJira,
+    onOpenTask,
     onIntake,
     onCancelDuplicate,
   }: Props = $props()
+
+  function statusBadgeClass(status: LinkedTaskSummary['status']): string {
+    if (status === 'doing') return 'badge-info'
+    if (status === 'done') return 'badge-success'
+    return 'badge-ghost'
+  }
 
   let detailsHeading: HTMLHeadingElement | undefined = $state()
   let confirmDuplicateButton: HTMLButtonElement | undefined = $state()
@@ -96,8 +104,20 @@
         {/if}
         <dt class="text-base-content/60">OpenForge</dt>
         <dd>
-          {#if linkState && linkState.linkedTaskCount > 0}
-            {linkState.linkedTaskCount} linked Task{linkState.linkedTaskCount === 1 ? '' : 's'}
+          {#if linkState && linkState.tasks.length > 0}
+            <ul class="flex flex-col gap-1" aria-label="Linked OpenForge Tasks">
+              {#each linkState.tasks as task (task.id)}
+                <li class="flex items-center gap-2">
+                  <button
+                    type="button"
+                    class="link link-primary min-w-0 truncate text-left"
+                    title={task.title}
+                    onclick={() => onOpenTask(task.id)}
+                  >{task.title}</button>
+                  <span class="badge badge-sm whitespace-nowrap {statusBadgeClass(task.status)}">{task.status}</span>
+                </li>
+              {/each}
+            </ul>
           {:else}
             No linked Tasks
           {/if}

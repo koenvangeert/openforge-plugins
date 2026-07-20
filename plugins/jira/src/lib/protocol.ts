@@ -46,7 +46,7 @@ export const GLOBAL_KEY = {
 
 /** Keys under storage.project(projectId). */
 export const PROJECT_KEY = {
-  intakeFilters: 'intakeFilters',
+  intakeQuery: 'intakeQuery',
 } as const
 
 /** Keys under storage.task(taskId). */

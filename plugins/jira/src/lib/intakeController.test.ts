@@ -10,10 +10,8 @@ import {
   createAndStartIntakeTask,
   createIntakeTask,
   deriveIssueLinkStates,
-  searchActiveIntakeFilter,
   searchIntakeIssues,
 } from './intakeController'
-import { activateIntakeFilter, saveIntakeFilter } from './intakeFilters'
 import { METHOD, TASK_KEY } from './protocol'
 
 type Api = Pick<FrontendOpenForgeAPI, 'backend' | 'storage' | 'tasks'>
@@ -108,7 +106,7 @@ function makeTaskWithProject(id: string, projectId: string, initialPrompt = ''):
 }
 
 describe('deriveIssueLinkStates', () => {
-  it('counts task-scoped Issue Links from the active Project without storing a sync model', async () => {
+  it('summarizes task-scoped Issue Links from the active Project without storing a sync model', async () => {
     const tasks = [makeTask('T-1'), makeTask('T-2'), makeTask('T-3'), makeTask('T-4')]
     const { api, listSpy } = makeApi(async () => undefined, tasks)
     await api.storage.task('T-1').set(TASK_KEY.link, { key: 'PROJ-1' })
@@ -119,11 +117,35 @@ describe('deriveIssueLinkStates', () => {
 
     expect(listSpy).toHaveBeenCalledWith({ projectId: 'P-1' })
     expect(result).toEqual({
-      'PROJ-1': { issueKey: 'PROJ-1', linkedTaskCount: 2, taskIds: ['T-1', 'T-2'] },
-      'PROJ-2': { issueKey: 'PROJ-2', linkedTaskCount: 1, taskIds: ['T-3'] },
-      'PROJ-3': { issueKey: 'PROJ-3', linkedTaskCount: 0, taskIds: [] },
+      'PROJ-1': {
+        issueKey: 'PROJ-1',
+        tasks: [
+          { id: 'T-1', title: 'T-1', status: 'backlog', updatedAt: 0 },
+          { id: 'T-2', title: 'T-2', status: 'backlog', updatedAt: 0 },
+        ],
+      },
+      'PROJ-2': {
+        issueKey: 'PROJ-2',
+        tasks: [{ id: 'T-3', title: 'T-3', status: 'backlog', updatedAt: 0 }],
+      },
+      'PROJ-3': { issueKey: 'PROJ-3', tasks: [] },
     })
     await expect(api.storage.project('P-1').get('issueLinkStates')).resolves.toBeNull()
+  })
+
+  it('orders linked Tasks most recently updated first and resolves each display title', async () => {
+    const older: Task = { ...makeTask('T-old'), updated_at: 100, title: 'Explicit title' }
+    const newer: Task = { ...makeTask('T-new'), updated_at: 200, initial_prompt: 'PROJ-1: Prompt heading\n\nBody' }
+    const { api } = makeApi(async () => undefined, [older, newer])
+    await api.storage.task('T-old').set(TASK_KEY.link, { key: 'PROJ-1' })
+    await api.storage.task('T-new').set(TASK_KEY.link, { key: 'PROJ-1' })
+
+    const result = await deriveIssueLinkStates(api, 'P-1', ['PROJ-1'])
+
+    expect(result['PROJ-1'].tasks).toEqual([
+      { id: 'T-new', title: 'PROJ-1: Prompt heading', status: 'backlog', updatedAt: 200 },
+      { id: 'T-old', title: 'Explicit title', status: 'backlog', updatedAt: 100 },
+    ])
   })
 })
 
@@ -279,20 +301,6 @@ describe('searchIntakeIssues', () => {
       issues: [{ descriptionHtml: '<p>Details</p><img src="x">' }],
       page: { isLast: false, nextPageToken: 'page-3' },
     })
-  })
-
-  it('queries the active named filter owned by the selected Project', async () => {
-    const backendResult: SearchResult = {
-      ok: true,
-      issues: [],
-      page: { isLast: true, nextPageToken: null },
-    }
-    const { api, invokeSpy } = makeApi(async () => backendResult)
-    await saveIntakeFilter(api, 'P-1', { id: 'triage', name: 'Triage', jql: 'project = KVG' })
-    await activateIntakeFilter(api, 'P-1', 'triage')
-
-    await expect(searchActiveIntakeFilter(api, 'P-1')).resolves.toEqual(backendResult)
-    expect(invokeSpy).toHaveBeenCalledWith(METHOD.search, { jql: 'project = KVG', nextPageToken: null })
   })
 
   it('propagates typed Jira errors without replacing their details', async () => {

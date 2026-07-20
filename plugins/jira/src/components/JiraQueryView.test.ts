@@ -46,15 +46,13 @@ function openForgeTask(id: string, projectId = 'P-1'): Task {
 }
 
 describe('JiraQueryView', () => {
-  it('opens with the active Project filter and presents its Issues as a selectable master-detail table', async () => {
+  it('opens with the active Project JQL and presents its Issues as a selectable master-detail table', async () => {
     const registry = createOpenForgeRegistryFake({ pluginId: 'dev.kvg.jira', projectId: 'P-1' })
-    await registry.storage.project('P-1').set(PROJECT_KEY.intakeFilters, {
-      filters: [{ id: 'triage', name: 'Triage', jql: 'project = KVG AND status = Triage' }],
-      activeFilterId: 'triage',
+    await registry.storage.project('P-1').set(PROJECT_KEY.intakeQuery, {
+      jql: 'project = KVG AND status = Triage',
     })
-    await registry.storage.project('P-2').set(PROJECT_KEY.intakeFilters, {
-      filters: [{ id: 'backlog', name: 'Backlog', jql: 'project = NEXT AND status = Backlog' }],
-      activeFilterId: 'backlog',
+    await registry.storage.project('P-2').set(PROJECT_KEY.intakeQuery, {
+      jql: 'project = NEXT AND status = Backlog',
     })
     const invoke = vi.fn(async () => ({
       ok: true,
@@ -176,11 +174,10 @@ describe('JiraQueryView', () => {
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Second page' })))
   })
 
-  it('sorts all Jira pages by status and persists the toggled direction in the active filter', async () => {
+  it('sorts all Jira pages by status and persists the toggled direction in the Project JQL', async () => {
     const registry = createOpenForgeRegistryFake({ pluginId: 'dev.kvg.jira', projectId: 'P-1' })
-    await registry.storage.project('P-1').set(PROJECT_KEY.intakeFilters, {
-      filters: [{ id: 'triage', name: 'Triage', jql: 'project = KVG ORDER BY updated DESC' }],
-      activeFilterId: 'triage',
+    await registry.storage.project('P-1').set(PROJECT_KEY.intakeQuery, {
+      jql: 'project = KVG ORDER BY updated DESC',
     })
     const invoke = vi.fn(async () => ({
       ok: true,
@@ -209,9 +206,8 @@ describe('JiraQueryView', () => {
     }))
     await waitFor(() => expect(statusHeader.getAttribute('aria-sort')).toBe('ascending'))
     await waitFor(async () => {
-      await expect(registry.storage.project('P-1').get(PROJECT_KEY.intakeFilters)).resolves.toEqual({
-        filters: [{ id: 'triage', name: 'Triage', jql: 'project = KVG ORDER BY status ASC, updated DESC' }],
-        activeFilterId: 'triage',
+      await expect(registry.storage.project('P-1').get(PROJECT_KEY.intakeQuery)).resolves.toEqual({
+        jql: 'project = KVG ORDER BY status ASC, updated DESC',
       })
     })
 
@@ -223,21 +219,16 @@ describe('JiraQueryView', () => {
     }))
     await waitFor(() => expect(statusHeader.getAttribute('aria-sort')).toBe('descending'))
     await waitFor(async () => {
-      await expect(registry.storage.project('P-1').get(PROJECT_KEY.intakeFilters)).resolves.toEqual({
-        filters: [{ id: 'triage', name: 'Triage', jql: 'project = KVG ORDER BY status DESC, updated DESC' }],
-        activeFilterId: 'triage',
+      await expect(registry.storage.project('P-1').get(PROJECT_KEY.intakeQuery)).resolves.toEqual({
+        jql: 'project = KVG ORDER BY status DESC, updated DESC',
       })
     })
   })
 
-  it('switches the active Project Intake Filter and applies accepted raw JQL immediately', async () => {
+  it('applies typed JQL immediately and persists it as the Project JQL', async () => {
     const registry = createOpenForgeRegistryFake({ pluginId: 'dev.kvg.jira', projectId: 'P-1' })
-    await registry.storage.project('P-1').set(PROJECT_KEY.intakeFilters, {
-      filters: [
-        { id: 'mine', name: 'My work', jql: 'assignee = currentUser()' },
-        { id: 'triage', name: 'Triage', jql: 'project = KVG AND status = Triage' },
-      ],
-      activeFilterId: 'mine',
+    await registry.storage.project('P-1').set(PROJECT_KEY.intakeQuery, {
+      jql: 'assignee = currentUser()',
     })
     const invoke = vi.fn(async () => ({
       ok: true,
@@ -259,14 +250,7 @@ describe('JiraQueryView', () => {
       nextPageToken: null,
     }))
 
-    await fireEvent.change(screen.getByRole('combobox', { name: 'Intake Filter' }), { target: { value: 'triage' } })
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith(METHOD.search, {
-      jql: 'project = KVG AND status = Triage',
-      nextPageToken: null,
-    }))
-
-    await fireEvent.click(screen.getByText('Advanced JQL'))
-    await fireEvent.input(screen.getByRole('textbox', { name: 'Raw JQL' }), {
+    await fireEvent.input(screen.getByRole('textbox', { name: 'JQL' }), {
       target: { value: 'project = KVG ORDER BY priority DESC' },
     })
     await fireEvent.click(screen.getByRole('button', { name: 'Apply JQL' }))
@@ -276,12 +260,8 @@ describe('JiraQueryView', () => {
       nextPageToken: null,
     }))
     await waitFor(async () => {
-      await expect(registry.storage.project('P-1').get(PROJECT_KEY.intakeFilters)).resolves.toEqual({
-        filters: [
-          { id: 'mine', name: 'My work', jql: 'assignee = currentUser()' },
-          { id: 'triage', name: 'Triage', jql: 'project = KVG ORDER BY priority DESC' },
-        ],
-        activeFilterId: 'triage',
+      await expect(registry.storage.project('P-1').get(PROJECT_KEY.intakeQuery)).resolves.toEqual({
+        jql: 'project = KVG ORDER BY priority DESC',
       })
     })
   })
@@ -314,7 +294,10 @@ describe('JiraQueryView', () => {
     }])
     expect(registry.calls.taskImplementationStarts).toEqual([])
     await expect(registry.storage.task('mock-task-1').get('link')).resolves.toEqual({ key: 'PROJ-7' })
-    expect(screen.getByText('1 linked Task')).toBeTruthy()
+    const linkedTaskLink = within(screen.getByLabelText('Linked OpenForge Tasks'))
+      .getByRole('button', { name: 'PROJ-7: Create intake task' })
+    await fireEvent.click(linkedTaskLink)
+    expect(registry.calls.navigationRequests).toEqual([{ viewId: 'board', taskId: 'mock-task-1' }])
   })
 
   it('requires explicit duplicate confirmation before Create and Start', async () => {
@@ -386,7 +369,7 @@ describe('JiraQueryView', () => {
     await expect(registry.storage.task('mock-task-1').get('link')).resolves.toEqual({ key: 'PROJ-8' })
   })
 
-  it('renders a loading state followed by the empty filter state', async () => {
+  it('renders a loading state followed by the empty query state', async () => {
     const registry = createOpenForgeRegistryFake({ pluginId: 'dev.kvg.jira', projectId: 'P-1' })
     let resolveSearch!: (value: unknown) => void
     const invoke = vi.fn(() => new Promise((resolve) => { resolveSearch = resolve }))
@@ -405,7 +388,7 @@ describe('JiraQueryView', () => {
     await waitFor(() => expect(invoke).toHaveBeenCalledOnce())
     resolveSearch({ ok: true, issues: [], page: { isLast: true, nextPageToken: null } })
 
-    await screen.findByText('No Issues match the active Intake Filter.')
+    await screen.findByText('No Issues match the current JQL query.')
   })
 
   it('shows typed Jira search failures as an accessible error', async () => {
@@ -457,10 +440,7 @@ describe('JiraQueryView', () => {
 
   it('refreshes only on explicit UI or plugin refresh events and reloads after active Project navigation', async () => {
     const registry = createOpenForgeRegistryFake({ pluginId: 'dev.kvg.jira', projectId: 'P-1' })
-    await registry.storage.project('P-2').set(PROJECT_KEY.intakeFilters, {
-      filters: [{ id: 'next', name: 'Next Project', jql: 'project = NEXT' }],
-      activeFilterId: 'next',
-    })
+    await registry.storage.project('P-2').set(PROJECT_KEY.intakeQuery, { jql: 'project = NEXT' })
     const invoke = vi.fn(async () => ({
       ok: true,
       issues: [],
@@ -494,10 +474,7 @@ describe('JiraQueryView', () => {
 
   it('does not paint an old Project search after navigation begins', async () => {
     const registry = createOpenForgeRegistryFake({ pluginId: 'dev.kvg.jira', projectId: 'P-1' })
-    await registry.storage.project('P-2').set(PROJECT_KEY.intakeFilters, {
-      filters: [{ id: 'next', name: 'Next Project', jql: 'project = NEXT' }],
-      activeFilterId: 'next',
-    })
+    await registry.storage.project('P-2').set(PROJECT_KEY.intakeQuery, { jql: 'project = NEXT' })
     let resolveFirstSearch!: (value: unknown) => void
     let releaseProjectRead!: () => void
     const firstSearch = new Promise((resolve) => { resolveFirstSearch = resolve })
@@ -536,7 +513,7 @@ describe('JiraQueryView', () => {
       activeProjectId: 'P-2',
       currentView: 'plugin:dev.kvg.jira:query',
     })
-    expect((screen.getByRole('combobox', { name: 'Intake Filter' }) as HTMLSelectElement).disabled).toBe(true)
+    expect((screen.getByRole('textbox', { name: 'JQL' }) as HTMLTextAreaElement).disabled).toBe(true)
     await api.events.emit(REFRESH_EVENT, null)
     expect(invoke).toHaveBeenCalledTimes(1)
     resolveFirstSearch({
@@ -624,7 +601,7 @@ describe('JiraQueryView', () => {
     expect(within(details).queryByText('Task created-task was created and linked to SHARED-1.')).toBeNull()
   })
 
-  it('shows Project Intake Filter storage failures instead of remaining in loading state', async () => {
+  it('shows Project JQL storage failures instead of remaining in loading state', async () => {
     const registry = createOpenForgeRegistryFake({ pluginId: 'dev.kvg.jira', projectId: 'P-1' })
     const storage = registry.storage
     const api: FrontendOpenForgeAPI = {
@@ -645,90 +622,12 @@ describe('JiraQueryView', () => {
 
     expect((await screen.findByRole('alert')).textContent).toContain('Project storage is unavailable.')
     expect(screen.queryByText('Loading Jira Issues…')).toBeNull()
-    expect((screen.getByRole('combobox', { name: 'Intake Filter' }) as HTMLSelectElement).disabled).toBe(true)
-  })
-
-  it('ignores a filter activation that completes after navigation to another Project', async () => {
-    const registry = createOpenForgeRegistryFake({ pluginId: 'dev.kvg.jira', projectId: 'P-1' })
-    await registry.storage.project('P-1').set(PROJECT_KEY.intakeFilters, {
-      filters: [
-        { id: 'mine', name: 'My work', jql: 'assignee = currentUser()' },
-        { id: 'triage', name: 'Triage', jql: 'project = OLD AND status = Triage' },
-      ],
-      activeFilterId: 'mine',
-    })
-    await registry.storage.project('P-2').set(PROJECT_KEY.intakeFilters, {
-      filters: [{ id: 'next', name: 'Next Project', jql: 'project = NEXT' }],
-      activeFilterId: 'next',
-    })
-    let delayActivation = false
-    let releaseActivation!: () => void
-    let activationStarted!: () => void
-    const activationGate = new Promise<void>((resolve) => { releaseActivation = resolve })
-    const activationStartedPromise = new Promise<void>((resolve) => { activationStarted = resolve })
-    const storage = registry.storage
-    const invoke = vi.fn(async () => ({ ok: true, issues: [], page: { isLast: true, nextPageToken: null } }))
-    const api: FrontendOpenForgeAPI = {
-      ...registry.frontendApi,
-      storage: {
-        global: storage.global,
-        project: (id) => {
-          const scope = storage.project(id)
-          return id === 'P-1'
-            ? {
-                ...scope,
-                set: async (key, value) => {
-                  if (delayActivation && key === PROJECT_KEY.intakeFilters) {
-                    activationStarted()
-                    await activationGate
-                  }
-                  await scope.set(key, value)
-                },
-              }
-            : scope
-        },
-        task: (id) => storage.task(id),
-      },
-      backend: {
-        ...registry.frontendApi.backend,
-        state: 'ready',
-        whenReady: async () => undefined,
-        invoke: invoke as FrontendOpenForgeAPI['backend']['invoke'],
-      },
-    }
-    render(JiraQueryView, { props: { api, context: api.context.getSnapshot() } })
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith(METHOD.search, {
-      jql: 'assignee = currentUser()',
-      nextPageToken: null,
-    }))
-
-    delayActivation = true
-    await fireEvent.change(screen.getByRole('combobox', { name: 'Intake Filter' }), { target: { value: 'triage' } })
-    await activationStartedPromise
-    await api.events.emitGlobal(HOST_EVENT.navigationChanged, {
-      activeProjectId: 'P-2',
-      currentView: 'plugin:dev.kvg.jira:query',
-    })
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith(METHOD.search, {
-      jql: 'project = NEXT',
-      nextPageToken: null,
-    }))
-    releaseActivation()
-    await new Promise((resolve) => setTimeout(resolve, 0))
-
-    expect(invoke).toHaveBeenLastCalledWith(METHOD.search, {
-      jql: 'project = NEXT',
-      nextPageToken: null,
-    })
-    expect((screen.getByRole('combobox', { name: 'Intake Filter' }) as HTMLSelectElement).value).toBe('next')
+    expect((screen.getByRole('textbox', { name: 'JQL' }) as HTMLTextAreaElement).disabled).toBe(true)
   })
 
   it('ignores accepted JQL persistence that completes after Project navigation', async () => {
     const registry = createOpenForgeRegistryFake({ pluginId: 'dev.kvg.jira', projectId: 'P-1' })
-    await registry.storage.project('P-2').set(PROJECT_KEY.intakeFilters, {
-      filters: [{ id: 'next', name: 'Next Project', jql: 'project = NEXT' }],
-      activeFilterId: 'next',
-    })
+    await registry.storage.project('P-2').set(PROJECT_KEY.intakeQuery, { jql: 'project = NEXT' })
     let delaySave = false
     let releaseSave!: () => void
     let saveStarted!: () => void
@@ -746,7 +645,7 @@ describe('JiraQueryView', () => {
             ? {
                 ...scope,
                 set: async (key, value) => {
-                  if (delaySave && key === PROJECT_KEY.intakeFilters) {
+                  if (delaySave && key === PROJECT_KEY.intakeQuery) {
                     saveStarted()
                     await saveGate
                   }
@@ -766,8 +665,7 @@ describe('JiraQueryView', () => {
     }
     render(JiraQueryView, { props: { api, context: api.context.getSnapshot() } })
     await waitFor(() => expect(invoke).toHaveBeenCalledOnce())
-    await fireEvent.click(screen.getByText('Advanced JQL'))
-    await fireEvent.input(screen.getByRole('textbox', { name: 'Raw JQL' }), {
+    await fireEvent.input(screen.getByRole('textbox', { name: 'JQL' }), {
       target: { value: 'project = OLD ORDER BY priority DESC' },
     })
     delaySave = true
@@ -785,7 +683,7 @@ describe('JiraQueryView', () => {
     releaseSave()
     await new Promise((resolve) => setTimeout(resolve, 0))
 
-    expect((screen.getByRole('combobox', { name: 'Intake Filter' }) as HTMLSelectElement).value).toBe('next')
+    expect((screen.getByRole('textbox', { name: 'JQL' }) as HTMLTextAreaElement).value).toBe('project = NEXT')
   })
 
   it('does not let a stale Issue Link derivation overwrite a newer refresh', async () => {
