@@ -176,6 +176,60 @@ describe('JiraQueryView', () => {
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Second page' })))
   })
 
+  it('sorts all Jira pages by status and persists the toggled direction in the active filter', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'dev.kvg.jira', projectId: 'P-1' })
+    await registry.storage.project('P-1').set(PROJECT_KEY.intakeFilters, {
+      filters: [{ id: 'triage', name: 'Triage', jql: 'project = KVG ORDER BY updated DESC' }],
+      activeFilterId: 'triage',
+    })
+    const invoke = vi.fn(async () => ({
+      ok: true,
+      issues: [jiraIssue('PROJ-1', 'Sortable Issue')],
+      page: { isLast: true, nextPageToken: null },
+    }))
+    const api: FrontendOpenForgeAPI = {
+      ...registry.frontendApi,
+      backend: {
+        ...registry.frontendApi.backend,
+        state: 'ready',
+        whenReady: async () => undefined,
+        invoke: invoke as FrontendOpenForgeAPI['backend']['invoke'],
+      },
+    }
+    render(JiraQueryView, { props: { api, context: api.context.getSnapshot() } })
+    await screen.findByRole('row', { name: /PROJ-1.*Sortable Issue/ })
+
+    const statusHeader = screen.getByRole('columnheader', { name: /Status/ })
+    expect(statusHeader.getAttribute('aria-sort')).toBe('none')
+    await fireEvent.click(screen.getByRole('button', { name: 'Sort by status ascending' }))
+
+    await waitFor(() => expect(invoke).toHaveBeenLastCalledWith(METHOD.search, {
+      jql: 'project = KVG ORDER BY status ASC, updated DESC',
+      nextPageToken: null,
+    }))
+    await waitFor(() => expect(statusHeader.getAttribute('aria-sort')).toBe('ascending'))
+    await waitFor(async () => {
+      await expect(registry.storage.project('P-1').get(PROJECT_KEY.intakeFilters)).resolves.toEqual({
+        filters: [{ id: 'triage', name: 'Triage', jql: 'project = KVG ORDER BY status ASC, updated DESC' }],
+        activeFilterId: 'triage',
+      })
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Sort by status descending' }))
+
+    await waitFor(() => expect(invoke).toHaveBeenLastCalledWith(METHOD.search, {
+      jql: 'project = KVG ORDER BY status DESC, updated DESC',
+      nextPageToken: null,
+    }))
+    await waitFor(() => expect(statusHeader.getAttribute('aria-sort')).toBe('descending'))
+    await waitFor(async () => {
+      await expect(registry.storage.project('P-1').get(PROJECT_KEY.intakeFilters)).resolves.toEqual({
+        filters: [{ id: 'triage', name: 'Triage', jql: 'project = KVG ORDER BY status DESC, updated DESC' }],
+        activeFilterId: 'triage',
+      })
+    })
+  })
+
   it('switches the active Project Intake Filter and applies accepted raw JQL immediately', async () => {
     const registry = createOpenForgeRegistryFake({ pluginId: 'dev.kvg.jira', projectId: 'P-1' })
     await registry.storage.project('P-1').set(PROJECT_KEY.intakeFilters, {

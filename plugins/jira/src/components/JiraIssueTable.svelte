@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { JiraIssue } from '../lib/jiraTypes'
   import type { IssueLinkStates } from '../lib/intakeController'
+  import type { SortDirection } from '../lib/jqlSort'
 
   interface Props {
     rows: JiraIssue[]
@@ -11,8 +12,11 @@
     errorMessage: string | null
     pageNumber: number
     nextPageToken: string | null
+    statusSortDirection: SortDirection | null
+    sorting: boolean
     onSelect: (issue: JiraIssue) => void
     onNextPage: () => void
+    onStatusSort: (direction: SortDirection) => void
   }
 
   let {
@@ -24,9 +28,17 @@
     errorMessage,
     pageNumber,
     nextPageToken,
+    statusSortDirection,
+    sorting,
     onSelect,
     onNextPage,
+    onStatusSort,
   }: Props = $props()
+
+  let nextStatusSortDirection = $derived<SortDirection>(statusSortDirection === 'asc' ? 'desc' : 'asc')
+  let statusAriaSort = $derived<'ascending' | 'descending' | 'none'>(statusSortDirection === 'asc'
+    ? 'ascending'
+    : statusSortDirection === 'desc' ? 'descending' : 'none')
 
   function selectFromKeyboard(event: KeyboardEvent, issue: JiraIssue) {
     if (event.key !== 'Enter' && event.key !== ' ') return
@@ -53,7 +65,17 @@
         <tr>
           <th>Issue Key</th>
           <th>Summary</th>
-          <th>Status</th>
+          <th aria-label="Status" aria-sort={statusAriaSort}>
+            <button
+              class="btn btn-ghost btn-xs -ml-2 gap-1"
+              aria-label={`Sort by status ${nextStatusSortDirection === 'asc' ? 'ascending' : 'descending'}`}
+              onclick={() => onStatusSort(nextStatusSortDirection)}
+              disabled={loading || sorting}
+            >
+              Status
+              <span aria-hidden="true">{statusSortDirection === 'asc' ? '↑' : statusSortDirection === 'desc' ? '↓' : '↕'}</span>
+            </button>
+          </th>
           <th>Priority</th>
           <th>Assignee</th>
           <th>OpenForge</th>

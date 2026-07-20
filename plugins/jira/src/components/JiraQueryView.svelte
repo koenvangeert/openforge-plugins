@@ -16,6 +16,8 @@
     saveIntakeFilter,
   } from '../lib/intakeFilters'
   import type { IntakeFilter } from '../lib/intakeFilters'
+  import { getStatusSortDirection, withStatusSort } from '../lib/jqlSort'
+  import type { SortDirection } from '../lib/jqlSort'
   import { HOST_EVENT, REFRESH_EVENT } from '../lib/protocol'
   import JiraIssueDetails from './JiraIssueDetails.svelte'
   import JiraIssueTable from './JiraIssueTable.svelte'
@@ -40,6 +42,7 @@
   let jql = $state(DEFAULT_INTAKE_FILTER.jql)
   let jqlDraft = $state(DEFAULT_INTAKE_FILTER.jql)
   let applyingJql = $state(false)
+  let sorting = $state(false)
   let filterChanging = $state(false)
   let filterReady = $state(false)
   let intakeBusy = $state(false)
@@ -58,6 +61,7 @@
   let projectSequence = 0
   let intakeSequence = 0
   let filterSequence = 0
+  let statusSortDirection = $derived(getStatusSortDirection(jql))
 
   function resetIntakeFeedback() {
     intakeNotice = null
@@ -121,7 +125,7 @@
   }
 
   async function changeFilter(event: Event) {
-    if (!projectId || !filterReady || filterChanging) return
+    if (!projectId || !filterReady || filterChanging || sorting) return
     const changeProjectId = projectId
     const sequence = ++filterSequence
     const filterId = (event.currentTarget as HTMLSelectElement).value
@@ -161,7 +165,7 @@
   }
 
   async function applyJql() {
-    if (!projectId || !filterReady || applyingJql) return
+    if (!projectId || !filterReady || applyingJql || sorting) return
     const applyProjectId = projectId
     const applyFilterId = activeFilterId
     const sequence = ++filterSequence
@@ -184,6 +188,34 @@
       }
     } finally {
       if (sequence === filterSequence) applyingJql = false
+    }
+  }
+
+  async function sortStatus(direction: SortDirection) {
+    if (!projectId || !filterReady || loading || applyingJql || sorting) return
+    const sortProjectId = projectId
+    const sortFilterId = activeFilterId
+    const sequence = ++filterSequence
+    sorting = true
+    try {
+      const accepted = await run(null, withStatusSort(jql, direction))
+      if (accepted && sequence === filterSequence && projectId === sortProjectId) {
+        jqlDraft = jql
+        const activeFilter = filters.find(({ id }) => id === sortFilterId)
+        if (activeFilter) {
+          const state = await saveIntakeFilter(api, sortProjectId, { ...activeFilter, jql })
+          if (sequence !== filterSequence || projectId !== sortProjectId) return
+          filters = state.filters
+        }
+      }
+    } catch (cause) {
+      if (sequence !== filterSequence || projectId !== sortProjectId) return
+      error = {
+        code: 'unknown',
+        message: cause instanceof Error ? cause.message : 'Could not save the Jira status ordering.',
+      }
+    } finally {
+      if (sequence === filterSequence) sorting = false
     }
   }
 
@@ -262,6 +294,7 @@
     filterSequence += 1
     filterChanging = false
     applyingJql = false
+    sorting = false
     filterReady = false
     querySequence += 1
     projectId = nextProjectId
@@ -353,7 +386,7 @@
                 class="select select-bordered select-sm w-full"
                 value={activeFilterId}
                 onchange={changeFilter}
-                disabled={filterChanging || applyingJql || !filterReady}
+                disabled={filterChanging || applyingJql || sorting || !filterReady}
               >
                 {#each filters as filter (filter.id)}
                   <option value={filter.id}>{filter.name}</option>
@@ -391,8 +424,11 @@
           errorMessage={error?.message ?? null}
           {pageNumber}
           {nextPageToken}
+          {statusSortDirection}
+          {sorting}
           onSelect={(issue) => selectIssue(issue)}
           onNextPage={() => void run(nextPageToken)}
+          onStatusSort={(direction) => void sortStatus(direction)}
         />
       </div>
 
