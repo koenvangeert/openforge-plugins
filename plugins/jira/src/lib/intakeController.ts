@@ -58,10 +58,9 @@ export type CreateAndStartIntakeTaskResult =
   | IntakeImplementationStarted
   | IntakePartialSuccess
 
-/** The subset of a linked Task the Intake UI renders and navigates to. */
 export interface LinkedTaskSummary {
   id: string
-  /** Resolved display title (never null); see {@link taskDisplayTitle}. */
+  /** Resolved display title; never null, unlike {@link Task.title}. */
   title: string
   status: BoardStatus
   updatedAt: number
@@ -83,13 +82,19 @@ export function taskDisplayTitle(task: Pick<Task, 'id' | 'title' | 'initial_prom
   return firstLine ?? task.id
 }
 
-/** Project a Task down to the fields the Intake UI renders for a linked Task. */
 export function toLinkedTaskSummary(task: Task): LinkedTaskSummary {
   return { id: task.id, title: taskDisplayTitle(task), status: task.status, updatedAt: task.updated_at }
 }
 
 function byMostRecentlyUpdated(a: LinkedTaskSummary, b: LinkedTaskSummary): number {
   return b.updatedAt - a.updatedAt
+}
+
+/** Add or replace a linked Task in a state, keeping the most-recently-updated-first ordering. */
+export function upsertLinkedTask(state: IssueLinkState | undefined, issueKey: string, task: Task): IssueLinkState {
+  const summary = toLinkedTaskSummary(task)
+  const others = (state?.tasks ?? []).filter((existing) => existing.id !== summary.id)
+  return { issueKey, tasks: [summary, ...others].sort(byMostRecentlyUpdated) }
 }
 
 export function buildIssueIntakePrompt(

@@ -11,6 +11,7 @@ import {
   createIntakeTask,
   deriveIssueLinkStates,
   searchIntakeIssues,
+  upsertLinkedTask,
 } from './intakeController'
 import { METHOD, TASK_KEY } from './protocol'
 
@@ -146,6 +147,39 @@ describe('deriveIssueLinkStates', () => {
       { id: 'T-new', title: 'PROJ-1: Prompt heading', status: 'backlog', updatedAt: 200 },
       { id: 'T-old', title: 'Explicit title', status: 'backlog', updatedAt: 100 },
     ])
+  })
+})
+
+describe('upsertLinkedTask', () => {
+  it('inserts a new linked Task and keeps most-recently-updated ordering', () => {
+    const state = { issueKey: 'PROJ-1', tasks: [{ id: 'T-old', title: 'Old', status: 'backlog' as const, updatedAt: 100 }] }
+    const task: Task = { ...makeTask('T-new'), updated_at: 200, title: 'New' }
+
+    expect(upsertLinkedTask(state, 'PROJ-1', task)).toEqual({
+      issueKey: 'PROJ-1',
+      tasks: [
+        { id: 'T-new', title: 'New', status: 'backlog', updatedAt: 200 },
+        { id: 'T-old', title: 'Old', status: 'backlog', updatedAt: 100 },
+      ],
+    })
+  })
+
+  it('replaces an already-present Task instead of duplicating it', () => {
+    const state = { issueKey: 'PROJ-1', tasks: [{ id: 'T-1', title: 'Stale', status: 'backlog' as const, updatedAt: 100 }] }
+    const task: Task = { ...makeTask('T-1'), updated_at: 300, title: 'Fresh' }
+
+    expect(upsertLinkedTask(state, 'PROJ-1', task).tasks).toEqual([
+      { id: 'T-1', title: 'Fresh', status: 'backlog', updatedAt: 300 },
+    ])
+  })
+
+  it('starts a new state when the Issue had no linked Tasks', () => {
+    const task: Task = { ...makeTask('T-1'), title: 'First' }
+
+    expect(upsertLinkedTask(undefined, 'PROJ-1', task)).toEqual({
+      issueKey: 'PROJ-1',
+      tasks: [{ id: 'T-1', title: 'First', status: 'backlog', updatedAt: 0 }],
+    })
   })
 })
 

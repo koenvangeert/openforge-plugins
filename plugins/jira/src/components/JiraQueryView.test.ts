@@ -722,4 +722,109 @@ describe('JiraQueryView', () => {
     expect(screen.queryByText('1 linked')).toBeNull()
   })
 
+  it('opens the single linked Task from its title in the issue table', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'dev.kvg.jira', projectId: 'P-1' })
+    await registry.storage.task('only-task').set('link', { key: 'PROJ-1' })
+    const invoke = vi.fn(async () => ({
+      ok: true,
+      issues: [jiraIssue('PROJ-1', 'First Issue')],
+      page: { isLast: true, nextPageToken: null },
+    }))
+    const api: FrontendOpenForgeAPI = {
+      ...registry.frontendApi,
+      backend: {
+        ...registry.frontendApi.backend,
+        state: 'ready',
+        whenReady: async () => undefined,
+        invoke: invoke as FrontendOpenForgeAPI['backend']['invoke'],
+      },
+      tasks: {
+        ...registry.frontendApi.tasks,
+        list: async () => [{ ...openForgeTask('only-task'), initial_prompt: 'PROJ-1: Do the thing' }],
+      },
+    }
+    render(JiraQueryView, { props: { api, context: api.context.getSnapshot() } })
+
+    const row = await screen.findByRole('row', { name: /PROJ-1.*First Issue/ })
+    const taskLink = await within(row).findByRole('button', { name: 'PROJ-1: Do the thing' })
+    await fireEvent.click(taskLink)
+
+    expect(registry.calls.navigationRequests).toEqual([{ viewId: 'board', taskId: 'only-task' }])
+  })
+
+  it('opens the most recently updated linked Task from the table badge without selecting the row', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'dev.kvg.jira', projectId: 'P-1' })
+    await registry.storage.task('task-early').set('link', { key: 'PROJ-2' })
+    await registry.storage.task('task-late').set('link', { key: 'PROJ-2' })
+    const invoke = vi.fn(async () => ({
+      ok: true,
+      issues: [jiraIssue('PROJ-1', 'First Issue'), jiraIssue('PROJ-2', 'Second Issue')],
+      page: { isLast: true, nextPageToken: null },
+    }))
+    const api: FrontendOpenForgeAPI = {
+      ...registry.frontendApi,
+      backend: {
+        ...registry.frontendApi.backend,
+        state: 'ready',
+        whenReady: async () => undefined,
+        invoke: invoke as FrontendOpenForgeAPI['backend']['invoke'],
+      },
+      tasks: {
+        ...registry.frontendApi.tasks,
+        list: async () => [
+          { ...openForgeTask('task-early'), updated_at: 100 },
+          { ...openForgeTask('task-late'), updated_at: 200 },
+        ],
+      },
+    }
+    render(JiraQueryView, { props: { api, context: api.context.getSnapshot() } })
+
+    const secondRow = await screen.findByRole('row', { name: /PROJ-2.*Second Issue/ })
+    const badge = await within(secondRow).findByRole('button', { name: '2 linked' })
+    expect(secondRow.getAttribute('aria-selected')).toBe('false')
+
+    await fireEvent.click(badge)
+
+    expect(registry.calls.navigationRequests).toEqual([{ viewId: 'board', taskId: 'task-late' }])
+    expect(secondRow.getAttribute('aria-selected')).toBe('false')
+  })
+
+  it('lists every linked Task in the details panel and opens each on click', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'dev.kvg.jira', projectId: 'P-1' })
+    await registry.storage.task('task-early').set('link', { key: 'PROJ-2' })
+    await registry.storage.task('task-late').set('link', { key: 'PROJ-2' })
+    const invoke = vi.fn(async () => ({
+      ok: true,
+      issues: [jiraIssue('PROJ-1', 'First Issue'), jiraIssue('PROJ-2', 'Second Issue')],
+      page: { isLast: true, nextPageToken: null },
+    }))
+    const api: FrontendOpenForgeAPI = {
+      ...registry.frontendApi,
+      backend: {
+        ...registry.frontendApi.backend,
+        state: 'ready',
+        whenReady: async () => undefined,
+        invoke: invoke as FrontendOpenForgeAPI['backend']['invoke'],
+      },
+      tasks: {
+        ...registry.frontendApi.tasks,
+        list: async () => [
+          { ...openForgeTask('task-early'), updated_at: 100, initial_prompt: 'PROJ-2: Older work' },
+          { ...openForgeTask('task-late'), updated_at: 200, initial_prompt: 'PROJ-2: Newer work' },
+        ],
+      },
+    }
+    render(JiraQueryView, { props: { api, context: api.context.getSnapshot() } })
+
+    await fireEvent.click(await screen.findByRole('row', { name: /PROJ-2.*Second Issue/ }))
+    const linkedTasks = within(await screen.findByLabelText('Linked OpenForge Tasks'))
+    const [firstListed, secondListed] = linkedTasks.getAllByRole('button')
+    expect(firstListed.textContent).toContain('PROJ-2: Newer work')
+    expect(secondListed.textContent).toContain('PROJ-2: Older work')
+
+    await fireEvent.click(secondListed)
+
+    expect(registry.calls.navigationRequests).toEqual([{ viewId: 'board', taskId: 'task-early' }])
+  })
+
 })

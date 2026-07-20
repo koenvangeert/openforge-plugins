@@ -7,7 +7,7 @@
     createIntakeTask,
     deriveIssueLinkStates,
     searchIntakeIssues,
-    toLinkedTaskSummary,
+    upsertLinkedTask,
   } from '../lib/intakeController'
   import type { Task } from '@openforge-app/plugin-sdk/domain'
   import type { DuplicateConfirmationRequired, IssueLinkStates } from '../lib/intakeController'
@@ -160,14 +160,7 @@
   }
 
   function recordCreatedLink(issueKey: string, task: Task) {
-    const current = linkStates[issueKey] ?? { issueKey, tasks: [] }
-    linkStates = {
-      ...linkStates,
-      [issueKey]: {
-        issueKey,
-        tasks: [toLinkedTaskSummary(task), ...current.tasks].sort((a, b) => b.updatedAt - a.updatedAt),
-      },
-    }
+    linkStates = { ...linkStates, [issueKey]: upsertLinkedTask(linkStates[issueKey], issueKey, task) }
   }
 
   async function performIntake(action: IntakeAction, duplicateConfirmed = false) {
