@@ -112,9 +112,10 @@ describe('InjectablesView', () => {
     const { api, invoke, getSnippets } = makeApi([])
     renderView(api)
 
-    await fireEvent.click(await screen.findByText('+ Snippet'))
-    await fireEvent.input(screen.getByPlaceholderText('Name'), { target: { value: 'My snip' } })
-    await fireEvent.input(screen.getByPlaceholderText(/Body/), { target: { value: 'hello world' } })
+    // Snippet creation now lives in the shared browser's Snippets group header.
+    await fireEvent.click(await screen.findByText('New snippet'))
+    await fireEvent.input(screen.getByTestId('snippet-name'), { target: { value: 'My snip' } })
+    await fireEvent.input(screen.getByTestId('snippet-editor'), { target: { value: 'hello world' } })
     await fireEvent.click(screen.getByText('Save'))
 
     await waitFor(() => expect(getSnippets()).toHaveLength(1))
@@ -130,9 +131,10 @@ describe('InjectablesView', () => {
 
     renderView(api)
 
-    // The lone snippet auto-selects, so Delete is already available.
+    // The lone snippet auto-selects, so Delete is already available. Confirmation is
+    // the shared browser's delete modal.
     await fireEvent.click(await screen.findByText('Delete'))
-    await fireEvent.click(screen.getByText('Confirm delete'))
+    await fireEvent.click(await screen.findByTestId('confirm-delete'))
 
     await waitFor(() => expect(getSnippets()).toHaveLength(0))
   })
@@ -146,9 +148,11 @@ describe('InjectablesView', () => {
 
     renderView(api)
 
-    // The lone snippet auto-selects, so Edit is already available.
+    // The lone snippet auto-selects, so Edit is already available. Edit changes only
+    // title + content; the scope must survive untouched (project scope is managed by
+    // the browser's "Available in" dropdown, not by this form).
     await fireEvent.click(await screen.findByText('Edit'))
-    await fireEvent.input(screen.getByPlaceholderText(/Body/), { target: { value: 'edited body' } })
+    await fireEvent.input(screen.getByTestId('snippet-editor'), { target: { value: 'edited body' } })
     await fireEvent.click(screen.getByText('Save'))
 
     await waitFor(() => expect(getSnippets()[0]?.body).toBe('edited body'))
