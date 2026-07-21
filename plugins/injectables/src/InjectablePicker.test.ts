@@ -423,17 +423,20 @@ describe('InjectablePicker', () => {
     const { getByPlaceholderText } = render(InjectablePicker, { props: props() })
     const input = getByPlaceholderText('Search injectables…')
     await fireEvent.keyDown(input, { key: 'Tab' })
-    // The first row is the leading group header.
-    const firstRow = document.querySelector('[data-injectable-id]')
-    expect(document.activeElement).toBe(firstRow)
-    expect(firstRow?.getAttribute('data-injectable-id')).toBe('group:snippet')
+    // Expanded group headers are skipped, so the first navigable row is the first item.
+    expect(document.activeElement).toBe(document.querySelector('[data-injectable-id="snippet:s1"]'))
   })
 
-  it('arrow navigation moves DOM focus onto the active row', async () => {
+  it('arrow navigation moves DOM focus onto the active row, skipping expanded headers', async () => {
     const { getByPlaceholderText } = render(InjectablePicker, { props: props() })
     const input = getByPlaceholderText('Search injectables…')
     await fireEvent.keyDown(input, { key: 'ArrowDown' })
-    expect(document.activeElement).toBe(document.querySelector('[data-injectable-id="group:snippet"]'))
+    expect(document.activeElement).toBe(document.querySelector('[data-injectable-id="snippet:s1"]'))
+    // Next down crosses into the following group without stopping on its header.
+    await fireEvent.keyDown(input, { key: 'ArrowDown' })
+    expect(document.activeElement).toBe(
+      document.querySelector('[data-injectable-id="personal:skill:pr-writer"]'),
+    )
   })
 
   it('⌘ filter change keeps focus in the list, re-homing when the active row is filtered out', async () => {
@@ -442,12 +445,12 @@ describe('InjectablePicker', () => {
     snippetRow.focus()
     expect(document.activeElement).toBe(snippetRow)
     // ⌘2 → Snippets (row survives), ⌘2 → Personal (snippet row removed → focus re-homes
-    // to the first row of the filtered list, the Personal header).
+    // to the first navigable row, which is the Personal item since its header is skipped).
     await fireEvent.keyDown(snippetRow, { key: '2', metaKey: true })
     await fireEvent.keyDown(snippetRow, { key: '2', metaKey: true })
     await waitFor(() =>
       expect(document.activeElement).toBe(
-        document.querySelector('[data-injectable-id="group:personal"]'),
+        document.querySelector('[data-injectable-id="personal:skill:pr-writer"]'),
       ),
     )
   })
@@ -455,18 +458,20 @@ describe('InjectablePicker', () => {
   it('ArrowLeft on an item collapses its group and moves to the header; ArrowRight re-expands', async () => {
     const { getByPlaceholderText } = render(InjectablePicker, { props: props() })
     const input = getByPlaceholderText('Search injectables…')
-    // Move down to the snippet item (group:snippet → snippet:s1), then Left.
-    await fireEvent.keyDown(input, { key: 'ArrowDown' })
+    // One down lands on the snippet item — the expanded header is skipped.
     await fireEvent.keyDown(input, { key: 'ArrowDown' })
     expect(document.activeElement).toBe(document.querySelector('[data-injectable-id="snippet:s1"]'))
     await fireEvent.keyDown(input, { key: 'ArrowLeft' })
-    // Group collapsed → the item row is gone and focus is on the header.
+    // Group collapsed → the item row is gone and the header, now selectable, takes focus.
     await waitFor(() => expect(document.querySelector('[data-injectable-id="snippet:s1"]')).toBeNull())
     expect(document.activeElement).toBe(document.querySelector('[data-injectable-id="group:snippet"]'))
-    // ArrowRight re-expands and the item reappears.
+    // ArrowRight re-expands; the header stops being selectable so focus lands on the item.
     await fireEvent.keyDown(input, { key: 'ArrowRight' })
     await waitFor(() =>
       expect(document.querySelector('[data-injectable-id="snippet:s1"]')).not.toBeNull(),
+    )
+    await waitFor(() =>
+      expect(document.activeElement).toBe(document.querySelector('[data-injectable-id="snippet:s1"]')),
     )
   })
 

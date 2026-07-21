@@ -24,6 +24,7 @@
     toggleAllProjectsScope,
     toggleProjectInScope,
     flattenNavRows,
+    navigableRowIds,
     navLeft,
     navRight,
     groupRowId,
@@ -211,7 +212,7 @@
   // Keyboard rows in display order: a header per group, then its items when expanded.
   // ↑/↓ step through all rows (headers + items); ←/→ collapse/expand groups.
   const navRows = $derived(flattenNavRows(displayGroups, collapsed))
-  const navigableIds = $derived(navRows.map((r) => r.id))
+  const navigableIds = $derived(navigableRowIds(navRows, collapsed))
   // The previewed item — a group-header row (`group:…`) resolves to null (no preview).
   const selected = $derived(
     selectedId === null ? null : (visible.find((i) => i.id === selectedId) ?? null),
@@ -512,7 +513,15 @@
     if (r.type === 'none') return
     if (r.type === 'toggle') toggleCollapse(r.groupKey)
     selectedId = r.focusId
-    void tick().then(() => focusRow(selectedId))
+    void tick().then(() => {
+      // Expanding a group makes its header unselectable, so the focus the tree asked
+      // for no longer exists — land on the group's first item instead.
+      if (selectedId && !navigableIds.includes(selectedId) && r.type === 'toggle') {
+        const firstItem = navRows.find((row) => row.kind === 'item' && row.groupKey === r.groupKey)
+        if (firstItem) selectedId = firstItem.id
+      }
+      focusRow(selectedId)
+    })
   }
 
   export function handleKeydown(e: KeyboardEvent): boolean | void {
@@ -744,14 +753,14 @@
       </div>
       {#if !collapsed.has(group.key)}
         {#if group.key === 'snippet' && group.items.length === 0}
-          <p class="py-2 pl-8 pr-2 text-xs opacity-50">No snippets yet — create one to reuse text.</p>
+          <p class="py-2 pl-12 pr-2 text-xs opacity-50">No snippets yet — create one to reuse text.</p>
         {:else}
           <div class="mt-0.5 flex flex-col">
             {#each group.items as item (item.id)}
               {@const Icon = KIND_ICON[item.kind]}
               <button
                 data-injectable-id={item.id}
-                class="flex w-full flex-col gap-0.5 rounded-md py-2 pl-8 pr-2 text-left hover:bg-base-200"
+                class="flex w-full flex-col gap-0.5 rounded-md py-2 pl-12 pr-2 text-left hover:bg-base-200"
                 class:ring-2={selectedId === item.id}
                 class:ring-primary={selectedId === item.id}
                 class:bg-base-200={selectedId === item.id}

@@ -125,6 +125,27 @@ export function flattenNavRows(
   return rows
 }
 
+/**
+ * The ids arrow up/down step through. An expanded group's header is skipped — with
+ * everything open you move purely through injectables — so a header is only selectable
+ * when its group is collapsed (where it is the thing you reopen with ArrowRight) or
+ * when the group is expanded but empty, which would otherwise leave it unreachable.
+ */
+export function navigableRowIds(rows: NavRow[], collapsedKeys: Set<string>): string[] {
+  const itemCount = new Map<string, number>()
+  for (const r of rows) {
+    if (r.kind === 'item') itemCount.set(r.groupKey, (itemCount.get(r.groupKey) ?? 0) + 1)
+  }
+  return rows
+    .filter(
+      (r) =>
+        r.kind === 'item' ||
+        collapsedKeys.has(r.groupKey) ||
+        (itemCount.get(r.groupKey) ?? 0) === 0,
+    )
+    .map((r) => r.id)
+}
+
 export type TreeKeyResult =
   | { type: 'none' }
   | { type: 'toggle'; groupKey: string; focusId: string }

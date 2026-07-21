@@ -10,6 +10,7 @@ import {
   toggleAllProjectsScope,
   toggleProjectInScope,
   flattenNavRows,
+  navigableRowIds,
   navLeft,
   navRight,
 } from './pickerLogic'
@@ -193,6 +194,26 @@ describe('tree navigation (headers + items)', () => {
       'personal:skill:a',
       'personal:skill:b',
     ])
+  })
+
+  it('navigableRowIds skips the header of an expanded group', () => {
+    // Everything open: arrow keys walk injectables only, never a category name.
+    const ids = navigableRowIds(flattenNavRows(groups, new Set()), new Set())
+    expect(ids).toEqual(['snippet:s1', 'personal:skill:a', 'personal:skill:b'])
+  })
+
+  it('navigableRowIds keeps a collapsed group header selectable', () => {
+    // Collapsed: the header becomes the thing you land on and reopen with ArrowRight.
+    const collapsed = new Set(['snippet'])
+    const ids = navigableRowIds(flattenNavRows(groups, collapsed), collapsed)
+    expect(ids).toEqual(['group:snippet', 'personal:skill:a', 'personal:skill:b'])
+  })
+
+  it('navigableRowIds keeps an expanded but empty group reachable', () => {
+    // Otherwise an empty Snippets group could never be focused or collapsed.
+    const withEmpty = [{ key: 'snippet', items: [] }, ...groups.slice(1)]
+    const ids = navigableRowIds(flattenNavRows(withEmpty, new Set()), new Set())
+    expect(ids).toEqual(['group:snippet', 'personal:skill:a', 'personal:skill:b'])
   })
 
   it('navLeft on an item collapses its group and moves to the header', () => {
