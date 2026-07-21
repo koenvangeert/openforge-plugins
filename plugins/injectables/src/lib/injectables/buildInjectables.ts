@@ -2,18 +2,30 @@ import type { CommandInfo } from '@openforge-app/plugin-sdk'
 import type { Injectable, InjectableOrigin, InjectableTriggerMode, Snippet } from '../injectableDomain'
 
 const CLAUDE_SKILL_DIRS = new Set(['.claude', '.agents'])
+// Every local skill directory the sidecar scans. The rail view browses all of them;
+// the picker stays Claude-scoped because it inserts into a Claude prompt.
+const ALL_SKILL_DIRS = new Set(['.claude', '.agents', '.opencode', '.codex', '.pi'])
 // builtin commands + plugin skills are provided by the tool/plugin and carry no source dir.
 const CLAUDE_PROVIDED_ORIGINS = new Set(['builtin', 'plugin'])
+
+/**
+ * Which local skill directories to surface.
+ * - `claude` (default): `.claude` / `.agents` only — what a Claude prompt can invoke.
+ * - `all`: every directory the sidecar scans, for browsing/managing what's on disk.
+ */
+export type SkillScope = 'claude' | 'all'
 const ORIGINS = new Set<InjectableOrigin>(['personal', 'project', 'plugin', 'builtin'])
 const TRIGGERS = new Set<InjectableTriggerMode>(['auto+manual', 'manual-only'])
 
-function isClaudeRelevant(c: CommandInfo): boolean {
-  // Tool/plugin-provided items are always Claude-relevant (no source dir to gate on).
+function isRelevant(c: CommandInfo, scope: SkillScope): boolean {
+  // Tool/plugin-provided items are always relevant (no source dir to gate on).
   if (c.origin != null && CLAUDE_PROVIDED_ORIGINS.has(c.origin)) return true
-  // Everything else — skills AND legacy .md commands — must live in a Claude source dir.
-  // This drops .pi/.codex/.opencode skills and .opencode/commands, and yields an empty
-  // catalog for non-claude-code providers (which don't emit origin/sourceDir enrichment).
-  return c.sourceDir != null && CLAUDE_SKILL_DIRS.has(c.sourceDir)
+  // Everything else — skills AND legacy .md commands — must live in a known source dir.
+  // Under `claude` scope that drops .pi/.codex/.opencode skills and .opencode/commands,
+  // and yields an empty catalog for non-claude-code providers (which don't emit
+  // origin/sourceDir enrichment). Under `all` scope every scanned directory is kept.
+  const allowed = scope === 'all' ? ALL_SKILL_DIRS : CLAUDE_SKILL_DIRS
+  return c.sourceDir != null && allowed.has(c.sourceDir)
 }
 
 function normOrigin(v: string | null | undefined): InjectableOrigin {
@@ -62,15 +74,21 @@ export function buildInjectables(input: {
   commands: CommandInfo[]
   snippets?: Snippet[]
   projectId?: string | null
+  skillScope?: SkillScope
 }): Injectable[] {
   const projectId = input.projectId ?? null
+  const scope = input.skillScope ?? 'claude'
   const commands = input.commands
-    .filter((c) => isClaudeRelevant(c) && c.userInvocable !== false)
+    .filter((c) => isRelevant(c, scope) && c.userInvocable !== false)
     .map((c) => {
       const kind = c.source === 'skill' ? 'skill' : 'command'
       const origin = normOrigin(c.origin)
       return {
-        id: `${origin}:${kind}:${c.name}`,
+        // The source dir is part of the identity: the same skill name can exist in
+        // several directories (e.g. ~/.claude/skills and ~/.codex/skills), and under
+        // `all` scope both are listed, so name alone is not unique. Tool/plugin-provided
+        // items carry no source dir and keep the shorter id.
+        id: [origin, kind, c.sourceDir, c.name].filter(Boolean).join(':'),
         kind,
         name: c.name,
         description: c.description,

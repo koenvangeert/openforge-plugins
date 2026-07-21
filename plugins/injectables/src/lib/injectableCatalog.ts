@@ -1,6 +1,6 @@
 import type { Injectable, Snippet } from './injectableDomain'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
-import { buildInjectables } from './injectables'
+import { buildInjectables, type SkillScope } from './injectables'
 import { METHOD } from './protocol'
 
 /** The slice of the plugin API the injectable catalog needs: the host command
@@ -17,11 +17,12 @@ export type CatalogApi = Pick<FrontendOpenForgeAPI, 'commands' | 'backend'>
 export async function loadInjectableCatalog(
   api: CatalogApi,
   projectId: string | null,
+  skillScope: SkillScope = 'claude',
 ): Promise<{ injectables: Injectable[]; snippets: Snippet[] }> {
   await api.backend.whenReady()
   const [commands, snippets] = await Promise.all([
     api.commands.listCatalog({ projectId }),
     api.backend.invoke<Snippet[]>(METHOD.listSnippets, null),
   ])
-  return { injectables: buildInjectables({ commands, snippets, projectId }), snippets }
+  return { injectables: buildInjectables({ commands, snippets, projectId, skillScope }), snippets }
 }

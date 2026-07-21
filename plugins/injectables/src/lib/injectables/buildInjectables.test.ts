@@ -23,6 +23,38 @@ describe('buildInjectables', () => {
     expect(out.map((i) => i.name)).toEqual(['keep'])
   })
 
+  it('keeps every local skill directory under the "all" scope', () => {
+    const out = buildInjectables({
+      commands: [
+        cmd({ name: 'claudeskill', sourceDir: '.claude' }),
+        cmd({ name: 'codexskill', sourceDir: '.codex' }),
+        cmd({ name: 'piskill', sourceDir: '.pi' }),
+        cmd({ name: 'opencodeskill', sourceDir: '.opencode' }),
+      ],
+      skillScope: 'all',
+    })
+    expect(out.map((i) => i.name).sort()).toEqual([
+      'claudeskill',
+      'codexskill',
+      'opencodeskill',
+      'piskill',
+    ])
+  })
+
+  it('gives same-named skills in different directories distinct ids', () => {
+    // Real case: ~/.claude/skills/openforge and ~/.codex/skills/openforge both exist.
+    // Without the source dir in the id these collide and break keyed rendering.
+    const out = buildInjectables({
+      commands: [
+        cmd({ name: 'openforge', origin: 'personal', sourceDir: '.claude' }),
+        cmd({ name: 'openforge', origin: 'personal', sourceDir: '.codex' }),
+      ],
+      skillScope: 'all',
+    })
+    expect(out).toHaveLength(2)
+    expect(new Set(out.map((i) => i.id)).size).toBe(2)
+  })
+
   it('keeps .agents skills and plugin/builtin commands', () => {
     const out = buildInjectables({
       commands: [
@@ -63,7 +95,8 @@ describe('buildInjectables', () => {
   it('maps kind, id and invocationText for a skill', () => {
     const [i] = buildInjectables({ commands: [cmd({ name: 'refactor', source: 'skill', origin: 'project' })] })
     expect(i).toMatchObject({
-      id: 'project:skill:refactor',
+      // The source dir is part of the id so the same name in two directories stays distinct.
+      id: 'project:skill:.claude:refactor',
       kind: 'skill',
       invocationText: '/refactor ',
     })

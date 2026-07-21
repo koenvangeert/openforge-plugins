@@ -73,6 +73,7 @@
       onActivate={null}
       onEscape={null}
       autoSelectFirst
+      skillScope="all"
       {detailFooter} />
   </div>
 </div>

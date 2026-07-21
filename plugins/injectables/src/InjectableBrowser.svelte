@@ -28,6 +28,7 @@
     navRight,
     groupRowId,
     type TreeKeyResult,
+    type SkillScope,
   } from './lib/injectables'
   import { METHOD } from './lib/protocol'
   import Sparkles from '@lucide/svelte/icons/sparkles'
@@ -100,6 +101,12 @@
      * picker, which you summon to choose something specific and so starts empty.
      */
     autoSelectFirst?: boolean
+    /**
+     * Which local skill directories to surface. The picker stays `claude`
+     * (`.claude`/`.agents`) because it inserts into a Claude prompt; the rail view
+     * uses `all` to browse and manage every directory the sidecar scans.
+     */
+    skillScope?: SkillScope
   }
   let {
     api,
@@ -108,9 +115,12 @@
     detailFooter,
     onEscape = null,
     autoSelectFirst = false,
+    skillScope = 'claude',
   }: Props = $props()
 
-  const catalog = useInjectableCatalog(() => api, () => projectId)
+  const catalog = useInjectableCatalog(() => api, () => projectId, () => skillScope)
+  // Only worth labelling a row's directory when more than one can appear.
+  const showSourceDir = $derived(skillScope === 'all')
 
   let query = $state('')
   let groupBy = $state<InjectableGroupBy>('origin')
@@ -757,6 +767,11 @@
                   {#if item.kind !== 'snippet'}
                     <span class="shrink-0 text-xs leading-none" title={TRIGGER_LABELS[item.triggerMode]}>{TRIGGER_EMOJI[item.triggerMode]}</span>
                   {/if}
+                  {#if showSourceDir && item.sourceDir}
+                    <span
+                      class="badge badge-xs badge-ghost shrink-0 font-mono"
+                      title="Lives in {item.sourceDir}/skills">{item.sourceDir}</span>
+                  {/if}
                   {#if item.content}
                     <span class="ml-auto shrink-0 pl-2 text-xs tabular-nums opacity-45">{formatCharCount(item.content.length)}</span>
                   {/if}
@@ -937,7 +952,15 @@
               <p class="text-sm leading-relaxed">{selected.description}</p>
             {/if}
             {#if selected.sourcePath}
-              <p class="mt-2 text-xs opacity-50">Source: <code>{selected.sourcePath}</code></p>
+              <!-- Qualified with its directory: the same skill name can exist in several
+                   of them, so the folder name alone is ambiguous. -->
+              <p class="mt-2 text-xs opacity-50">
+                Source:
+                <code
+                  >{selected.sourceDir
+                    ? `${selected.sourceDir}/skills/${selected.sourcePath}`
+                    : selected.sourcePath}</code>
+              </p>
             {/if}
             {#if selected.content}
               {#if contentView === 'md'}

@@ -42,7 +42,7 @@ export const ORIGIN_LABELS: Record<InjectableOrigin, string> = {
 }
 
 export const ORIGIN_DESCRIPTIONS: Record<InjectableOrigin, string> = {
-  personal: 'Your own, in ~/.claude — across all your projects',
+  personal: 'Your own, in your home skills folders — across all your projects',
   project: 'Committed to this repo — shared with your team',
   plugin: 'From an installed plugin',
   builtin: 'Ships with Claude Code itself — not a file you own',
