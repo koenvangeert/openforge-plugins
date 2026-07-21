@@ -72,4 +72,88 @@ describe('InjectionTrigger', () => {
     expect(onInsert).not.toHaveBeenCalled()
     expect(screen.queryByTestId('picker-select')).toBeNull()
   })
+
+  describe('Cmd+I shortcut', () => {
+    it('opens the picker from anywhere on the surface', async () => {
+      renderTrigger()
+
+      await fireEvent.keyDown(document, { key: 'i', metaKey: true })
+
+      expect(screen.getByTestId('picker-select')).toBeTruthy()
+    })
+
+    it('fires while a prompt field has focus, which is the point of it', async () => {
+      renderTrigger()
+      const field = document.createElement('textarea')
+      document.body.appendChild(field)
+      field.focus()
+
+      await fireEvent.keyDown(field, { key: 'i', metaKey: true })
+
+      expect(screen.getByTestId('picker-select')).toBeTruthy()
+      field.remove()
+    })
+
+    it('ignores the key without the meta modifier', async () => {
+      renderTrigger()
+
+      await fireEvent.keyDown(document, { key: 'i' })
+
+      expect(screen.queryByTestId('picker-select')).toBeNull()
+    })
+
+    it('does nothing while the picker is already open', async () => {
+      renderTrigger()
+
+      await fireEvent.click(screen.getByTestId('injection-trigger'))
+      await fireEvent.keyDown(document, { key: 'i', metaKey: true })
+
+      // Still exactly one picker, not a second stacked on top.
+      expect(screen.getAllByTestId('picker-select')).toHaveLength(1)
+    })
+
+    it('stops listening once unmounted', async () => {
+      const { unmount } = render(InjectionTrigger, {
+        props: {
+          api: {}, context: {}, location: 'createTaskPrompt', projectId: 'P-1', taskId: null,
+          onInsert: vi.fn(),
+        } as never,
+      })
+      unmount()
+
+      await fireEvent.keyDown(document, { key: 'i', metaKey: true })
+
+      expect(screen.queryByTestId('picker-select')).toBeNull()
+    })
+
+    it('lets the dialog trigger win while a dialog is open, not the session one', async () => {
+      // Both surfaces can be mounted at once — a task's session behind the create-task
+      // dialog. Only the dialog's trigger may answer, or one keypress opens two pickers.
+      const dialog = document.createElement('div')
+      dialog.setAttribute('role', 'dialog')
+      document.body.appendChild(dialog)
+
+      render(InjectionTrigger, {
+        props: {
+          api: {}, context: {}, location: 'agentSession', projectId: 'P-1', taskId: 'T-1',
+          onInsert: vi.fn(),
+        } as never,
+      })
+      render(InjectionTrigger, {
+        props: {
+          api: {}, context: {}, location: 'createTaskPrompt', projectId: 'P-1', taskId: null,
+          onInsert: vi.fn(),
+        } as never,
+        target: dialog,
+      })
+
+      const field = document.createElement('textarea')
+      dialog.appendChild(field)
+      field.focus()
+      await fireEvent.keyDown(field, { key: 'i', metaKey: true })
+
+      expect(screen.getAllByTestId('picker-select')).toHaveLength(1)
+      dialog.remove()
+    })
+  })
 })
