@@ -73,7 +73,7 @@
       onActivate={null}
       onEscape={null}
       autoSelectFirst
-      skillScope="all"
+      mode="manage"
       {detailFooter} />
   </div>
 </div>

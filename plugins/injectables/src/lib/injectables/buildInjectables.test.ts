@@ -23,7 +23,7 @@ describe('buildInjectables', () => {
     expect(out.map((i) => i.name)).toEqual(['keep'])
   })
 
-  it('keeps every local skill directory under the "all" scope', () => {
+  it('keeps every local skill directory under manage mode', () => {
     const out = buildInjectables({
       commands: [
         cmd({ name: 'claudeskill', sourceDir: '.claude' }),
@@ -31,7 +31,7 @@ describe('buildInjectables', () => {
         cmd({ name: 'piskill', sourceDir: '.pi' }),
         cmd({ name: 'opencodeskill', sourceDir: '.opencode' }),
       ],
-      skillScope: 'all',
+      mode: 'manage',
     })
     expect(out.map((i) => i.name).sort()).toEqual([
       'claudeskill',
@@ -39,6 +39,50 @@ describe('buildInjectables', () => {
       'opencodeskill',
       'piskill',
     ])
+  })
+
+  it('hides snippets outside the active project when inserting', () => {
+    const out = buildInjectables({
+      commands: [],
+      snippets: [
+        { id: 's1', name: 'Here', body: 'x', allProjects: false, projectIds: ['P-1'] },
+        { id: 's2', name: 'Elsewhere', body: 'y', allProjects: false, projectIds: ['P-2'] },
+      ],
+      projectId: 'P-1',
+    })
+    expect(out.map((i) => i.name)).toEqual(['Here'])
+  })
+
+  it('keeps snippets outside the active project when managing', () => {
+    // Removing the current project from a snippet's scope happens in the rail view, so
+    // the snippet has to stay listed — otherwise it vanishes the instant you do it.
+    const out = buildInjectables({
+      commands: [],
+      snippets: [
+        { id: 's1', name: 'Here', body: 'x', allProjects: false, projectIds: ['P-1'] },
+        { id: 's2', name: 'Elsewhere', body: 'y', allProjects: false, projectIds: ['P-2'] },
+      ],
+      projectId: 'P-1',
+      mode: 'manage',
+    })
+    expect(out.map((i) => i.name).sort()).toEqual(['Elsewhere', 'Here'])
+  })
+
+  it('sinks snippets outside the active project to the bottom when managing', () => {
+    // Interleaved on the way in, so the assertion proves ordering rather than luck.
+    const out = buildInjectables({
+      commands: [],
+      snippets: [
+        { id: 's1', name: 'Away A', body: 'x', allProjects: false, projectIds: ['P-2'] },
+        { id: 's2', name: 'Here A', body: 'x', allProjects: false, projectIds: ['P-1'] },
+        { id: 's3', name: 'Away B', body: 'x', allProjects: false, projectIds: ['P-2'] },
+        { id: 's4', name: 'Here B', body: 'x', allProjects: true, projectIds: [] },
+      ],
+      projectId: 'P-1',
+      mode: 'manage',
+    })
+    // Available ones first, each half keeping the order it arrived in.
+    expect(out.map((i) => i.name)).toEqual(['Here A', 'Here B', 'Away A', 'Away B'])
   })
 
   it('gives same-named skills in different directories distinct ids', () => {
@@ -49,7 +93,7 @@ describe('buildInjectables', () => {
         cmd({ name: 'openforge', origin: 'personal', sourceDir: '.claude' }),
         cmd({ name: 'openforge', origin: 'personal', sourceDir: '.codex' }),
       ],
-      skillScope: 'all',
+      mode: 'manage',
     })
     expect(out).toHaveLength(2)
     expect(new Set(out.map((i) => i.id)).size).toBe(2)

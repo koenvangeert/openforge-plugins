@@ -29,7 +29,8 @@
     navRight,
     groupRowId,
     type TreeKeyResult,
-    type SkillScope,
+    type BrowseMode,
+    snippetVisibleIn,
   } from './lib/injectables'
   import { METHOD } from './lib/protocol'
   import Sparkles from '@lucide/svelte/icons/sparkles'
@@ -103,11 +104,12 @@
      */
     autoSelectFirst?: boolean
     /**
-     * Which local skill directories to surface. The picker stays `claude`
-     * (`.claude`/`.agents`) because it inserts into a Claude prompt; the rail view
-     * uses `all` to browse and manage every directory the sidecar scans.
+     * What this surface is for. `insert` (the picker) shows only what is usable in
+     * this context: Claude-invokable skill dirs, and snippets scoped to the active
+     * project. `manage` (the rail view) shows everything that exists so it can be
+     * edited — every scanned skill dir, and every snippet whatever its scope.
      */
-    skillScope?: SkillScope
+    mode?: BrowseMode
   }
   let {
     api,
@@ -116,12 +118,24 @@
     detailFooter,
     onEscape = null,
     autoSelectFirst = false,
-    skillScope = 'claude',
+    mode = 'insert',
   }: Props = $props()
 
-  const catalog = useInjectableCatalog(() => api, () => projectId, () => skillScope)
+  const catalog = useInjectableCatalog(() => api, () => projectId, () => mode)
   // Only worth labelling a row's directory when more than one can appear.
-  const showSourceDir = $derived(skillScope === 'all')
+  const showSourceDir = $derived(mode === 'manage')
+  // `manage` lists snippets that are not available in the active project, so those rows
+  // are marked rather than hidden. Derived from the raw snippet records, which carry the
+  // scope the Injectable view model does not. Empty when there is no project to be
+  // irrelevant to, so nothing is dimmed on the no-project view.
+  const outOfProjectSnippetIds = $derived.by(() => {
+    const ids = new Set<string>()
+    if (mode !== 'manage' || projectId === null) return ids
+    for (const snippet of catalog.snippets) {
+      if (!snippetVisibleIn(snippet, projectId)) ids.add(`snippet:${snippet.id}`)
+    }
+    return ids
+  })
 
   let query = $state('')
   let groupBy = $state<InjectableGroupBy>('origin')
@@ -763,10 +777,12 @@
           <div class="mt-0.5 flex flex-col">
             {#each group.items as item (item.id)}
               {@const Icon = KIND_ICON[item.kind]}
+              {@const outOfProject = outOfProjectSnippetIds.has(item.id)}
               <button
                 data-injectable-id={item.id}
+                data-out-of-project={outOfProject ? 'true' : undefined}
                 class="flex w-full flex-col gap-0.5 rounded-md py-2 pr-2 text-left hover:bg-base-200"
-                style="padding-left: 3rem"
+                style="padding-left: 3rem{outOfProject ? '; opacity: 0.55' : ''}"
                 class:ring-2={selectedId === item.id}
                 class:ring-primary={selectedId === item.id}
                 class:bg-base-200={selectedId === item.id}
@@ -781,6 +797,12 @@
                   </span>
                   {#if item.kind !== 'snippet'}
                     <span class="shrink-0 text-xs leading-none" title={TRIGGER_LABELS[item.triggerMode]}>{TRIGGER_EMOJI[item.triggerMode]}</span>
+                  {/if}
+                  {#if outOfProject}
+                    <span
+                      class="badge badge-xs badge-ghost shrink-0"
+                      title="Not available in this project — still editable here; use “Available in” to add this project back"
+                      >Not in this project</span>
                   {/if}
                   {#if showSourceDir && item.sourceDir}
                     <span

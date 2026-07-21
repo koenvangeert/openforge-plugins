@@ -1,6 +1,6 @@
 import { loadInjectableCatalog, type CatalogApi } from './injectableCatalog'
 import type { Injectable, Snippet } from './injectableDomain'
-import type { SkillScope } from './injectables'
+import type { BrowseMode } from './injectables'
 
 /**
  * Reactive loader for the injectable catalog, used by the injectable picker dialog.
@@ -8,13 +8,13 @@ import type { SkillScope } from './injectables'
  * into the shared `Injectable` view model) to `loadInjectableCatalog` so the fetch
  * sequence lives in one place, not duplicated between the Skills tab and the picker.
  *
- * `getSkillScope` selects which local skill directories to surface — the picker stays
- * Claude-scoped, the rail view browses every scanned directory.
+ * `getMode` selects how much of the catalog to surface — the picker shows only what is
+ * usable in this context, the rail view shows everything so it can be managed.
  */
 export function useInjectableCatalog(
   getApi: () => CatalogApi,
   getProjectId: () => string | null,
-  getSkillScope: () => SkillScope = () => 'claude',
+  getMode: () => BrowseMode = () => 'insert',
 ) {
   let injectables = $state<Injectable[]>([])
   let snippets = $state<Snippet[]>([])
@@ -25,7 +25,7 @@ export function useInjectableCatalog(
     loading = true
     error = null
     try {
-      const result = await loadInjectableCatalog(getApi(), getProjectId(), getSkillScope())
+      const result = await loadInjectableCatalog(getApi(), getProjectId(), getMode())
       injectables = result.injectables
       snippets = result.snippets
     } catch (e) {
