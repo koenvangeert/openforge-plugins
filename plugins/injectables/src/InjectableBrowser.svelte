@@ -668,7 +668,8 @@
     autocomplete="off" />
   <textarea
     data-testid="snippet-editor"
-    class="textarea textarea-bordered mt-3 min-h-80 w-full flex-1 font-mono text-xs leading-relaxed"
+    class="textarea textarea-bordered mt-3 w-full flex-1 font-mono text-xs leading-relaxed"
+    style="min-height: 20rem"
     placeholder="Snippet text — inserted verbatim when picked"
     bind:value={editDraft}
     spellcheck="false"></textarea>
@@ -725,6 +726,10 @@
   {#if catalog.error}
     <p class="p-4 text-sm text-error">{catalog.error}</p>
   {/if}
+  <!-- Indentation is an inline style, not a Tailwind class: an external plugin renders
+     into the host's DOM and its Svelte <style> is emitted to a CSS file the host never
+     loads, so only utilities the HOST itself happens to generate would apply. pl-6/8/12
+     are not among them, so as classes they silently do nothing. -->
   {#each displayGroups as group (group.key)}
     <!-- Generous space between groups, tight within — the tight/generous beat. -->
     <section class="mt-4 first:mt-0">
@@ -753,14 +758,15 @@
       </div>
       {#if !collapsed.has(group.key)}
         {#if group.key === 'snippet' && group.items.length === 0}
-          <p class="py-2 pl-12 pr-2 text-xs opacity-50">No snippets yet — create one to reuse text.</p>
+          <p class="py-2 pr-2 text-xs opacity-50" style="padding-left: 3rem">No snippets yet — create one to reuse text.</p>
         {:else}
           <div class="mt-0.5 flex flex-col">
             {#each group.items as item (item.id)}
               {@const Icon = KIND_ICON[item.kind]}
               <button
                 data-injectable-id={item.id}
-                class="flex w-full flex-col gap-0.5 rounded-md py-2 pl-12 pr-2 text-left hover:bg-base-200"
+                class="flex w-full flex-col gap-0.5 rounded-md py-2 pr-2 text-left hover:bg-base-200"
+                style="padding-left: 3rem"
                 class:ring-2={selectedId === item.id}
                 class:ring-primary={selectedId === item.id}
                 class:bg-base-200={selectedId === item.id}
@@ -786,7 +792,10 @@
                   {/if}
                 </span>
                 {#if item.description}
-                  <span class="pl-6 pr-1 text-xs leading-snug opacity-60 {wrapDescriptions ? '' : 'truncate'}">{item.description}</span>
+                  <span
+                    style="padding-left: 1.5rem"
+                    class="pr-1 text-xs leading-snug opacity-60 {wrapDescriptions ? '' : 'truncate'}"
+                    >{item.description}</span>
                 {/if}
               </button>
             {/each}
@@ -952,7 +961,8 @@
             {:else}
               <textarea
                 data-testid="skill-editor"
-                class="textarea textarea-bordered min-h-80 w-full flex-1 font-mono text-xs leading-relaxed"
+                class="textarea textarea-bordered w-full flex-1 font-mono text-xs leading-relaxed"
+                    style="min-height: 20rem"
                 bind:value={editDraft}
                 spellcheck="false"></textarea>
             {/if}
