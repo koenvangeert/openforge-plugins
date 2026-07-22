@@ -12,6 +12,12 @@
   import type { Task } from '@openforge-app/plugin-sdk/domain'
   import type { DuplicateConfirmationRequired, IssueLinkStates } from '../lib/intakeController'
   import { DEFAULT_INTAKE_JQL, readIntakeQuery, saveIntakeQuery } from '../lib/intakeQuery'
+  import {
+    DEFAULT_INTAKE_TEMPLATE,
+    readIntakeTemplate,
+    saveIntakeTemplate,
+    TEMPLATE_PLACEHOLDERS,
+  } from '../lib/intakeTemplate'
   import { getStatusSortDirection, withStatusSort } from '../lib/jqlSort'
   import type { SortDirection } from '../lib/jqlSort'
   import { HOST_EVENT, REFRESH_EVENT } from '../lib/protocol'
@@ -31,12 +37,18 @@
   }
   let { api }: PluginViewProps = $props()
 
+  const templatePlaceholderTokens = TEMPLATE_PLACEHOLDERS.map((name) => `{{${name}}}`)
+
   let projectId = $state<string | null>(null)
   let jql = $state(DEFAULT_INTAKE_JQL)
   let jqlDraft = $state(DEFAULT_INTAKE_JQL)
   let applyingJql = $state(false)
   let sorting = $state(false)
   let queryReady = $state(false)
+  let templateDraft = $state(DEFAULT_INTAKE_TEMPLATE)
+  let templateReady = $state(false)
+  let savingTemplate = $state(false)
+  let templateError = $state<string | null>(null)
   let intakeBusy = $state(false)
   let intakeNotice = $state<IntakeNotice | null>(null)
   let duplicateWarning = $state<(DuplicateConfirmationRequired & { action: IntakeAction }) | null>(null)
@@ -53,6 +65,7 @@
   let projectSequence = 0
   let intakeSequence = 0
   let applySequence = 0
+  let templateSequence = 0
   let statusSortDirection = $derived(getStatusSortDirection(jql))
 
   function resetIntakeFeedback() {
@@ -159,6 +172,24 @@
     }
   }
 
+  async function applyTemplate() {
+    if (!projectId || !templateReady || savingTemplate) return
+    const applyProjectId = projectId
+    const sequence = ++templateSequence
+    savingTemplate = true
+    templateError = null
+    try {
+      const saved = await saveIntakeTemplate(api, applyProjectId, templateDraft)
+      if (sequence !== templateSequence || projectId !== applyProjectId) return
+      templateDraft = saved
+    } catch (cause) {
+      if (sequence !== templateSequence || projectId !== applyProjectId) return
+      templateError = cause instanceof Error ? cause.message : 'Could not save the Intake template.'
+    } finally {
+      if (sequence === templateSequence) savingTemplate = false
+    }
+  }
+
   function recordCreatedLink(issueKey: string, task: Task) {
     linkStates = { ...linkStates, [issueKey]: upsertLinkedTask(linkStates[issueKey], issueKey, task) }
   }
@@ -221,12 +252,30 @@
     }
   }
 
+  async function loadTemplate(nextProjectId: string, sequence: number) {
+    try {
+      const storedTemplate = await readIntakeTemplate(api, nextProjectId)
+      if (sequence !== projectSequence || projectId !== nextProjectId) return
+      templateDraft = storedTemplate
+      templateReady = true
+    } catch {
+      // A load failure means Project storage is unavailable, which the JQL load
+      // already surfaces as the workspace error. Leave the template field
+      // disabled rather than raising a second, redundant alert; the inline
+      // template alert is reserved for actionable save-validation failures.
+    }
+  }
+
   async function loadProject(nextProjectId: string | null) {
     const sequence = ++projectSequence
     applySequence += 1
+    templateSequence += 1
     applyingJql = false
     sorting = false
+    savingTemplate = false
     queryReady = false
+    templateReady = false
+    templateError = null
     querySequence += 1
     projectId = nextProjectId
     resetIntakeFeedback()
@@ -240,10 +289,13 @@
     error = null
     jql = ''
     jqlDraft = ''
+    templateDraft = ''
     if (!nextProjectId) {
       loading = false
       return
     }
+
+    void loadTemplate(nextProjectId, sequence)
 
     try {
       const storedJql = await readIntakeQuery(api, nextProjectId)
@@ -317,6 +369,32 @@
               disabled={applyingJql || loading || !queryReady}
             >Apply JQL</button>
           </div>
+          <details class="mt-3">
+            <summary class="cursor-pointer text-xs font-medium text-base-content/70">Intake template</summary>
+            <div class="mt-2 flex flex-col gap-1">
+              <textarea
+                class="textarea textarea-bordered textarea-sm w-full resize-y font-mono text-xs leading-relaxed"
+                rows="4"
+                aria-label="Intake template"
+                bind:value={templateDraft}
+                disabled={!templateReady}
+              ></textarea>
+              <p class="text-xs text-base-content/60">
+                Arranges the new Task's prompt at intake. Placeholders:
+                {#each templatePlaceholderTokens as token, index}{#if index > 0}, {/if}<code>{token}</code>{/each}.
+              </p>
+              {#if templateError}
+                <p class="text-xs text-error" role="alert">{templateError}</p>
+              {/if}
+              <div class="mt-1 flex items-center justify-end">
+                <button
+                  class="btn btn-primary btn-sm"
+                  onclick={() => void applyTemplate()}
+                  disabled={savingTemplate || !templateReady}
+                >Save template</button>
+              </div>
+            </div>
+          </details>
         </div>
         <JiraIssueTable
           {rows}

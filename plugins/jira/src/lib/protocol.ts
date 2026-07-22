@@ -47,6 +47,7 @@ export const GLOBAL_KEY = {
 /** Keys under storage.project(projectId). */
 export const PROJECT_KEY = {
   intakeQuery: 'intakeQuery',
+  intakeTemplate: 'intakeTemplate',
 } as const
 
 /** Keys under storage.task(taskId). */

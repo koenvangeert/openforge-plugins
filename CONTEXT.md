@@ -104,8 +104,12 @@ assuming a one-to-one relationship or that the Task id equals the Issue Key.
 
 **Issue Link State**:
 The active **Project**'s count of OpenForge **Tasks** linked to a **Jira Issue**,
-shown as unlinked or as the number of linked Tasks.
-_Avoid_: Jira status, synchronization state, global link count.
+shown as unlinked or as the number of linked Tasks. Counts Tasks in **every**
+status, done included — a completed Task still holds its **Issue Link**, so it
+shows in the list and counts toward the duplicate-intake guard. Active Tasks
+(backlog, doing) list ahead of done ones.
+_Avoid_: Jira status, synchronization state, global link count; "active Tasks
+only" (the host's default `tasks.list` excludes done, but this state does not).
 
 **Linked Issue Section**:
 The collapsible Jira Plugin section present in every OpenForge **Task**'s detail
@@ -140,6 +144,16 @@ The concise Jira context carried into a new OpenForge **Task** during **Issue
 Intake**: the **Issue Key**, Jira summary, and Jira description. **Agent Jira
 Access** supplies current or extended Issue details when needed.
 _Avoid_: full Issue mirror, synchronized copy, copying every Jira field.
+
+**Intake Template**:
+The single, Project-owned text template that arranges the **Intake Context** into
+the new **Task**'s initial prompt during **Issue Intake**. Each Project remembers
+its own template; the user edits it in the **Intake Workspace**, and a Project
+that never touches it keeps the default arrangement. Placeholders name the
+Intake Context fields; the template controls layout, not which Issue fields are
+available.
+_Avoid_: a global/app-wide template, per-Issue templates, pulling in Jira fields
+beyond the **Intake Context**, treating the template as a Jira write-back format.
 
 **Agent Jira Access**:
 The independently configured ability of an **Agent Session** to retrieve the

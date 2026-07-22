@@ -6,13 +6,13 @@ import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import { createMemoryPluginStorage } from '@openforge-app/plugin-sdk/testing'
 import type { SearchResult } from './jiraTypes'
 import {
-  buildIssueIntakePrompt,
   createAndStartIntakeTask,
   createIntakeTask,
   deriveIssueLinkStates,
   searchIntakeIssues,
   upsertLinkedTask,
 } from './intakeController'
+import { saveIntakeTemplate } from './intakeTemplate'
 import { METHOD, TASK_KEY } from './protocol'
 
 type Api = Pick<FrontendOpenForgeAPI, 'backend' | 'storage' | 'tasks'>
@@ -184,15 +184,6 @@ describe('upsertLinkedTask', () => {
 })
 
 describe('Issue Intake orchestration', () => {
-  it('builds the initial prompt from the Issue Key and summary followed by sanitized description', () => {
-    expect(buildIssueIntakePrompt({
-      ...INTAKE_ISSUE,
-      key: ' proj-7 ',
-      summary: ' Fix Issue Intake ',
-      descriptionHtml: '<p>Keep this.</p><script>discard()</script>',
-    })).toBe('PROJ-7: Fix Issue Intake\n\n<p>Keep this.</p>')
-  })
-
   it('creates a linked backlog Task in the active Project without starting it', async () => {
     const { api, listSpy, createSpy, startSpy } = makeIntakeApi()
 
@@ -211,6 +202,18 @@ describe('Issue Intake orchestration', () => {
     })
     expect(startSpy).not.toHaveBeenCalled()
     await expect(api.storage.task('T-1').get(TASK_KEY.link)).resolves.toEqual({ key: 'PROJ-7' })
+  })
+
+  it('renders the initial prompt with the active Project\'s saved Intake Template', async () => {
+    const { api, createSpy } = makeIntakeApi()
+    await saveIntakeTemplate(api, 'P-active', '{{summary}} [{{key}}]\n\n{{description}}')
+
+    await createIntakeTask(api, { projectId: 'P-active', issue: INTAKE_ISSUE })
+
+    expect(createSpy).toHaveBeenCalledWith({
+      projectId: 'P-active',
+      initialPrompt: 'Fix Issue Intake [PROJ-7]\n\n<p>Keep the <strong>Jira description</strong>.</p>',
+    })
   })
 
   it('ignores linked Tasks outside the active Project', async () => {

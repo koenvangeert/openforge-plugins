@@ -2,6 +2,7 @@ import type { ImplementationRun } from '@openforge-app/plugin-sdk'
 import type { BoardStatus, Task } from '@openforge-app/plugin-sdk/domain'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import { sanitizeHtml } from '@openforge-app/plugin-sdk/sanitize'
+import { readIntakeTemplate, renderIntakeTemplate } from './intakeTemplate'
 import { validateJql } from './issueKey'
 import type { JiraIssue, SearchIssuesRequest, SearchResult } from './jiraTypes'
 import { invokeJiraBackend } from './protocol'
@@ -95,15 +96,6 @@ export function upsertLinkedTask(state: IssueLinkState | undefined, issueKey: st
   const summary = toLinkedTaskSummary(task)
   const others = (state?.tasks ?? []).filter((existing) => existing.id !== summary.id)
   return { issueKey, tasks: [summary, ...others].sort(byMostRecentlyUpdated) }
-}
-
-export function buildIssueIntakePrompt(
-  issue: Pick<JiraIssue, 'key' | 'summary' | 'descriptionHtml'>,
-): string {
-  const issueKey = issue.key.trim().toUpperCase()
-  const heading = `${issueKey}: ${issue.summary.trim()}`
-  const description = sanitizeHtml(issue.descriptionHtml).trim()
-  return description ? `${heading}\n\n${description}` : heading
 }
 
 function sanitizeIssue(issue: JiraIssue): JiraIssue {
@@ -208,9 +200,10 @@ export async function createIntakeTask(
     return duplicateConfirmation(request.projectId, linkState)
   }
 
+  const template = await readIntakeTemplate(api, request.projectId)
   const task = await api.tasks.create({
     projectId: request.projectId,
-    initialPrompt: buildIssueIntakePrompt({ ...request.issue, key: issueKey }),
+    initialPrompt: renderIntakeTemplate(template, { ...request.issue, key: issueKey }),
   })
   await saveLinkedKey(api, task.id, issueKey)
 

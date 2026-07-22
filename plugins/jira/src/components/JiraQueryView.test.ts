@@ -6,6 +6,7 @@ import type { Task } from '@openforge-app/plugin-sdk/domain'
 import { createOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
 import { describe, expect, it, vi } from 'vitest'
 import { HOST_EVENT, METHOD, PROJECT_KEY, REFRESH_EVENT } from '../lib/protocol'
+import { DEFAULT_INTAKE_TEMPLATE } from '../lib/intakeTemplate'
 import JiraQueryView from './JiraQueryView.svelte'
 
 function jiraIssue(key: string, summary: string) {
@@ -298,6 +299,77 @@ describe('JiraQueryView', () => {
       .getByRole('button', { name: 'PROJ-7: Create intake task' })
     await fireEvent.click(linkedTaskLink)
     expect(registry.calls.navigationRequests).toEqual([{ viewId: 'board', taskId: 'mock-task-1' }])
+  })
+
+  it('saves an edited Task template for the active Project without re-running the search', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'dev.kvg.jira', projectId: 'P-1' })
+    const invoke = vi.fn(async () => ({
+      ok: true,
+      issues: [jiraIssue('PROJ-1', 'Templated Issue')],
+      page: { isLast: true, nextPageToken: null },
+    }))
+    const api: FrontendOpenForgeAPI = {
+      ...registry.frontendApi,
+      backend: {
+        ...registry.frontendApi.backend,
+        state: 'ready',
+        whenReady: async () => undefined,
+        invoke: invoke as FrontendOpenForgeAPI['backend']['invoke'],
+      },
+    }
+    render(JiraQueryView, { props: { api, context: api.context.getSnapshot() } })
+    await screen.findByRole('heading', { name: 'Templated Issue' })
+    await waitFor(() => expect(invoke).toHaveBeenCalledTimes(1))
+
+    const templateField = await waitFor(() => {
+      const field = screen.getByRole('textbox', { name: 'Intake template' }) as HTMLTextAreaElement
+      expect(field.disabled).toBe(false)
+      return field
+    })
+    expect(templateField.value).toBe(DEFAULT_INTAKE_TEMPLATE)
+
+    await fireEvent.input(templateField, { target: { value: '{{summary}} — {{key}}\n\n{{description}}' } })
+    await fireEvent.click(screen.getByRole('button', { name: 'Save template' }))
+
+    await waitFor(async () => {
+      await expect(registry.storage.project('P-1').get(PROJECT_KEY.intakeTemplate)).resolves.toEqual({
+        template: '{{summary}} — {{key}}\n\n{{description}}',
+      })
+    })
+    expect(invoke).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects a template with an unknown placeholder and keeps the stored template intact', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'dev.kvg.jira', projectId: 'P-1' })
+    const invoke = vi.fn(async () => ({
+      ok: true,
+      issues: [jiraIssue('PROJ-1', 'Templated Issue')],
+      page: { isLast: true, nextPageToken: null },
+    }))
+    const api: FrontendOpenForgeAPI = {
+      ...registry.frontendApi,
+      backend: {
+        ...registry.frontendApi.backend,
+        state: 'ready',
+        whenReady: async () => undefined,
+        invoke: invoke as FrontendOpenForgeAPI['backend']['invoke'],
+      },
+    }
+    render(JiraQueryView, { props: { api, context: api.context.getSnapshot() } })
+    await screen.findByRole('heading', { name: 'Templated Issue' })
+    const templateField = await waitFor(() => {
+      const field = screen.getByRole('textbox', { name: 'Intake template' }) as HTMLTextAreaElement
+      expect(field.disabled).toBe(false)
+      return field
+    })
+
+    await fireEvent.input(templateField, { target: { value: '{{key}} {{status}}' } })
+    await fireEvent.click(screen.getByRole('button', { name: 'Save template' }))
+
+    expect((await screen.findByRole('alert')).textContent).toContain('{{status}}')
+    await expect(registry.storage.project('P-1').get(PROJECT_KEY.intakeTemplate)).resolves.toEqual({
+      template: DEFAULT_INTAKE_TEMPLATE,
+    })
   })
 
   it('requires explicit duplicate confirmation before Create and Start', async () => {
