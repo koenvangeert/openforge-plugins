@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { JiraIssue } from '../lib/jiraTypes'
-  import type { IssueLinkStates } from '../lib/intakeController'
+  import { issueLinkState, type IssueLinkStates } from '../lib/intakeController'
   import type { SortDirection } from '../lib/jqlSort'
 
   interface Props {
@@ -92,7 +92,7 @@
       </thead>
       <tbody>
         {#each rows as row (row.key)}
-          {@const linkedTasks = linkStates[row.key]?.tasks ?? []}
+          {@const linkedTasks = issueLinkState(linkStates, row.key)?.tasks ?? []}
           <tr
             class="cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary {selectedKey === row.key ? 'bg-primary/10' : ''}"
             aria-selected={selectedKey === row.key}

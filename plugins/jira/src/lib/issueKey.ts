@@ -10,6 +10,15 @@ export function isValidIssueKey(value: string): boolean {
 }
 
 /**
+ * Canonical form of an Issue Key for storage and lookup. Jira Cloud keys are
+ * already uppercase, but normalizing here is the single source of truth so a
+ * non-uppercase key never splits into two map entries (see IssueLinkStates).
+ */
+export function normalizeIssueKey(value: string): string {
+  return value.trim().toUpperCase()
+}
+
+/**
  * Scan the given text fragments for a key-shaped hint. Returns the FIRST match.
  * The hint is non-authoritative — the Issue Key and the OpenForge Task id can
  * look identical yet be unrelated (see CONTEXT.md), so callers must treat this

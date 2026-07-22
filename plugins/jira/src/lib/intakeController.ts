@@ -3,7 +3,7 @@ import type { BoardStatus, Task } from '@openforge-app/plugin-sdk/domain'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import { sanitizeHtml } from '@openforge-app/plugin-sdk/sanitize'
 import { readIntakeTemplate, renderIntakeTemplate } from './intakeTemplate'
-import { validateJql } from './issueKey'
+import { normalizeIssueKey, validateJql } from './issueKey'
 import type { JiraIssue, SearchIssuesRequest, SearchResult } from './jiraTypes'
 import { invokeJiraBackend } from './protocol'
 import { readLinkedKey, saveLinkedKey } from './taskLink'
@@ -74,6 +74,11 @@ export interface IssueLinkState {
 }
 
 export type IssueLinkStates = Record<string, IssueLinkState>
+
+/** Read an Issue's link state, normalizing the key the same way the map is built. */
+export function issueLinkState(states: IssueLinkStates, issueKey: string): IssueLinkState | undefined {
+  return states[normalizeIssueKey(issueKey)]
+}
 
 /** Resolve a Task's display title: explicit title, else first non-empty prompt line, else id. */
 export function taskDisplayTitle(task: Pick<Task, 'id' | 'title' | 'initial_prompt'>): string {
@@ -151,16 +156,16 @@ export async function deriveIssueLinkStates(
   projectId: string,
   issueKeys: string[],
 ): Promise<IssueLinkStates> {
-  const keys = [...new Set(issueKeys.map((key) => key.trim().toUpperCase()))]
+  const keys = [...new Set(issueKeys.map(normalizeIssueKey))]
   const states: IssueLinkStates = {}
   for (const issueKey of keys) {
     states[issueKey] = { issueKey, tasks: [] }
   }
   const tasks = await api.tasks.list({ projectId })
-  const links = await Promise.all(tasks.map(async (task) => ({
-    task,
-    issueKey: (await readLinkedKey(api, task.id))?.toUpperCase() ?? null,
-  })))
+  const links = await Promise.all(tasks.map(async (task) => {
+    const linkedKey = await readLinkedKey(api, task.id)
+    return { task, issueKey: linkedKey ? normalizeIssueKey(linkedKey) : null }
+  }))
 
   for (const link of links) {
     if (!link.issueKey || !(link.issueKey in states)) continue
@@ -193,7 +198,7 @@ export async function createIntakeTask(
   api: IssueIntakeApi,
   request: IssueIntakeRequest,
 ): Promise<CreateIntakeTaskResult> {
-  const issueKey = request.issue.key.trim().toUpperCase()
+  const issueKey = normalizeIssueKey(request.issue.key)
   const states = await deriveIssueLinkStates(api, request.projectId, [issueKey])
   const linkState = states[issueKey]
   if (linkState.tasks.length > 0 && !request.duplicateConfirmed) {

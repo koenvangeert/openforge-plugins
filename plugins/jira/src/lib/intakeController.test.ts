@@ -9,6 +9,7 @@ import {
   createAndStartIntakeTask,
   createIntakeTask,
   deriveIssueLinkStates,
+  issueLinkState,
   searchIntakeIssues,
   upsertLinkedTask,
 } from './intakeController'
@@ -147,6 +148,25 @@ describe('deriveIssueLinkStates', () => {
       { id: 'T-new', title: 'PROJ-1: Prompt heading', status: 'backlog', updatedAt: 200 },
       { id: 'T-old', title: 'Explicit title', status: 'backlog', updatedAt: 100 },
     ])
+  })
+
+  it('keys the map by normalized Issue Key regardless of requested key casing', async () => {
+    const { api } = makeApi(async () => undefined, [makeTask('T-1')])
+    await api.storage.task('T-1').set(TASK_KEY.link, { key: 'PROJ-1' })
+
+    const result = await deriveIssueLinkStates(api, 'P-1', [' proj-1 '])
+
+    expect(Object.keys(result)).toEqual(['PROJ-1'])
+    expect(result['PROJ-1'].tasks).toEqual([{ id: 'T-1', title: 'T-1', status: 'backlog', updatedAt: 0 }])
+  })
+})
+
+describe('issueLinkState', () => {
+  it('resolves a linked Issue when the lookup key differs in casing or whitespace', () => {
+    const states = { 'PROJ-1': { issueKey: 'PROJ-1', tasks: [] } }
+
+    expect(issueLinkState(states, ' proj-1 ')).toBe(states['PROJ-1'])
+    expect(issueLinkState(states, 'PROJ-2')).toBeUndefined()
   })
 })
 

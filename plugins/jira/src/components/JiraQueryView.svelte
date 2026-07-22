@@ -6,6 +6,7 @@
     createAndStartIntakeTask,
     createIntakeTask,
     deriveIssueLinkStates,
+    issueLinkState,
     searchIntakeIssues,
     upsertLinkedTask,
   } from '../lib/intakeController'
@@ -416,7 +417,7 @@
 
       <JiraIssueDetails
         issue={selectedIssue}
-        linkState={selectedIssue ? linkStates[selectedIssue.key] : undefined}
+        linkState={selectedIssue ? issueLinkState(linkStates, selectedIssue.key) : undefined}
         {intakeBusy}
         intakeNotice={intakeNotice?.projectId === projectId && intakeNotice.issueKey === selectedIssue?.key
           ? intakeNotice
