@@ -137,6 +137,61 @@ describe('JiraQueryView', () => {
     expect(screen.getByRole('heading', { name: 'Second Issue' })).toBeTruthy()
   })
 
+  it('moves the selection up and down with j/k and the arrow keys while keeping focus in the list', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'dev.kvg.jira', projectId: 'P-1' })
+    const invoke = vi.fn(async () => ({
+      ok: true,
+      issues: [
+        jiraIssue('PROJ-1', 'First Issue'),
+        jiraIssue('PROJ-2', 'Second Issue'),
+        jiraIssue('PROJ-3', 'Third Issue'),
+      ],
+      page: { isLast: true, nextPageToken: null },
+    }))
+    const api: FrontendOpenForgeAPI = {
+      ...registry.frontendApi,
+      backend: {
+        ...registry.frontendApi.backend,
+        state: 'ready',
+        whenReady: async () => undefined,
+        invoke: invoke as FrontendOpenForgeAPI['backend']['invoke'],
+      },
+    }
+    render(JiraQueryView, { props: { api, context: api.context.getSnapshot() } })
+    await screen.findByRole('heading', { name: 'First Issue' })
+    const firstRow = screen.getByRole('row', { name: /PROJ-1.*First Issue/ })
+    const secondRow = screen.getByRole('row', { name: /PROJ-2.*Second Issue/ })
+    const thirdRow = screen.getByRole('row', { name: /PROJ-3.*Third Issue/ })
+
+    firstRow.focus()
+    await fireEvent.keyDown(firstRow, { key: 'ArrowDown' })
+    expect(secondRow.getAttribute('aria-selected')).toBe('true')
+    expect(document.activeElement).toBe(secondRow)
+    expect(screen.getByRole('heading', { name: 'Second Issue' })).toBeTruthy()
+
+    await fireEvent.keyDown(secondRow, { key: 'j' })
+    expect(thirdRow.getAttribute('aria-selected')).toBe('true')
+    expect(document.activeElement).toBe(thirdRow)
+
+    // Clamps at the bottom edge instead of wrapping.
+    await fireEvent.keyDown(thirdRow, { key: 'ArrowDown' })
+    expect(thirdRow.getAttribute('aria-selected')).toBe('true')
+    expect(document.activeElement).toBe(thirdRow)
+
+    await fireEvent.keyDown(thirdRow, { key: 'k' })
+    expect(secondRow.getAttribute('aria-selected')).toBe('true')
+    expect(document.activeElement).toBe(secondRow)
+
+    await fireEvent.keyDown(secondRow, { key: 'ArrowUp' })
+    expect(firstRow.getAttribute('aria-selected')).toBe('true')
+    expect(document.activeElement).toBe(firstRow)
+
+    // Clamps at the top edge instead of wrapping.
+    await fireEvent.keyDown(firstRow, { key: 'k' })
+    expect(firstRow.getAttribute('aria-selected')).toBe('true')
+    expect(document.activeElement).toBe(firstRow)
+  })
+
   it('navigates to the next Jira page without appending it to the current page', async () => {
     const registry = createOpenForgeRegistryFake({ pluginId: 'dev.kvg.jira', projectId: 'P-1' })
     const invoke = vi.fn()

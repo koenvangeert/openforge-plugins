@@ -409,6 +409,7 @@
           {statusSortDirection}
           {sorting}
           onSelect={(issue) => selectIssue(issue)}
+          onNavigate={(issue) => selectIssue(issue, false)}
           onNextPage={() => void run(nextPageToken)}
           onStatusSort={(direction) => void sortStatus(direction)}
           onOpenTask={(taskId) => void api.navigation.navigate({ viewId: 'board', taskId })}

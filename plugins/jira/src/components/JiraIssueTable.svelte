@@ -15,6 +15,7 @@
     statusSortDirection: SortDirection | null
     sorting: boolean
     onSelect: (issue: JiraIssue) => void
+    onNavigate: (issue: JiraIssue) => void
     onNextPage: () => void
     onStatusSort: (direction: SortDirection) => void
     onOpenTask: (taskId: string) => void
@@ -32,22 +33,41 @@
     statusSortDirection,
     sorting,
     onSelect,
+    onNavigate,
     onNextPage,
     onStatusSort,
     onOpenTask,
   }: Props = $props()
+
+  let rowRefs = $state<(HTMLTableRowElement | undefined)[]>([])
 
   let nextStatusSortDirection = $derived<SortDirection>(statusSortDirection === 'asc' ? 'desc' : 'asc')
   let statusAriaSort = $derived<'ascending' | 'descending' | 'none'>(statusSortDirection === 'asc'
     ? 'ascending'
     : statusSortDirection === 'desc' ? 'descending' : 'none')
 
-  function selectFromKeyboard(event: KeyboardEvent, issue: JiraIssue) {
+  function onRowKeydown(event: KeyboardEvent, index: number) {
     // Ignore keystrokes bubbling up from an interactive cell (e.g. the linked-Task link).
     if (event.target !== event.currentTarget) return
-    if (event.key !== 'Enter' && event.key !== ' ') return
+
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      onSelect(rows[index])
+      return
+    }
+
+    // Terminal-style navigation: j/↓ move down, k/↑ move up. The selection (and
+    // DOM focus) follows the cursor while focus stays in the list, so the detail
+    // pane previews live. Enter/Space confirm the row and hand focus to details.
+    const delta = event.key === 'ArrowDown' || event.key === 'j' ? 1
+      : event.key === 'ArrowUp' || event.key === 'k' ? -1
+      : 0
+    if (delta === 0) return
     event.preventDefault()
-    onSelect(issue)
+    const target = index + delta
+    if (target < 0 || target >= rows.length) return
+    onNavigate(rows[target])
+    rowRefs[target]?.focus()
   }
 
   function openTask(event: MouseEvent, taskId: string) {
@@ -91,14 +111,15 @@
         </tr>
       </thead>
       <tbody>
-        {#each rows as row (row.key)}
+        {#each rows as row, index (row.key)}
           {@const linkedTasks = issueLinkState(linkStates, row.key)?.tasks ?? []}
           <tr
+            bind:this={rowRefs[index]}
             class="cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary {selectedKey === row.key ? 'bg-primary/10' : ''}"
             aria-selected={selectedKey === row.key}
             tabindex="0"
             onclick={() => onSelect(row)}
-            onkeydown={(event) => selectFromKeyboard(event, row)}
+            onkeydown={(event) => onRowKeydown(event, index)}
           >
             <td><span class="font-medium text-primary">{row.key}</span></td>
             <td class="max-w-sm truncate">{row.summary}</td>
