@@ -1,0 +1,45 @@
+{
+  "name": "@openforge-app/plugin-injectables",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "vite build && vite build --config vite.backend.config.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@lucide/svelte": "^1.25.0",
+    "@openforge-app/plugin-sdk": "link:../../../openforge/packages/plugin-sdk"
+  },
+  "peerDependencies": {
+    "svelte": "^5.0.0"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "catalog:",
+    "@testing-library/svelte": "catalog:",
+    "@types/node": "catalog:",
+    "jsdom": "^26.0.0",
+    "svelte": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "openforge": {
+    "id": "com.openforge.injectables",
+    "apiVersion": 1,
+    "displayName": "Injectables",
+    "description": "Browse and insert Claude skills, slash-commands, and personal snippets",
+    "icon": "sparkles",
+    "frontend": "./dist/frontend.js",
+    "backend": "./dist/backend.js",
+    "requires": [
+      "views",
+      "backend",
+      "projects",
+      "system.openUrl",
+      "context",
+      "commands",
+      "injectionPoints"
+    ]
+  }
+}
