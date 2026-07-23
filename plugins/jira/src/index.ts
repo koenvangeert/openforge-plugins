@@ -15,6 +15,7 @@ export default defineFrontendPlugin({
         icon: 'file-text',
         placement: 'rail',
         order: 40,
+        shortcut: 'Cmd+I',
         component: JiraQueryView,
       }),
     )
