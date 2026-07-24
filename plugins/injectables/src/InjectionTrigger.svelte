@@ -10,6 +10,30 @@
   let open = $state(false)
   let triggerEl = $state<HTMLElement | null>(null)
 
+  // Where focus sat when the picker opened, so it can be handed back on close. The
+  // picker's Modal focuses its own input on open but restores nothing on close, and a
+  // running session's host `onInsert` writes to the terminal without refocusing it —
+  // so without this the terminal keeps the inserted text while the keyboard goes to
+  // <body>. In the create/edit dialogs the host's prompt field refocuses itself, so
+  // this simply hands focus back to that same field.
+  let previouslyFocused: HTMLElement | null = null
+
+  function openPicker() {
+    // Capture before opening, so it is the field the user came from rather than the
+    // Modal's input.
+    previouslyFocused = document.activeElement as HTMLElement | null
+    open = true
+  }
+
+  // Runs after the picker has left the DOM on any close (insert, Escape, click-away,
+  // close button), by which point focus has fallen to <body>; restore it once.
+  $effect(() => {
+    if (open) return
+    const target = previouslyFocused
+    previouslyFocused = null
+    target?.focus()
+  })
+
   // Both the app's Modal and the SDK's mark their overlay with role="dialog".
   const DIALOG = '[role="dialog"]'
 
@@ -33,7 +57,7 @@
     if (open || !shouldRespond()) return
     // Cmd+I is italics in a text field, which is exactly where this fires.
     event.preventDefault()
-    open = true
+    openPicker()
   }
 
   // onMount's teardown rather than $effect cleanup: the listener belongs to this
@@ -44,12 +68,19 @@
   })
 </script>
 
+<!--
+  onmousedown preventDefault so clicking the trigger does not pull focus off the field
+  the user came from (a running session's terminal). Without it, that field is the
+  button by the time openPicker() records where to hand focus back, and insert leaves
+  focus stranded on the button. The click still opens the picker.
+-->
 <button
   bind:this={triggerEl}
   data-testid="injection-trigger"
   class="btn btn-ghost btn-xs gap-1"
   title="Insert injectable (⌘I)"
-  onclick={() => (open = true)}
+  onmousedown={(e) => e.preventDefault()}
+  onclick={openPicker}
   type="button">
   <span aria-hidden="true">✨</span>
   <span>Insert injectable</span>

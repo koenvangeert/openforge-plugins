@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from '@testing-library/svelte'
+import { createEvent, fireEvent, render, screen } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
 
 // The picker (Task 5) is already thoroughly tested on its own; mocking the whole
@@ -124,6 +124,66 @@ describe('InjectionTrigger', () => {
       await fireEvent.keyDown(document, { key: 'i', metaKey: true })
 
       expect(screen.queryByTestId('picker-select')).toBeNull()
+    })
+
+    it('restores focus to the field that was focused when it opened, after inserting', async () => {
+      // A running session inserts into the terminal but never refocuses it (the host's
+      // agentSession onInsert only writes to the PTY), and the picker's Modal restores
+      // no focus on close. Without the trigger handing focus back, the terminal keeps
+      // the inserted text but loses the keyboard. A textarea stands in for the terminal.
+      renderTrigger()
+      const terminal = document.createElement('textarea')
+      document.body.appendChild(terminal)
+      terminal.focus()
+
+      await fireEvent.keyDown(terminal, { key: 'i', metaKey: true })
+      // The real picker's Modal pulls focus onto itself on open; mimic that so the test
+      // exercises focus restoration rather than focus merely never having moved.
+      screen.getByTestId('picker-select').focus()
+
+      await fireEvent.click(screen.getByTestId('picker-select'))
+
+      expect(document.activeElement).toBe(terminal)
+      terminal.remove()
+    })
+
+    it('restores focus to the field even when opened by clicking the trigger button', async () => {
+      // The reported failure: opening by clicking the ✨ trigger (not ⌘I) let the button
+      // take focus, so focus returned to the button after inserting instead of the
+      // terminal. The trigger must decline the mousedown focus so the field the user
+      // came from — a running session's terminal — stays the restore target.
+      renderTrigger()
+      const terminal = document.createElement('textarea')
+      document.body.appendChild(terminal)
+      terminal.focus()
+
+      const button = screen.getByTestId('injection-trigger')
+      // Emulate the browser: a button takes focus on mousedown unless it is prevented.
+      const mousedown = createEvent.mouseDown(button)
+      await fireEvent(button, mousedown)
+      if (!mousedown.defaultPrevented) button.focus()
+
+      await fireEvent.click(button)
+      screen.getByTestId('picker-select').focus()
+      await fireEvent.click(screen.getByTestId('picker-select'))
+
+      expect(document.activeElement).toBe(terminal)
+      terminal.remove()
+    })
+
+    it('restores focus to the field that was focused when it opened, after dismissing', async () => {
+      renderTrigger()
+      const terminal = document.createElement('textarea')
+      document.body.appendChild(terminal)
+      terminal.focus()
+
+      await fireEvent.keyDown(terminal, { key: 'i', metaKey: true })
+      screen.getByTestId('picker-close').focus()
+
+      await fireEvent.click(screen.getByTestId('picker-close'))
+
+      expect(document.activeElement).toBe(terminal)
+      terminal.remove()
     })
 
     it('lets the dialog trigger win while a dialog is open, not the session one', async () => {
