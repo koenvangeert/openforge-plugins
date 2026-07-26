@@ -9,6 +9,7 @@
 // groq.ts, which keeps the reference's approach for the provider that requires it.
 
 import Anthropic from '@anthropic-ai/sdk'
+import { AI_BUDGET_MS } from './budget'
 import { buildDraftMessage, buildDraftPrompt, buildReviseDraftPrompt, buildReviseMessage } from './prompt'
 import type { RepoContext, ReviseInput, TicketDraft } from './prompt'
 
@@ -16,12 +17,13 @@ const MODEL = 'claude-haiku-4-5'
 // Matches the reference implementation's ceiling: enough for a structured body,
 // short enough that a runaway generation can't stall the dialog.
 const MAX_TOKENS = 1800
-// A hard ceiling for a button someone is waiting on. The CLI path this replaces
-// allowed 120s; anything near that is a failure worth surfacing, not waiting out.
-const TIMEOUT_MS = 30_000
-// One retry, not the SDK's default two: a rate limit that needs a second backoff
-// has already blown the latency budget this whole change exists to protect.
-const MAX_RETRIES = 1
+// The whole budget goes to one attempt. There is no second model to fall back to
+// here (unlike Groq), so an SDK retry would only be backoff on a rate limit — and a
+// rate limit that needs backoff has already blown the latency budget this exists to
+// protect. Spending the budget on a single generous attempt beats splitting it into
+// two that each risk timing out a call that would have succeeded.
+const TIMEOUT_MS = AI_BUDGET_MS
+const MAX_RETRIES = 0
 
 /** Constrains the reply so a Markdown body can never corrupt the envelope. */
 export const TICKET_DRAFT_SCHEMA = {

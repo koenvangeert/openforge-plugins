@@ -23,12 +23,13 @@ export interface EditIssueInput {
   removeLabels?: string[]
 }
 
-function headers(token: string): Record<string, string> {
+function headers(token: string, extra?: HeadersInit): Record<string, string> {
   return {
     Authorization: `token ${token}`,
     'User-Agent': 'openforge',
     Accept: 'application/vnd.github+json',
     'X-GitHub-Api-Version': '2026-03-10',
+    ...(extra as Record<string, string> | undefined),
   }
 }
 
@@ -63,7 +64,13 @@ async function apiError(response: Response): Promise<Error> {
 }
 
 async function request<T>(url: string, token: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, { ...init, headers: headers(token) })
+  // A JSON body needs saying so: the Rust client this ports used reqwest's `.json()`,
+  // which set the header, and fetch would otherwise label a string body text/plain.
+  const contentType = init?.body === undefined ? undefined : { 'Content-Type': 'application/json' }
+  const response = await fetch(url, {
+    ...init,
+    headers: headers(token, { ...contentType, ...(init?.headers as Record<string, string>) }),
+  })
   if (!response.ok) throw await apiError(response)
   return (await response.json()) as T
 }

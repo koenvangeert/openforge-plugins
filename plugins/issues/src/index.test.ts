@@ -69,17 +69,14 @@ describe('issues plugin metadata', () => {
   // Board.svelte styles its masonry columns in a <style> block. As a built-in that
   // CSS rode along in the app bundle; as an external plugin the host only injects
   // stylesheets the manifest names, so an undeclared one silently breaks the layout.
-  it('declares the stylesheet the frontend build emits', async () => {
-    const { existsSync } = await import('node:fs')
-    const { dirname, join, resolve } = await import('node:path')
-    const { fileURLToPath } = await import('node:url')
-    const packageDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-    const styles = packageJson.openforge.frontendStyles as string[] | undefined
+  //
+  // Asserted against the name Vite derives from the package name rather than against
+  // dist/, which is gitignored and which `pnpm test` does not build — reading it would
+  // make this red on a clean checkout and vacuously green next to a stale build.
+  it('declares the stylesheet the frontend build will emit', () => {
+    const emitted = `./dist/${packageJson.name.split('/').pop()}.css`
 
-    expect(styles).toEqual(['./dist/plugin-issues.css'])
-    for (const stylesheet of styles ?? []) {
-      expect(existsSync(join(packageDir, stylesheet)), `${stylesheet} is not built`).toBe(true)
-    }
+    expect(packageJson.openforge.frontendStyles).toEqual([emitted])
   })
 })
 

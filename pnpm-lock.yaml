@@ -96,6 +96,9 @@ importers:
       svelte:
         specifier: 'catalog:'
         version: 5.56.5
+      svelte-check:
+        specifier: 'catalog:'
+        version: 4.7.2(picomatch@4.0.5)(svelte@5.56.5)(typescript@6.0.3)
       typescript:
         specifier: 'catalog:'
         version: 6.0.3

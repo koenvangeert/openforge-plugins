@@ -5,6 +5,7 @@ import { loadRepoContext } from './lib/ai/context'
 import { readAiSettings, resolveProvider } from './lib/settings/aiSettings'
 import { createIssue, editIssue, listLabels, listOpenIssues, updateLabelColor } from './lib/github/client'
 import { resolveRepoRef } from './lib/github/repoRef'
+import { normalizeLabelColor } from './lib/labelColors'
 import {
   computeLabelUsage,
   readColumnLabels,
@@ -49,12 +50,14 @@ async function connect(
   return { repo, token }
 }
 
-/** Normalize a colour to GitHub's six-digit lowercase hex, without a leading `#`. */
+/**
+ * Normalize a colour to GitHub's six-digit lowercase hex, without a leading `#`.
+ * What counts as valid is `lib/labelColors.ts`'s business; this only turns its `null`
+ * into the rejection the command boundary owes the caller.
+ */
 function normalizeColor(raw: string): string {
-  const color = raw.trim().replace(/^#/, '').toLowerCase()
-  if (!/^[0-9a-f]{6}$/.test(color)) {
-    throw new Error('color must be a six-digit hex color')
-  }
+  const color = normalizeLabelColor(raw)
+  if (!color) throw new Error('color must be a six-digit hex color')
   return color
 }
 

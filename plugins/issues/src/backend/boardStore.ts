@@ -11,6 +11,25 @@ import type { Issue, LabelUsage, RepoLabel } from '../lib/types'
 const VALUES_KEY = 'issueValues'
 const COLUMN_LABELS_KEY = 'columnLabels'
 
+// The Rust original wrote a single issue's value with an atomic SQL upsert. Plugin
+// storage holds the whole map under one key and offers no atomic update, so a
+// read-modify-write is the only shape available — and two overlapping calls would
+// otherwise both read the same snapshot, with the later write erasing the earlier
+// issue's value. Serialize each project's cycle, mirroring lib/issueActions.ts.
+const valueUpdates = new Map<string, Promise<unknown>>()
+
+function serializePerProject<T>(projectId: string, work: () => Promise<T>): Promise<T> {
+  const previous = valueUpdates.get(projectId) ?? Promise.resolve()
+  // Run after whatever is queued, whether it settled or failed — one caller's failure
+  // must not strand every later write for that project.
+  const next = previous.catch(() => undefined).then(work)
+  valueUpdates.set(
+    projectId,
+    next.catch(() => undefined),
+  )
+  return next
+}
+
 /** Issue number (as a string, since JSON object keys are strings) → value 1..10. */
 export type IssueValues = Record<string, number>
 
@@ -41,17 +60,21 @@ export async function writeValue(
   issueNumber: number,
   value: number | null,
 ): Promise<void> {
+  // Validate before queueing: a bad value should reject immediately rather than wait
+  // behind unrelated writes to say so.
   if (value !== null && (!Number.isInteger(value) || value < 1 || value > 10)) {
     throw new Error('value must be an integer between 1 and 10, or null')
   }
 
-  const values = await readValues(storage, projectId)
-  if (value === null) {
-    delete values[String(issueNumber)]
-  } else {
-    values[String(issueNumber)] = value
-  }
-  await storage.project(projectId).set<IssueValues>(VALUES_KEY, values)
+  await serializePerProject(projectId, async () => {
+    const values = await readValues(storage, projectId)
+    if (value === null) {
+      delete values[String(issueNumber)]
+    } else {
+      values[String(issueNumber)] = value
+    }
+    await storage.project(projectId).set<IssueValues>(VALUES_KEY, values)
+  })
 }
 
 /**
@@ -87,6 +110,12 @@ export async function resolveColumnLabels(
   const seeded = computeLabelUsage(repoLabels, issues)
     .filter((usage) => usage.used)
     .map((usage) => usage.name)
-  await writeColumnLabels(storage, projectId, seeded)
+
+  // Only persist a seed that found something. Storing an empty one would be
+  // indistinguishable from the user having cleared the board on purpose, which is
+  // never re-seeded — so a repo whose open issues carry no labels yet would be stuck
+  // column-less forever once it started labelling them. (The Rust original persisted
+  // unconditionally and had exactly that hole.)
+  if (seeded.length > 0) await writeColumnLabels(storage, projectId, seeded)
   return seeded
 }

@@ -43,6 +43,16 @@ describe('listOpenIssues', () => {
     })
   })
 
+  // A GET carries no body, so labelling it as JSON would be wrong.
+  it('sends no content type when there is no body', async () => {
+    const spy = stubFetch(jsonResponse(200, []))
+
+    await listOpenIssues(TOKEN, REPO)
+
+    const [, init] = spy.mock.calls[0] as unknown as [string, RequestInit]
+    expect((init.headers as Record<string, string>)['Content-Type']).toBeUndefined()
+  })
+
   it('drops pull requests, which the issues endpoint also returns', async () => {
     stubFetch(
       jsonResponse(200, [
@@ -86,6 +96,17 @@ describe('createIssue', () => {
     expect(init.method).toBe('POST')
     expect(JSON.parse(init.body as string)).toEqual({ title: 'New', body: 'Details', labels: ['bug'] })
     expect(issue.number).toBe(7)
+  })
+
+  // The Rust client used reqwest's .json(), which set this; fetch would otherwise
+  // label a string body text/plain and leave us relying on GitHub's leniency.
+  it('labels a JSON body as JSON', async () => {
+    const spy = stubFetch(jsonResponse(201, { number: 7, title: 'New', labels: [] }))
+
+    await createIssue(TOKEN, REPO, { title: 'New', body: '', labels: [] })
+
+    const [, init] = spy.mock.calls[0] as unknown as [string, RequestInit]
+    expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json')
   })
 })
 

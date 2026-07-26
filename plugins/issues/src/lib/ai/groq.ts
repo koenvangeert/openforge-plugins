@@ -7,6 +7,7 @@
 // primary/backup model pair. The one difference is the key source — a desktop plugin
 // has no server-side env to hide a key in, so it comes from plugin storage.
 
+import { AI_BUDGET_MS } from './budget'
 import { buildDraftMessage, buildDraftPrompt, buildReviseDraftPrompt, buildReviseMessage } from './prompt'
 import type { RepoContext, ReviseInput, TicketDraft } from './prompt'
 
@@ -18,8 +19,12 @@ const GROQ_MODEL = 'llama-3.3-70b-versatile'
 const GROQ_FALLBACK_MODEL = 'openai/gpt-oss-120b'
 const MAX_TOKENS = 1800
 const TEMPERATURE = 0.4
-// Matches the Anthropic transport: a hard ceiling for a button someone is waiting on.
-const TIMEOUT_MS = 30_000
+// Two attempts have to fit the budget between them, since the backup model is only
+// reached after the primary has already spent its share. Giving each the full budget
+// would put the fallback past the host's deadline, where its result can never arrive —
+// which would make the fallback pure cost.
+const ATTEMPTS = 2
+const TIMEOUT_MS = Math.floor(AI_BUDGET_MS / ATTEMPTS)
 
 /**
  * A rate limit is the one Groq failure a different model can fix, so it has to be

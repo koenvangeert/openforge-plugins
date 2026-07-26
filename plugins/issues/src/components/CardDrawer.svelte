@@ -175,13 +175,16 @@
         <ExternalLink size={14} /> Open on GitHub
       </button>
       {#if card.taskLink}
+        <!-- Bind the id here: the click handler runs later, and a board refresh that
+             clears taskLink in between would otherwise dereference null. -->
+        {@const taskId = card.taskLink.taskId}
         <button
           class="btn btn-sm"
           type="button"
-          aria-label={`Open task details ${card.taskLink.taskId}`}
-          onclick={() => onOpenTask(card.taskLink.taskId)}
+          aria-label={`Open task details ${taskId}`}
+          onclick={() => onOpenTask(taskId)}
         >
-          Open task details {card.taskLink.taskId}
+          Open task details {taskId}
         </button>
       {/if}
       <button class="btn btn-sm" type="button" onclick={() => onCopyLink(card.issueNumber)}>

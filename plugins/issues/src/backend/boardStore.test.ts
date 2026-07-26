@@ -86,6 +86,30 @@ describe('values', () => {
     await expect(writeValue(storage as never, 'P-1', 7, 1.5)).rejects.toThrow(/between 1 and 10/)
   })
 
+  // Plugin storage holds the whole map under one key with no atomic update, so
+  // overlapping writes both read the same snapshot unless they are serialized — the
+  // later one would otherwise erase the earlier issue's value.
+  it('does not lose an update when two writes overlap', async () => {
+    const storage = fakeStorage()
+
+    await Promise.all([
+      writeValue(storage as never, 'P-1', 7, 5),
+      writeValue(storage as never, 'P-1', 9, 8),
+      writeValue(storage as never, 'P-1', 11, 2),
+    ])
+
+    expect(await readValues(storage as never, 'P-1')).toEqual({ '7': 5, '9': 8, '11': 2 })
+  })
+
+  it('keeps serving later writes after one of them fails', async () => {
+    const storage = fakeStorage()
+    const failing = writeValue(storage as never, 'P-1', 7, 99).catch(() => undefined)
+
+    await Promise.all([failing, writeValue(storage as never, 'P-1', 9, 8)])
+
+    expect(await readValues(storage as never, 'P-1')).toEqual({ '9': 8 })
+  })
+
   it('keeps values separate per project', async () => {
     const storage = fakeStorage()
 
@@ -106,6 +130,19 @@ describe('resolveColumnLabels', () => {
 
     expect(columns).toEqual(['feature', 'bug'])
     expect(await readColumnLabels(storage as never, 'P-1')).toEqual(['feature', 'bug'])
+  })
+
+  // An empty seed must not be persisted: `[]` means "cleared on purpose" and is never
+  // re-seeded, so storing it would leave a repo that has not started labelling yet
+  // permanently column-less.
+  it('does not persist a seed that found no labels in use', async () => {
+    const storage = fakeStorage()
+
+    expect(await resolveColumnLabels(storage as never, 'P-1', repoLabels, [issue(1, [])])).toEqual([])
+    expect(await readColumnLabels(storage as never, 'P-1')).toBeNull()
+
+    // Once issues carry labels, the next open seeds for real.
+    expect(await resolveColumnLabels(storage as never, 'P-1', repoLabels, [issue(1, ['bug'])])).toEqual(['bug'])
   })
 
   it('never re-seeds a board the user deliberately cleared', async () => {
