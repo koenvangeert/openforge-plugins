@@ -13,7 +13,7 @@
 //     is left null. contextBlock() already omits the line when it's absent.
 
 import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
-import type { RepoContext } from './client'
+import type { RepoContext } from './prompt'
 
 const TTL_MS = 10 * 60 * 1000
 const README_MAX_CHARS = 2500

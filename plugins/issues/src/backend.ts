@@ -1,13 +1,8 @@
 import { defineBackendPlugin } from '@openforge-app/plugin-sdk/backend'
 import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
-import {
-  describeAnthropicError,
-  MissingApiKeyError,
-  refineTicket,
-  reviseTicket,
-} from './lib/anthropic/client'
-import { loadRepoContext } from './lib/anthropic/context'
-import { readApiKey } from './lib/settings/apiKey'
+import { describeAiError, refineTicket, reviseTicket } from './lib/ai'
+import { loadRepoContext } from './lib/ai/context'
+import { readAiSettings, resolveProvider } from './lib/settings/aiSettings'
 import { createIssue, editIssue, listLabels, listOpenIssues, updateLabelColor } from './lib/github/client'
 import { resolveRepoRef } from './lib/github/repoRef'
 import {
@@ -146,9 +141,9 @@ export default defineBackendPlugin({
       }),
     )
 
-    // Refine drafts a ticket from a rough note. The key comes from plugin storage,
-    // so a user without one gets a gated button (see CreateDialog) rather than a
-    // failure at call time.
+    // Refine drafts a ticket from a rough note, through whichever of Anthropic or Groq
+    // the user has a key for. The keys come from plugin storage, so a user without any
+    // gets a gated button (see CreateDialog) rather than a failure at call time.
     context.subscriptions.add(
       openforge.backend.registerMethod<RefineTicketRequest, TicketDraft>('issues_refine_ticket', {
         handler: (request) => refineHandler(openforge, request),
@@ -161,8 +156,7 @@ async function refineHandler(
   openforge: BackendOpenForgeAPI,
   request: RefineTicketRequest,
 ): Promise<TicketDraft> {
-  const key = await readApiKey(openforge.storage)
-  if (!key) throw new MissingApiKeyError()
+  const settings = await readAiSettings(openforge.storage)
 
   try {
     const context = await loadRepoContext(openforge, {
@@ -173,11 +167,12 @@ async function refineHandler(
 
     const draft = request.draft
     return draft
-      ? await reviseTicket(key, { draft, feedback: request.feedback, note: request.text, context })
-      : await refineTicket(key, request.text, context)
+      ? await reviseTicket(settings, { draft, feedback: request.feedback, note: request.text, context })
+      : await refineTicket(settings, request.text, context)
   } catch (error) {
     // Surface what the user can act on (a bad key, a rate limit) rather than letting a
-    // raw SDK error reach the dialog's error line.
-    throw new Error(describeAnthropicError(error))
+    // raw SDK error reach the dialog's error line. Which provider ran decides whose
+    // vocabulary the message speaks.
+    throw new Error(describeAiError(error, resolveProvider(settings)))
   }
 }

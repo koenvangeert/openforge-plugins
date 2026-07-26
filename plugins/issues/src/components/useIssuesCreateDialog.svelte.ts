@@ -1,6 +1,6 @@
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import type { RefineTicketRequest, TicketDraft } from '../lib/types'
-import { readApiKey } from '../lib/settings/apiKey'
+import { hasUsableProvider, readAiSettings } from '../lib/settings/aiSettings'
 import type { IssuesBoardController } from './useIssuesBoard.svelte'
 
 export function useIssuesCreateDialog(
@@ -15,8 +15,8 @@ export function useIssuesCreateDialog(
     initialLabels = [...labels]
     open = true
     // Re-read on every open because settings can change while the view remains mounted.
-    void readApiKey(api.storage).then((key) => {
-      hasApiKey = Boolean(key)
+    void readAiSettings(api.storage).then((settings) => {
+      hasApiKey = hasUsableProvider(settings)
     })
   }
 
