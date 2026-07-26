@@ -48,7 +48,7 @@ describe('issues plugin metadata', () => {
     expect(packageJson.openforge.frontend).toBe('./dist/frontend.js')
     expect(packageJson.openforge.backend).toBe('./dist/backend.js')
     expect(packageJson.openforge.requires).toEqual(
-      expect.arrayContaining(['views', 'taskPane', 'backend', 'commands', 'events', 'tasks', 'projectConfig', 'storage', 'system.openUrl', 'context']),
+      expect.arrayContaining(['views', 'taskPane', 'backend', 'tasks', 'projectConfig', 'storage', 'system.openUrl', 'context']),
     )
   })
 
@@ -56,6 +56,30 @@ describe('issues plugin metadata', () => {
   // project's README, neither of which the plugin can do uncapability'd.
   it('declares the settings and fs capabilities that Refine depends on', () => {
     expect(packageJson.openforge.requires).toEqual(expect.arrayContaining(['settings', 'fs']))
+  })
+
+  // The board resolves the repo itself and reads the token OpenForge already holds,
+  // so it needs both. As an external plugin it is NOT on the host's global-command
+  // allowlist, which is why nothing here may proxy to core.
+  it('declares the capabilities the self-contained GitHub path needs', () => {
+    expect(packageJson.openforge.requires).toEqual(expect.arrayContaining(['config', 'projects']))
+    expect(packageJson.openforge.requires).not.toContain('commands')
+  })
+
+  // Board.svelte styles its masonry columns in a <style> block. As a built-in that
+  // CSS rode along in the app bundle; as an external plugin the host only injects
+  // stylesheets the manifest names, so an undeclared one silently breaks the layout.
+  it('declares the stylesheet the frontend build emits', async () => {
+    const { existsSync } = await import('node:fs')
+    const { dirname, join, resolve } = await import('node:path')
+    const { fileURLToPath } = await import('node:url')
+    const packageDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+    const styles = packageJson.openforge.frontendStyles as string[] | undefined
+
+    expect(styles).toEqual(['./dist/plugin-issues.css'])
+    for (const stylesheet of styles ?? []) {
+      expect(existsSync(join(packageDir, stylesheet)), `${stylesheet} is not built`).toBe(true)
+    }
   })
 })
 
@@ -124,13 +148,11 @@ describe('issues frontend plugin', () => {
 })
 
 describe('issues backend plugin', () => {
-  it('registers all issues backend methods proxying the camelCase host commands', async () => {
+  it('registers every board method and subscribes each one for disposal', async () => {
     const { default: backend } = await import('./backend')
     const subscriptions = { add: vi.fn() }
-    const invokeGlobal = vi.fn(() => Promise.resolve(null))
     const api = {
       backend: { registerMethod: vi.fn(() => ({ dispose: vi.fn() })) },
-      commands: { invokeGlobal },
     } as unknown as BackendOpenForgeAPI
     const context = {
       pluginId: packageJson.openforge.id,
@@ -146,28 +168,11 @@ describe('issues backend plugin', () => {
       expect(api.backend.registerMethod).toHaveBeenCalledWith(method, expect.objectContaining({ handler: expect.any(Function) }))
     }
     expect(subscriptions.add).toHaveBeenCalledTimes(8)
-
-    // Invoking the registered issues_get_board handler must proxy to the
-    // camelCase host command id the core callback router expects.
-    const registerCalls = (api.backend.registerMethod as ReturnType<typeof vi.fn>).mock.calls
-    const getBoard = registerCalls.find((c) => c[0] === 'issues_get_board')![1] as { handler: (p: unknown) => unknown }
-    await getBoard.handler({ projectId: 'P-1' })
-    expect(invokeGlobal).toHaveBeenCalledWith('openforge.roadmapGetBoard', { projectId: 'P-1' })
-
-    const updateColor = registerCalls.find((c) => c[0] === 'issues_update_label_color')![1] as { handler: (p: unknown) => unknown }
-    await updateColor.handler({ projectId: 'P-1', name: 'bug', color: '0e8a16' })
-    expect(invokeGlobal).toHaveBeenCalledWith('openforge.roadmapUpdateLabelColor', {
-      projectId: 'P-1',
-      name: 'bug',
-      color: '0e8a16',
-    })
-
   })
 
-  // Refine is the one method that doesn't proxy: it calls the Anthropic API from the
-  // plugin so the dialog isn't waiting on an agent CLI spawn. Core's
-  // openforge.roadmapRefineTicket must not be reached.
-  it('handles issues_refine_ticket in-plugin instead of proxying it to core', async () => {
+  // The board talks to GitHub itself; no method may fall back to invoking a core
+  // command, because an external plugin is not on the host's invoke allowlist.
+  it('handles issues_refine_ticket in-plugin without reaching a host command', async () => {
     const { default: backend } = await import('./backend')
     const invokeGlobal = vi.fn(() => Promise.resolve(null))
     const api = {

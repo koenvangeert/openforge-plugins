@@ -32,14 +32,15 @@
     "description": "A per-repository Kanban board over GitHub Issues",
     "icon": "kanban",
     "frontend": "./dist/frontend.js",
+    "frontendStyles": [
+      "./dist/plugin-issues.css"
+    ],
     "backend": "./dist/backend.js",
     "requires": [
       "views",
       "taskPane",
       "settings",
       "backend",
-      "commands",
-      "events",
       "tasks",
       "projects",
       "projectConfig",
