@@ -4,6 +4,11 @@ Use only the public `@openforge-app/plugin-sdk` contract described in
 `../openforge/docs/plugin-authoring.md`. Keep plugin runtime code out of
 OpenForge application internals.
 
+**Always reload the plugin after making changes so the user can test the
+running build — never hand off an unbuilt, unreloaded change.** A source edit
+alone does not update what the app runs; the user will otherwise be testing
+stale artifacts.
+
 Before asking the user to test a finished plugin change in the running
 OpenForge app:
 
