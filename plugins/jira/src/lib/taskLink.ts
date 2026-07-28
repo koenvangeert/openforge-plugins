@@ -55,6 +55,7 @@ export async function clearLink(api: StorageApi, taskId: string): Promise<void> 
 export async function suggestIssueKey(api: TasksApi, taskId: string): Promise<string | null> {
   try {
     const task = await api.tasks.get(taskId)
+    if (!task) return null
     return extractIssueKeyHint(task.initial_prompt, task.summary)
   } catch {
     return null
