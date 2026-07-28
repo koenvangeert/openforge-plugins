@@ -69,7 +69,7 @@ export interface LinkedTaskSummary {
 
 export interface IssueLinkState {
   issueKey: string
-  /** Linked Tasks in the active Project, most recently updated first. */
+  /** Linked Tasks in the active Project: active (backlog, doing) before done, each most recently updated first. */
   tasks: LinkedTaskSummary[]
 }
 
@@ -92,15 +92,21 @@ export function toLinkedTaskSummary(task: Task): LinkedTaskSummary {
   return { id: task.id, title: taskDisplayTitle(task), status: task.status, updatedAt: task.updated_at }
 }
 
-function byMostRecentlyUpdated(a: LinkedTaskSummary, b: LinkedTaskSummary): number {
-  return b.updatedAt - a.updatedAt
+/**
+ * Ordering for a linked-Tasks list: active Tasks (backlog, doing) rank ahead of
+ * done ones, so a recently-touched completed Task can't headline the list or the
+ * table's single-Task cell. Within a rank, most recently updated first.
+ */
+function byActiveThenRecent(a: LinkedTaskSummary, b: LinkedTaskSummary): number {
+  const doneRank = Number(a.status === 'done') - Number(b.status === 'done')
+  return doneRank !== 0 ? doneRank : b.updatedAt - a.updatedAt
 }
 
-/** Add or replace a linked Task in a state, keeping the most-recently-updated-first ordering. */
+/** Add or replace a linked Task in a state, keeping the active-before-done, most-recently-updated ordering. */
 export function upsertLinkedTask(state: IssueLinkState | undefined, issueKey: string, task: Task): IssueLinkState {
   const summary = toLinkedTaskSummary(task)
   const others = (state?.tasks ?? []).filter((existing) => existing.id !== summary.id)
-  return { issueKey, tasks: [summary, ...others].sort(byMostRecentlyUpdated) }
+  return { issueKey, tasks: [summary, ...others].sort(byActiveThenRecent) }
 }
 
 function sanitizeIssue(issue: JiraIssue): JiraIssue {
@@ -161,7 +167,9 @@ export async function deriveIssueLinkStates(
   for (const issueKey of keys) {
     states[issueKey] = { issueKey, tasks: [] }
   }
-  const tasks = await api.tasks.list({ projectId })
+  // includeDone: a completed Task keeps its Issue Link, so it still counts here —
+  // for both the linked-Tasks display and the duplicate-intake guard.
+  const tasks = await api.tasks.list({ projectId, includeDone: true })
   const links = await Promise.all(tasks.map(async (task) => {
     const linkedKey = await readLinkedKey(api, task.id)
     return { task, issueKey: linkedKey ? normalizeIssueKey(linkedKey) : null }
@@ -172,7 +180,7 @@ export async function deriveIssueLinkStates(
     states[link.issueKey].tasks.push(toLinkedTaskSummary(link.task))
   }
   for (const issueKey of keys) {
-    states[issueKey].tasks.sort(byMostRecentlyUpdated)
+    states[issueKey].tasks.sort(byActiveThenRecent)
   }
   return states
 }

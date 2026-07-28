@@ -117,7 +117,7 @@ describe('deriveIssueLinkStates', () => {
 
     const result = await deriveIssueLinkStates(api, 'P-1', ['PROJ-1', 'PROJ-2', 'PROJ-3'])
 
-    expect(listSpy).toHaveBeenCalledWith({ projectId: 'P-1' })
+    expect(listSpy).toHaveBeenCalledWith({ projectId: 'P-1', includeDone: true })
     expect(result).toEqual({
       'PROJ-1': {
         issueKey: 'PROJ-1',
@@ -147,6 +147,21 @@ describe('deriveIssueLinkStates', () => {
     expect(result['PROJ-1'].tasks).toEqual([
       { id: 'T-new', title: 'PROJ-1: Prompt heading', status: 'backlog', updatedAt: 200 },
       { id: 'T-old', title: 'Explicit title', status: 'backlog', updatedAt: 100 },
+    ])
+  })
+
+  it('includes done Tasks but ranks them after active ones even when more recently updated', async () => {
+    const active: Task = { ...makeTask('T-active'), status: 'doing', updated_at: 100 }
+    const done: Task = { ...makeTask('T-done'), status: 'done', updated_at: 300 }
+    const { api } = makeApi(async () => undefined, [done, active])
+    await api.storage.task('T-active').set(TASK_KEY.link, { key: 'PROJ-1' })
+    await api.storage.task('T-done').set(TASK_KEY.link, { key: 'PROJ-1' })
+
+    const result = await deriveIssueLinkStates(api, 'P-1', ['PROJ-1'])
+
+    expect(result['PROJ-1'].tasks).toEqual([
+      { id: 'T-active', title: 'T-active', status: 'doing', updatedAt: 100 },
+      { id: 'T-done', title: 'T-done', status: 'done', updatedAt: 300 },
     ])
   })
 
@@ -184,6 +199,16 @@ describe('upsertLinkedTask', () => {
     })
   })
 
+  it('ranks a new active Task ahead of an existing done one regardless of update time', () => {
+    const state = { issueKey: 'PROJ-1', tasks: [{ id: 'T-done', title: 'Done', status: 'done' as const, updatedAt: 500 }] }
+    const task: Task = { ...makeTask('T-active'), status: 'doing', updated_at: 100, title: 'Active' }
+
+    expect(upsertLinkedTask(state, 'PROJ-1', task).tasks).toEqual([
+      { id: 'T-active', title: 'Active', status: 'doing', updatedAt: 100 },
+      { id: 'T-done', title: 'Done', status: 'done', updatedAt: 500 },
+    ])
+  })
+
   it('replaces an already-present Task instead of duplicating it', () => {
     const state = { issueKey: 'PROJ-1', tasks: [{ id: 'T-1', title: 'Stale', status: 'backlog' as const, updatedAt: 100 }] }
     const task: Task = { ...makeTask('T-1'), updated_at: 300, title: 'Fresh' }
@@ -215,7 +240,7 @@ describe('Issue Intake orchestration', () => {
       issueKey: 'PROJ-7',
       task: { id: 'T-1', status: 'backlog', project_id: 'P-active' },
     })
-    expect(listSpy).toHaveBeenCalledWith({ projectId: 'P-active' })
+    expect(listSpy).toHaveBeenCalledWith({ projectId: 'P-active', includeDone: true })
     expect(createSpy).toHaveBeenCalledWith({
       projectId: 'P-active',
       initialPrompt: 'PROJ-7: Fix Issue Intake\n\n<p>Keep the <strong>Jira description</strong>.</p>',
