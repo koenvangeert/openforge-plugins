@@ -62,6 +62,7 @@
   let hasRun = $state(false)
   let error = $state<{ code: JiraErrorCode; message: string } | null>(null)
   let detailsFocusRequest = $state(0)
+  let tableFocusRequest = $state(0)
   let querySequence = 0
   let projectSequence = 0
   let intakeSequence = 0
@@ -79,6 +80,32 @@
     selectedIssue = issue
     if (focusDetails) detailsFocusRequest += 1
   }
+
+  // Terminal-style navigation needs a focused row to act on. When j/k/arrows are
+  // pressed while no row holds focus yet, hand focus to the list so the next press
+  // navigates. This listens on the document, not on this view's markup: when the
+  // view has just opened, focus still sits on the host chrome (or document.body),
+  // so a handler bound to our own DOM subtree would never see the keystroke.
+  // A row that already has focus consumes the event first (defaultPrevented), and
+  // keystrokes typed into a text field are left alone so inputs keep working.
+  function focusIssueListOnNavigation(event: KeyboardEvent) {
+    if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return
+    if (event.key !== 'j' && event.key !== 'k' && event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
+    const target = event.target as HTMLElement | null
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) return
+    // Stand down while a dialog owns the screen, matching the host's modal semantics.
+    if (document.querySelector('dialog[open]') !== null) return
+    if (rows.length === 0) return
+    event.preventDefault()
+    tableFocusRequest += 1
+  }
+
+  // onMount's teardown rather than $effect cleanup: the listener belongs to this
+  // view's lifetime, not to any prop value, so it is released only on unmount.
+  onMount(() => {
+    document.addEventListener('keydown', focusIssueListOnNavigation)
+    return () => document.removeEventListener('keydown', focusIssueListOnNavigation)
+  })
 
   async function run(pageToken: string | null = null, query = jql): Promise<boolean> {
     if (!projectId || !queryReady) return false
@@ -408,6 +435,7 @@
           {nextPageToken}
           {statusSortDirection}
           {sorting}
+          focusRequest={tableFocusRequest}
           onSelect={(issue) => selectIssue(issue)}
           onNavigate={(issue) => selectIssue(issue, false)}
           onNextPage={() => void run(nextPageToken)}

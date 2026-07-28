@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte'
   import type { JiraIssue } from '../lib/jiraTypes'
   import { issueLinkState, type IssueLinkStates } from '../lib/intakeController'
   import type { SortDirection } from '../lib/jqlSort'
@@ -14,6 +15,7 @@
     nextPageToken: string | null
     statusSortDirection: SortDirection | null
     sorting: boolean
+    focusRequest: number
     onSelect: (issue: JiraIssue) => void
     onNavigate: (issue: JiraIssue) => void
     onNextPage: () => void
@@ -32,6 +34,7 @@
     nextPageToken,
     statusSortDirection,
     sorting,
+    focusRequest,
     onSelect,
     onNavigate,
     onNextPage,
@@ -45,6 +48,18 @@
   let statusAriaSort = $derived<'ascending' | 'descending' | 'none'>(statusSortDirection === 'asc'
     ? 'ascending'
     : statusSortDirection === 'desc' ? 'descending' : 'none')
+
+  // Hand DOM focus to the selected row (or the first row) when the parent asks —
+  // e.g. the first j/k press while focus still sits on the JQL field or Run button.
+  // Only focusRequest is tracked; rows/selectedKey are read in the callback so a new
+  // query alone never steals focus.
+  $effect(() => {
+    if (focusRequest === 0) return
+    void tick().then(() => {
+      const index = Math.max(0, rows.findIndex((row) => row.key === selectedKey))
+      rowRefs[index]?.focus()
+    })
+  })
 
   function onRowKeydown(event: KeyboardEvent, index: number) {
     // Ignore keystrokes bubbling up from an interactive cell (e.g. the linked-Task link).

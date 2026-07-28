@@ -192,6 +192,47 @@ describe('JiraQueryView', () => {
     expect(document.activeElement).toBe(firstRow)
   })
 
+  it('starts list navigation from the query pane on the first j press, leaving the JQL field alone', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'dev.kvg.jira', projectId: 'P-1' })
+    const invoke = vi.fn(async () => ({
+      ok: true,
+      issues: [jiraIssue('PROJ-1', 'First Issue'), jiraIssue('PROJ-2', 'Second Issue')],
+      page: { isLast: true, nextPageToken: null },
+    }))
+    const api: FrontendOpenForgeAPI = {
+      ...registry.frontendApi,
+      backend: {
+        ...registry.frontendApi.backend,
+        state: 'ready',
+        whenReady: async () => undefined,
+        invoke: invoke as FrontendOpenForgeAPI['backend']['invoke'],
+      },
+    }
+    render(JiraQueryView, { props: { api, context: api.context.getSnapshot() } })
+    await screen.findByRole('heading', { name: 'First Issue' })
+    const firstRow = screen.getByRole('row', { name: /PROJ-1.*First Issue/ })
+    const secondRow = screen.getByRole('row', { name: /PROJ-2.*Second Issue/ })
+
+    // Typing j into the JQL field must keep working as text entry, not navigation.
+    const jqlField = screen.getByRole('textbox', { name: 'JQL' })
+    jqlField.focus()
+    await fireEvent.keyDown(jqlField, { key: 'j' })
+    expect(document.activeElement).toBe(jqlField)
+
+    // The real case a view-scoped handler misses: the view has just opened, so focus
+    // still sits outside its markup (host chrome / document.body). The first j must
+    // still hand focus to the selected row without moving the selection.
+    jqlField.blur()
+    expect(document.activeElement).toBe(document.body)
+    await fireEvent.keyDown(document.body, { key: 'j' })
+    await waitFor(() => expect(document.activeElement).toBe(firstRow))
+    expect(firstRow.getAttribute('aria-selected')).toBe('true')
+
+    await fireEvent.keyDown(firstRow, { key: 'j' })
+    expect(document.activeElement).toBe(secondRow)
+    expect(secondRow.getAttribute('aria-selected')).toBe('true')
+  })
+
   it('navigates to the next Jira page without appending it to the current page', async () => {
     const registry = createOpenForgeRegistryFake({ pluginId: 'dev.kvg.jira', projectId: 'P-1' })
     const invoke = vi.fn()
