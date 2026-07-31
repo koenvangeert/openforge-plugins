@@ -1,4 +1,4 @@
-import type { ImplementationRun, JsonObject } from '@openforge-app/plugin-sdk'
+import type { ComposeTaskResult, JsonObject } from '@openforge-app/plugin-sdk'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import type { BoardCard, IssueTaskLink } from './board'
 
@@ -159,7 +159,9 @@ async function saveIssueTaskLink(
   api: FrontendOpenForgeAPI,
   projectId: string,
   issueNumber: number,
-  run: ImplementationRun,
+  // Session id and workspace path are unknown while the task is only composed;
+  // they are filled in once the task actually runs.
+  run: { taskId: string; sessionId: string; workspacePath: string },
   repo: string,
   title: string,
 ): Promise<void> {
@@ -177,44 +179,55 @@ async function saveIssueTaskLink(
   await updateIssueTaskLinks(api, projectId, issueNumber, link)
 }
 
-export function buildIssueTaskPrompt({ repo, card }: BuildIssueTaskPromptRequest): string {
-  const lines = [
-    `Implement this GitHub issue #${card.issueNumber}: ${card.title}`,
-    '',
-    `Repository: ${repo}`,
-    `Issue URL: https://github.com/${repo}/issues/${card.issueNumber}`,
-  ]
-
-  if (card.labels.length > 0) {
-    lines.push(`Labels: ${card.labels.join(', ')}`)
-  }
-
-  if (card.value !== null) {
-    lines.push(`Value: ${card.value}`)
-  }
-
-  const body = card.body?.trim()
-  if (body) {
-    lines.push('', 'Issue body:', body)
-  }
-
-  return lines.join('\n')
+export function issueUrl({ repo, card }: BuildIssueTaskPromptRequest): string {
+  return `https://github.com/${repo}/issues/${card.issueNumber}`
 }
 
+/**
+ * A reference, not a copy. The agent reads the issue itself when it needs the
+ * body, so it sees the issue as it stands rather than as it was when the menu
+ * was clicked — and the create dialog stays short enough to read and edit.
+ */
+export function buildIssueTaskPrompt({ repo, card }: BuildIssueTaskPromptRequest): string {
+  return [
+    `Implement GitHub issue #${card.issueNumber}: ${card.title}`,
+    '',
+    issueUrl({ repo, card }),
+  ].join('\n')
+}
+
+/**
+ * Hands the issue to the host's create-task dialog, pre-filled, instead of
+ * creating and starting a task behind the user's back. The dialog carries the
+ * injectable picker and the task's workspace/permission settings, and the user
+ * decides there whether to start now.
+ */
 export async function startIssueAction(
   api: FrontendOpenForgeAPI,
   request: StartIssueActionRequest,
-): Promise<ImplementationRun> {
-  const task = await api.tasks.create({
+): Promise<ComposeTaskResult | null> {
+  const url = issueUrl({ repo: request.repo, card: request.card })
+
+  const result = await api.tasks.compose({
     projectId: request.projectId,
-    initialPrompt: buildIssueTaskPrompt({
-      repo: request.repo,
-      card: request.card,
-    }),
+    initialPrompt: buildIssueTaskPrompt({ repo: request.repo, card: request.card }),
+    sourceTicketUrl: url,
+    title: request.card.title,
   })
 
-  const run = await api.tasks.startImplementation({ taskId: task.id })
-  await saveIssueTaskLink(api, request.projectId, request.card.issueNumber, run, request.repo, request.card.title)
-  await api.navigation.navigate({ projectId: request.projectId, viewId: 'board', taskId: task.id })
-  return run
+  // Dismissed: no task was created, so there is nothing to link.
+  if (!result) return null
+
+  await saveIssueTaskLink(
+    api,
+    request.projectId,
+    request.card.issueNumber,
+    { taskId: result.task.id, sessionId: '', workspacePath: '' },
+    request.repo,
+    request.card.title,
+  )
+
+  // No navigation here: the host moves to the board itself when the user starts
+  // the task, and on a plain create they stay on the issues board.
+  return result
 }

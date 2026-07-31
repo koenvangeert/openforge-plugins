@@ -34,7 +34,7 @@
       {disabled}
       onclick={onStart}
     >
-      Start Task
+      Start Task…
     </button>
   </div>
 {/if}
