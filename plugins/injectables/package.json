@@ -39,7 +39,8 @@
       "system.openUrl",
       "context",
       "commands",
-      "injectionPoints"
+      "injectionPoints",
+      "taskStart"
     ]
   }
 }
