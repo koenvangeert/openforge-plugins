@@ -46,42 +46,48 @@ function withFailingNextIssueTaskLinksGet(storage: PluginStorage): PluginStorage
 }
 
 describe('issue actions', () => {
-  it('builds a task prompt from the GitHub issue context', () => {
+  it('builds a reference to the GitHub issue rather than a copy of it', () => {
     const prompt = buildIssueTaskPrompt({
       card,
       repo: 'octo/cat',
     })
 
-    expect(prompt).toContain('Implement this GitHub issue #42: Add repository docs')
-    expect(prompt).toContain('Repository: octo/cat')
-    expect(prompt).toContain('Issue URL: https://github.com/octo/cat/issues/42')
-    expect(prompt).toContain('Labels: enhancement, github')
-    expect(prompt).toContain('Users need a GitHub issue board inside OpenForge.')
+    expect(prompt).toBe(
+      'Implement GitHub issue #42: Add repository docs\n\nhttps://github.com/octo/cat/issues/42',
+    )
+    // The agent reads the issue itself, so it sees the current body rather than
+    // a snapshot taken when the menu was clicked.
+    expect(prompt).not.toContain('Users need a GitHub issue board inside OpenForge.')
+    expect(prompt).not.toContain('Labels:')
+    expect(prompt).not.toContain('Repository:')
   })
 
-  it('creates a backlog task for the issue, starts implementation, stores the issue task link, and navigates to the task', async () => {
+  it('composes a task for the issue and stores the issue task link, without starting or navigating itself', async () => {
     const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.issues', projectId: 'P-1' })
 
-    const run = await startIssueAction(registry.frontendApi, {
+    const result = await startIssueAction(registry.frontendApi, {
       projectId: 'P-1',
       repo: 'octo/cat',
       card,
     })
 
-    expect(run.taskId).toBe('mock-task-1')
-    expect(registry.calls.taskCreations).toEqual([
+    expect(result?.task.id).toBe('mock-task-1')
+    expect(registry.calls.taskComposes).toEqual([
       {
-        initialPrompt: expect.stringContaining('GitHub issue #42: Add repository docs'),
         projectId: 'P-1',
+        initialPrompt: 'Implement GitHub issue #42: Add repository docs\n\nhttps://github.com/octo/cat/issues/42',
+        sourceTicketUrl: 'https://github.com/octo/cat/issues/42',
+        title: 'Add repository docs',
       },
     ])
-    expect(registry.calls.taskImplementationStarts).toEqual([{ taskId: 'mock-task-1' }])
+    // The dialog owns starting; the host navigates when the user starts there.
+    expect(registry.calls.taskImplementationStarts).toEqual([])
     await expect(registry.frontendApi.storage.task('mock-task-1').get('issueTaskLink')).resolves.toEqual({
       issueNumber: 42,
       link: {
         taskId: 'mock-task-1',
-        sessionId: 'mock-session',
-        workspacePath: '/mock-workspace',
+        sessionId: '',
+        workspacePath: '',
         repo: 'octo/cat',
         title: 'Add repository docs',
       },
@@ -96,13 +102,27 @@ describe('issue actions', () => {
     await expect(loadIssueTaskLinks(registry.frontendApi, 'P-1')).resolves.toEqual({
       42: {
         taskId: 'mock-task-1',
-        sessionId: 'mock-session',
-        workspacePath: '/mock-workspace',
+        sessionId: '',
+        workspacePath: '',
         repo: 'octo/cat',
         title: 'Add repository docs',
       },
     })
-    expect(registry.calls.navigationRequests).toEqual([{ projectId: 'P-1', viewId: 'board', taskId: 'mock-task-1' }])
+    expect(registry.calls.navigationRequests).toEqual([])
+  })
+
+  it('records nothing when the compose dialog is dismissed', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.issues', projectId: 'P-1' })
+    registry.frontendApi.tasks.compose = async () => null
+
+    const result = await startIssueAction(registry.frontendApi, {
+      projectId: 'P-1',
+      repo: 'octo/cat',
+      card,
+    })
+
+    expect(result).toBeNull()
+    await expect(loadIssueTaskLinks(registry.frontendApi, 'P-1')).resolves.toEqual({})
   })
 
   it('keeps both issue links available for IssuesView hydration after concurrent starts', async () => {

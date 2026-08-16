@@ -20,4 +20,12 @@ describe('injectables plugin activation', () => {
       ]),
     )
   })
+
+  it('registers a task-start prefix provider', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.injectables', projectId: 'P-1' })
+    await registry.activateFrontend(plugin)
+    expect(registry.getSnapshot().taskStartPrefixProviders).toEqual([
+      expect.objectContaining({ id: 'injectable', title: 'Start with injectable…', order: 10 }),
+    ])
+  })
 })
