@@ -39,6 +39,7 @@ function renderDrawer(overrides: Record<string, unknown> = {}) {
       onToggleLabel: vi.fn(),
       onCloseIssue: vi.fn(),
       onOpenTask: vi.fn(),
+      onStart: vi.fn(),
       ...overrides,
     },
   })
@@ -81,6 +82,15 @@ describe('CardDrawer', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Open task details KVG-42' }))
 
     expect(onOpenTask).toHaveBeenCalledWith('KVG-42')
+  })
+
+  it('starts a task for the open issue', async () => {
+    const onStart = vi.fn()
+    renderDrawer({ onStart })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Start a task' }))
+
+    expect(onStart).toHaveBeenCalledWith(card)
   })
 
   it('shows the pager position for the opened group', () => {

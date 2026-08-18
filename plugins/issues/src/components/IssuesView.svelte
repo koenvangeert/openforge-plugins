@@ -163,6 +163,9 @@
     onToggleLabel={toggleLabel}
     onCloseIssue={closeIssue}
     onOpenTask={openTask}
+    onStart={(card) => {
+      void issues.runIssueAction(card)
+    }}
   />
 {/if}
 

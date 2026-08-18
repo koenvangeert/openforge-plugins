@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ExternalLink, Copy } from '@lucide/svelte'
+  import { ExternalLink, Copy, Play } from '@lucide/svelte'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
   import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
   import type { BoardCard } from '../lib/board'
@@ -30,6 +30,7 @@
     onToggleLabel: (name: string, currentlyOn: boolean) => void
     onCloseIssue: () => void
     onOpenTask: (taskId: string) => void
+    onStart: (card: BoardCard) => void
   }
 
   let {
@@ -50,6 +51,7 @@
     onToggleLabel,
     onCloseIssue,
     onOpenTask,
+    onStart,
   }: Props = $props()
 
   // Editable copies, re-seeded only when the open issue's identity changes (via the
@@ -171,8 +173,14 @@
       <h3 class="text-base font-semibold m-0 shrink-0">#{card.issueNumber}</h3>
     </div>
     <div class="flex items-center gap-2">
-      <button class="btn btn-sm" type="button" onclick={() => onOpenUrl(issueUrl)}>
-        <ExternalLink size={14} /> Open on GitHub
+      <button
+        class="btn btn-sm btn-square"
+        type="button"
+        title="Open issue on GitHub"
+        aria-label="Open issue on GitHub"
+        onclick={() => onOpenUrl(issueUrl)}
+      >
+        <ExternalLink size={14} />
       </button>
       {#if card.taskLink}
         <!-- Bind the id here: the click handler runs later, and a board refresh that
@@ -187,8 +195,17 @@
           Open task details {taskId}
         </button>
       {/if}
-      <button class="btn btn-sm" type="button" onclick={() => onCopyLink(card.issueNumber)}>
-        <Copy size={14} /> Copy link
+      <button
+        class="btn btn-sm btn-square"
+        type="button"
+        title="Copy issue link"
+        aria-label="Copy issue link"
+        onclick={() => onCopyLink(card.issueNumber)}
+      >
+        <Copy size={14} />
+      </button>
+      <button class="btn btn-sm btn-primary" type="button" disabled={busy} onclick={() => onStart(card)}>
+        <Play size={14} /> Start a task
       </button>
     </div>
   {/snippet}
