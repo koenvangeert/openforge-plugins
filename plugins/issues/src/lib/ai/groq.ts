@@ -12,11 +12,16 @@ import { buildDraftMessage, buildDraftPrompt, buildReviseDraftPrompt, buildRevis
 import type { RepoContext, ReviseInput, TicketDraft } from './prompt'
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
-const GROQ_MODEL = 'llama-3.3-70b-versatile'
+// Groq deprecated llama-3.3-70b-versatile (and llama-3.1-8b-instant) for free/developer-tier
+// keys on 2026-08-16; a request now gets a 404 model_not_found instead of a completion.
+// openai/gpt-oss-120b and openai/gpt-oss-20b are Groq's own recommended replacements, and
+// unlike qwen/qwen3.6-27b (Groq's other suggestion) both are production models rather than
+// preview, so they aren't liable to be pulled again on short notice the same way.
+const GROQ_MODEL = 'openai/gpt-oss-120b'
 // Rate limits are per model, so a capped primary is a routing decision rather than a
 // dead end: this backup carries its own separate daily budget. A refine costs ~2.9k
-// tokens against a 100k/day allowance, so the primary can genuinely run out for the day.
-const GROQ_FALLBACK_MODEL = 'openai/gpt-oss-120b'
+// tokens against a 200k/day allowance, so the primary can genuinely run out for the day.
+const GROQ_FALLBACK_MODEL = 'openai/gpt-oss-20b'
 const MAX_TOKENS = 1800
 const TEMPERATURE = 0.4
 // Two attempts have to fit the budget between them, since the backup model is only
