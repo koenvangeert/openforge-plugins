@@ -63,7 +63,7 @@ async function apiError(response: Response): Promise<Error> {
   return new Error(`GitHub request failed (${response.status})${detail}`)
 }
 
-async function request<T>(url: string, token: string, init?: RequestInit): Promise<T> {
+async function rawRequest(url: string, token: string, init?: RequestInit): Promise<Response> {
   // A JSON body needs saying so: the Rust client this ports used reqwest's `.json()`,
   // which set the header, and fetch would otherwise label a string body text/plain.
   const contentType = init?.body === undefined ? undefined : { 'Content-Type': 'application/json' }
@@ -72,7 +72,39 @@ async function request<T>(url: string, token: string, init?: RequestInit): Promi
     headers: headers(token, { ...contentType, ...(init?.headers as Record<string, string>) }),
   })
   if (!response.ok) throw await apiError(response)
+  return response
+}
+
+async function request<T>(url: string, token: string, init?: RequestInit): Promise<T> {
+  const response = await rawRequest(url, token, init)
   return (await response.json()) as T
+}
+
+/**
+ * The next page URL from a GitHub `Link` response header, or null on the last page.
+ * GitHub's format: `<url>; rel="next", <url>; rel="last"` — entries in any order.
+ */
+export function nextPageUrl(linkHeader: string | null): string | null {
+  if (!linkHeader) return null
+  for (const entry of linkHeader.split(',')) {
+    const match = entry.match(/<([^>]+)>;\s*rel="next"/)
+    if (match) return match[1]
+  }
+  return null
+}
+
+/** Sanity cap on pages fetched, so a runaway repo can't hang the board. */
+const MAX_PAGES = 10
+
+async function requestAllPages<T>(url: string, token: string): Promise<T[]> {
+  const items: T[] = []
+  let next: string | null = url
+  for (let page = 0; next && page < MAX_PAGES; page++) {
+    const response: Response = await rawRequest(next, token)
+    items.push(...((await response.json()) as T[]))
+    next = nextPageUrl(response.headers.get('Link'))
+  }
+  return items
 }
 
 function repoUrl(repo: RepoRef, path: string): string {
@@ -84,9 +116,13 @@ function repoUrl(repo: RepoRef, path: string): string {
  *
  * `GET /issues` returns pull requests as well; entries carrying a `pull_request`
  * field are PRs and are dropped, matching what the board has always shown.
+ *
+ * Follows the `Link: rel="next"` header to fetch every page (capped at `MAX_PAGES`
+ * pages / ~1000 issues) — a single 100-issue page silently dropped the rest of any
+ * larger repo's open issues.
  */
 export async function listOpenIssues(token: string, repo: RepoRef): Promise<Issue[]> {
-  const issues = await request<(Issue & { pull_request?: unknown })[]>(
+  const issues = await requestAllPages<Issue & { pull_request?: unknown }>(
     repoUrl(repo, '/issues?state=open&per_page=100'),
     token,
   )

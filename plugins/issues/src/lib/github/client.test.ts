@@ -5,6 +5,7 @@ import {
   encodePathSegment,
   listLabels,
   listOpenIssues,
+  nextPageUrl,
   resolveLabels,
   updateLabelColor,
 } from './client'
@@ -12,10 +13,10 @@ import {
 const REPO = { owner: 'acme', name: 'repo' }
 const TOKEN = 'ghp_test'
 
-function jsonResponse(status: number, body: unknown): Response {
+function jsonResponse(status: number, body: unknown, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...headers },
   })
 }
 
@@ -71,6 +72,53 @@ describe('listOpenIssues', () => {
     stubFetch(jsonResponse(401, { message: 'Bad credentials' }))
 
     await expect(listOpenIssues(TOKEN, REPO)).rejects.toThrow(/Bad credentials/)
+  })
+
+  it('follows the Link header to fetch every page', async () => {
+    const page2Url = 'https://api.github.com/repos/acme/repo/issues?state=open&per_page=100&page=2'
+    const spy = stubFetch(
+      jsonResponse(200, [{ number: 1, title: 'first page', labels: [] }], {
+        Link: `<${page2Url}>; rel="next", <${page2Url}>; rel="last"`,
+      }),
+      jsonResponse(200, [{ number: 2, title: 'second page', labels: [] }]),
+    )
+
+    const issues = await listOpenIssues(TOKEN, REPO)
+
+    expect(issues.map((issue) => issue.number)).toEqual([1, 2])
+    expect(spy).toHaveBeenCalledTimes(2)
+    expect(spy.mock.calls[1][0]).toBe(page2Url)
+  })
+
+  it('stops after MAX_PAGES so a runaway repo cannot hang the board', async () => {
+    const nextUrl = 'https://api.github.com/repos/acme/repo/issues?state=open&per_page=100&page=2'
+    const alwaysNext = () =>
+      jsonResponse(200, [{ number: 1, title: 'page', labels: [] }], {
+        Link: `<${nextUrl}>; rel="next"`,
+      })
+    const spy = vi.fn(async () => alwaysNext())
+    vi.stubGlobal('fetch', spy)
+
+    const issues = await listOpenIssues(TOKEN, REPO)
+
+    expect(spy).toHaveBeenCalledTimes(10)
+    expect(issues).toHaveLength(10)
+  })
+})
+
+describe('nextPageUrl', () => {
+  it('extracts the rel="next" URL among several Link entries', () => {
+    const header =
+      '<https://api.github.com/x?page=2>; rel="next", <https://api.github.com/x?page=5>; rel="last"'
+    expect(nextPageUrl(header)).toBe('https://api.github.com/x?page=2')
+  })
+
+  it('returns null when there is no next link', () => {
+    expect(nextPageUrl('<https://api.github.com/x?page=1>; rel="last"')).toBeNull()
+  })
+
+  it('returns null for a missing header', () => {
+    expect(nextPageUrl(null)).toBeNull()
   })
 })
 

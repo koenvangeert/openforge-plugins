@@ -8,10 +8,13 @@
   import CardDrawer from './CardDrawer.svelte'
   import CreateDialog from './CreateDialog.svelte'
   import ColumnSettingsModal from './ColumnSettingsModal.svelte'
+  import SearchInput from './SearchInput.svelte'
   import { useIssuesBoard } from './useIssuesBoard.svelte'
   import { useIssuesColumnSettings } from './useIssuesColumnSettings.svelte'
   import { useIssuesCreateDialog } from './useIssuesCreateDialog.svelte'
   import { useIssuesDrawer } from './useIssuesDrawer.svelte'
+  import { useIssuesSearch } from './useIssuesSearch.svelte'
+  import { isSearchFocusKey, isTypingTarget } from '../lib/searchHotkey'
 
   interface Props {
     api: FrontendOpenForgeAPI
@@ -27,10 +30,16 @@
   // `api` is stable for the plugin view lifetime; capture it once in the controller.
   // svelte-ignore state_referenced_locally
   const issues = useIssuesBoard(api)
+  // The drawer and search hooks both read the unfiltered board: the drawer so paging
+  // through a clicked column's queue is unaffected by later query changes, search so
+  // it always has the full set to filter from.
   const drawer = useIssuesDrawer(() => issues.board)
+  const search = useIssuesSearch(() => issues.board)
   // svelte-ignore state_referenced_locally
   const createDialog = useIssuesCreateDialog(api, issues)
   const columnSettings = useIssuesColumnSettings(issues)
+
+  let searchInputEl = $state<HTMLInputElement | null>(null)
 
   // Reset view-local state only when the logical project changes. This intentionally
   // has no effect cleanup: prop identity churn for the same project must not close resources.
@@ -40,8 +49,30 @@
       drawer.close()
       createDialog.close()
       columnSettings.close()
+      search.clear()
     }
   })
+
+  // `/` focuses search from anywhere in the board (unless already typing somewhere,
+  // e.g. inside the drawer's title field, or a drawer/modal is open above the board —
+  // this is the one place that knows about all three at once). Esc clears an active
+  // query or blurs, but only while search itself is focused.
+  function handleKeydown(event: KeyboardEvent): void {
+    const overlayOpen = drawer.open !== null || createDialog.open || columnSettings.open
+    if (isSearchFocusKey(event) && !overlayOpen && !isTypingTarget(event.target)) {
+      event.preventDefault()
+      searchInputEl?.focus()
+      return
+    }
+    if (event.key === 'Escape' && event.target === searchInputEl) {
+      if (search.query) {
+        event.preventDefault()
+        search.clear()
+      } else {
+        searchInputEl?.blur()
+      }
+    }
+  }
 
   function openUrl(url: string): void {
     void api.system.openUrl(url)
@@ -94,6 +125,8 @@
   })
 </script>
 
+<svelte:window onkeydown={handleKeydown} />
+
 <div class="flex flex-col h-full overflow-hidden">
   <PluginPageHeader
     title={projectName || 'Issues'}
@@ -101,6 +134,13 @@
   >
     {#snippet actions()}
       <div class="flex items-center gap-2 shrink-0">
+        <SearchInput
+          bind:value={search.query}
+          bind:inputEl={searchInputEl}
+          matchCount={search.matchCount}
+          totalCount={search.totalCount}
+          active={search.active}
+        />
         <button class="btn btn-sm" onclick={() => createDialog.show()} disabled={!issues.board || issues.busy}>
           <Plus size={14} /> Create
         </button>
@@ -124,21 +164,29 @@
       emptyTitle="Select a project to view its issues."
     >
       {#if issues.board}
-        <Board
-          columns={issues.board.columns}
-          repo={issues.repoSlug}
-          busy={issues.busy}
-          onCardClick={drawer.openFrom}
-          onOpenUrl={openUrl}
-          onCopyLink={copyLink}
-          onRecolor={(name, color) => {
-            void issues.recolorLabel(name, color).catch(() => undefined)
-          }}
-          onStart={(card) => {
-            void issues.runIssueAction(card)
-          }}
-          onAddCard={(label) => createDialog.show(label ? [label] : [])}
-        />
+        {#if search.active && search.matchCount === 0}
+          <div class="flex flex-col items-center justify-center h-full gap-3 text-center px-4">
+            <p class="text-sm text-base-content/60 m-0">No issues match "{search.query}".</p>
+            <button class="btn btn-sm" onclick={search.clear}>Clear</button>
+          </div>
+        {:else if search.board}
+          <Board
+            columns={search.board.columns}
+            repo={issues.repoSlug}
+            busy={issues.busy}
+            terms={search.terms}
+            onCardClick={drawer.openFrom}
+            onOpenUrl={openUrl}
+            onCopyLink={copyLink}
+            onRecolor={(name, color) => {
+              void issues.recolorLabel(name, color).catch(() => undefined)
+            }}
+            onStart={(card) => {
+              void issues.runIssueAction(card)
+            }}
+            onAddCard={(label) => createDialog.show(label ? [label] : [])}
+          />
+        {/if}
       {/if}
     </PluginViewState>
   </div>

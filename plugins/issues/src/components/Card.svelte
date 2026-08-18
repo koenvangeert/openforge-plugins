@@ -1,6 +1,8 @@
 <script lang="ts">
   import { ExternalLink, Copy, MoreVertical } from '@lucide/svelte'
   import type { BoardCard } from '../lib/board'
+  import { cardExcerpt, type SearchTerms } from '../lib/search'
+  import HighlightedText from './HighlightedText.svelte'
 
   interface Props {
     card: BoardCard
@@ -9,11 +11,14 @@
     onOpenUrl: (url: string) => void
     onCopyLink: (issueNumber: number) => void
     onContextMenu: (event: MouseEvent) => void
+    /** Active search terms, for title highlighting and the body-match excerpt. */
+    terms?: SearchTerms
   }
 
-  let { card, repo, onOpen, onOpenUrl, onCopyLink, onContextMenu }: Props = $props()
+  let { card, repo, onOpen, onOpenUrl, onCopyLink, onContextMenu, terms = [] }: Props = $props()
 
   let issueUrl = $derived(`https://github.com/${repo}/issues/${card.issueNumber}`)
+  let excerpt = $derived(cardExcerpt(card, terms))
 
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -34,11 +39,18 @@
 >
   <div class="card-body p-3 gap-2">
     <div class="flex items-start gap-2">
-      <span class="text-sm font-medium text-base-content flex-1 min-w-0 break-words">{card.title}</span>
+      <span class="text-sm font-medium text-base-content flex-1 min-w-0 break-words">
+        <HighlightedText text={card.title} {terms} />
+      </span>
       {#if card.value !== null}
         <span class="badge badge-primary badge-sm shrink-0" title="Value">{card.value}</span>
       {/if}
     </div>
+    {#if excerpt}
+      <p class="text-xs text-base-content/60 break-words m-0">
+        <HighlightedText text={excerpt} {terms} />
+      </p>
+    {/if}
     <div class="flex items-center gap-1">
       <span class="text-xs text-base-content/40">#{card.issueNumber}</span>
       {#if card.taskLink}
