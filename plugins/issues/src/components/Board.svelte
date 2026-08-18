@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Plus } from '@lucide/svelte'
   import type { BoardCard, BoardColumn } from '../lib/board'
+  import type { SearchTerms } from '../lib/search'
   import Card from './Card.svelte'
   import ColorPicker from './ColorPicker.svelte'
   import IssueContextMenu from './IssueContextMenu.svelte'
@@ -15,6 +16,8 @@
     busy?: boolean
     onStart: (card: BoardCard) => void
     onAddCard: (label: string) => void
+    /** Active search terms, forwarded to each Card for highlighting. */
+    terms?: SearchTerms
   }
 
   let {
@@ -27,6 +30,7 @@
     busy = false,
     onStart,
     onAddCard,
+    terms = [],
   }: Props = $props()
 
   let openColorLabel = $state<string | null>(null)
@@ -125,6 +129,7 @@
           <Card
             {card}
             {repo}
+            {terms}
             onOpen={() => {
               closeContextMenu()
               onCardClick(card, column)
