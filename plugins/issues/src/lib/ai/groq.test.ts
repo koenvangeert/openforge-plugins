@@ -113,7 +113,7 @@ describe('refineWithGroq', () => {
     const [url, init] = spy.mock.calls[0] as unknown as [string, RequestInit]
     expect(url).toBe('https://api.groq.com/openai/v1/chat/completions')
     const body = JSON.parse(init.body as string)
-    expect(body.model).toBe('llama-3.3-70b-versatile')
+    expect(body.model).toBe('openai/gpt-oss-120b')
     expect(body.messages[0].content).toContain(FORMAT_GUIDE)
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer gsk_test')
   })
@@ -129,7 +129,7 @@ describe('refineWithGroq', () => {
 
     expect(draft.title).toBe('Add a filter')
     expect(JSON.parse((spy.mock.calls[1] as unknown as [string, RequestInit])[1].body as string).model).toBe(
-      'openai/gpt-oss-120b',
+      'openai/gpt-oss-20b',
     )
   })
 
