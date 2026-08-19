@@ -4,18 +4,13 @@ import { isOpenForgePackageMetadata } from '@openforge-app/plugin-sdk'
 import type { FrontendOpenForgeAPI, FrontendPluginContext } from '@openforge-app/plugin-sdk/frontend'
 import type { BackendOpenForgeAPI, BackendPluginContext } from '@openforge-app/plugin-sdk/backend'
 
-const { mockIssuesView, mockLinkedIssuePane, mockSettingsSection } = vi.hoisted(() => ({
+const { mockIssuesView, mockSettingsSection } = vi.hoisted(() => ({
   mockIssuesView: { name: 'IssuesViewComponent' },
-  mockLinkedIssuePane: { name: 'LinkedIssuePaneComponent' },
   mockSettingsSection: { name: 'IssuesSettingsSectionComponent' },
 }))
 
 vi.mock('./components/IssuesView.svelte', () => ({
   default: mockIssuesView,
-}))
-
-vi.mock('./components/LinkedIssuePane.svelte', () => ({
-  default: mockLinkedIssuePane,
 }))
 
 vi.mock('./components/SettingsSection.svelte', () => ({
@@ -28,7 +23,6 @@ function makeFrontendHarness() {
   const subscriptions = { add: vi.fn() }
   const api = {
     views: { register: vi.fn(() => ({ dispose: vi.fn() })) },
-    taskPane: { registerTab: vi.fn(() => ({ dispose: vi.fn() })) },
     settings: { registerSection: vi.fn(() => ({ dispose: vi.fn() })) },
   } as unknown as FrontendOpenForgeAPI
   const context = {
@@ -48,7 +42,7 @@ describe('issues plugin metadata', () => {
     expect(packageJson.openforge.frontend).toBe('./dist/frontend.js')
     expect(packageJson.openforge.backend).toBe('./dist/backend.js')
     expect(packageJson.openforge.requires).toEqual(
-      expect.arrayContaining(['views', 'taskPane', 'backend', 'tasks', 'projectConfig', 'storage', 'system.openUrl', 'context']),
+      expect.arrayContaining(['views', 'backend', 'tasks', 'projectConfig', 'storage', 'system.openUrl', 'context']),
     )
   })
 
@@ -95,7 +89,7 @@ describe('issues frontend plugin', () => {
   })
 
   it('registers the Issues rail view with a non-colliding Cmd shortcut', async () => {
-    const { default: plugin, IssuesViewComponent, LinkedIssuePaneComponent } = await import('./index')
+    const { default: plugin, IssuesViewComponent } = await import('./index')
     const { api, context, subscriptions } = makeFrontendHarness()
 
     await plugin.activate(api, context)
@@ -116,15 +110,6 @@ describe('issues frontend plugin', () => {
     const reserved = ['Cmd+H', 'Cmd+G', 'Cmd+L', 'Cmd+,']
     const registration = (api.views.register as ReturnType<typeof vi.fn>).mock.calls[0][0]
     expect(reserved).not.toContain(registration.shortcut)
-    expect(api.taskPane.registerTab).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: 'issue',
-        title: 'Linked issue',
-        icon: 'ticket',
-        order: 30,
-        component: LinkedIssuePaneComponent,
-      }),
-    )
     expect(subscriptions.add).toHaveBeenCalledWith(expect.objectContaining({ dispose: expect.any(Function) }))
   })
 
