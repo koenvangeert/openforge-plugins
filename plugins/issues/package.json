@@ -39,7 +39,6 @@
     "backend": "./dist/backend.js",
     "requires": [
       "views",
-      "taskPane",
       "settings",
       "backend",
       "tasks",

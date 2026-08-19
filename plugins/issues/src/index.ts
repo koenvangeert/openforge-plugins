@@ -1,10 +1,8 @@
 import { defineFrontendPlugin } from '@openforge-app/plugin-sdk/frontend'
 import IssuesView from './components/IssuesView.svelte'
-import LinkedIssuePane from './components/LinkedIssuePane.svelte'
 import SettingsSection from './components/SettingsSection.svelte'
 
 export const IssuesViewComponent = IssuesView
-export const LinkedIssuePaneComponent = LinkedIssuePane
 export const IssuesSettingsSectionComponent = SettingsSection
 
 export default defineFrontendPlugin({
@@ -18,15 +16,6 @@ export default defineFrontendPlugin({
         order: 21,
         shortcut: 'Cmd+R',
         component: IssuesView,
-      }),
-    )
-    context.subscriptions.add(
-      openforge.taskPane.registerTab({
-        id: 'issue',
-        title: 'Linked issue',
-        icon: 'ticket',
-        order: 30,
-        component: LinkedIssuePane,
       }),
     )
     context.subscriptions.add(
