@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import type { PluginInjectionPointProps } from '@openforge-app/plugin-sdk/frontend'
+  import Sparkles from '@lucide/svelte/icons/sparkles'
   import InjectablePicker from './InjectablePicker.svelte'
 
   // Only api/projectId/onInsert are used here; context/location/taskId are part of the
@@ -77,13 +78,13 @@
 <button
   bind:this={triggerEl}
   data-testid="injection-trigger"
-  class="btn btn-ghost btn-xs gap-1"
+  class="btn btn-ghost btn-xs btn-square text-base-content/65 hover:text-base-content"
+  aria-label="Insert injectable"
   title="Insert injectable (⌘I)"
   onmousedown={(e) => e.preventDefault()}
   onclick={openPicker}
   type="button">
-  <span aria-hidden="true">✨</span>
-  <span>Insert injectable</span>
+  <Sparkles size={14} aria-hidden="true" />
 </button>
 
 <InjectablePicker
