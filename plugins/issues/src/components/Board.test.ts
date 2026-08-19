@@ -2,10 +2,24 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
 import Board from './Board.svelte'
-import type { BoardColumn } from '../lib/board'
+import type { BoardCard, BoardColumn } from '../lib/board'
 
 const columns: BoardColumn[] = [
   { label: 'bug', isOther: false, title: 'bug', color: null, cards: [] },
+  { label: '', isOther: true, title: 'No label / Other', color: null, cards: [] },
+]
+
+const bugCard: BoardCard = {
+  issueNumber: 1,
+  title: 'Fix the thing',
+  body: null,
+  labels: ['bug'],
+  value: null,
+  taskLink: null,
+}
+
+const columnsWithCard: BoardColumn[] = [
+  { label: 'bug', isOther: false, title: 'bug', color: null, cards: [bugCard] },
   { label: '', isOther: true, title: 'No label / Other', color: null, cards: [] },
 ]
 
@@ -19,7 +33,20 @@ function props(onAddCard = vi.fn()) {
     onRecolor: vi.fn(),
     onStart: vi.fn(),
     onAddCard,
+    onMoveCard: vi.fn(),
   }
+}
+
+// jsdom doesn't implement the drag-and-drop DataTransfer object, so the events fired at
+// the handlers are plain Events with a stubbed-in `dataTransfer`, not real DragEvents.
+function fakeDataTransfer() {
+  return { setData: vi.fn(), getData: vi.fn(), effectAllowed: '', dropEffect: '' }
+}
+
+function dragEvent(type: string, dataTransfer: ReturnType<typeof fakeDataTransfer>): Event {
+  const event = new Event(type, { bubbles: true, cancelable: true })
+  Object.defineProperty(event, 'dataTransfer', { value: dataTransfer, configurable: true })
+  return event
 }
 
 describe('Board column create actions', () => {
@@ -39,5 +66,62 @@ describe('Board column create actions', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Create issue with no label' }))
 
     expect(onAddCard).toHaveBeenCalledWith('')
+  })
+})
+
+describe('Board drag and drop', () => {
+  it('moves a card to another column on drop', async () => {
+    const onMoveCard = vi.fn()
+    const { container } = render(Board, { props: { ...props(), columns: columnsWithCard, onMoveCard } })
+
+    const cardWrapper = screen.getByText('Fix the thing').closest('[draggable]') as HTMLElement
+    const otherList = container.querySelectorAll('.issues-column')[1].children[1] as HTMLElement
+
+    const dt = fakeDataTransfer()
+    await fireEvent(cardWrapper, dragEvent('dragstart', dt))
+    await fireEvent(otherList, dragEvent('dragover', dt))
+    await fireEvent(otherList, dragEvent('drop', dt))
+
+    expect(onMoveCard).toHaveBeenCalledWith(1, 'bug', '')
+  })
+
+  it('is a no-op when a card is dropped back on its own column', async () => {
+    const onMoveCard = vi.fn()
+    const { container } = render(Board, { props: { ...props(), columns: columnsWithCard, onMoveCard } })
+
+    const cardWrapper = screen.getByText('Fix the thing').closest('[draggable]') as HTMLElement
+    const bugList = container.querySelectorAll('.issues-column')[0].children[1] as HTMLElement
+
+    const dt = fakeDataTransfer()
+    await fireEvent(cardWrapper, dragEvent('dragstart', dt))
+    await fireEvent(bugList, dragEvent('dragover', dt))
+    await fireEvent(bugList, dragEvent('drop', dt))
+
+    expect(onMoveCard).not.toHaveBeenCalled()
+  })
+
+  it('dims the dragged card and highlights a valid target column, clearing on drag-leave', async () => {
+    const { container } = render(Board, { props: { ...props(), columns: columnsWithCard } })
+
+    const cardWrapper = screen.getByText('Fix the thing').closest('[draggable]') as HTMLElement
+    const otherList = container.querySelectorAll('.issues-column')[1].children[1] as HTMLElement
+
+    const dt = fakeDataTransfer()
+    await fireEvent(cardWrapper, dragEvent('dragstart', dt))
+    expect(cardWrapper.className).toContain('opacity-40')
+
+    await fireEvent(otherList, dragEvent('dragover', dt))
+    expect(otherList.className).toContain('outline-primary')
+
+    await fireEvent(otherList, dragEvent('dragleave', dt))
+    expect(otherList.className).not.toContain('outline-primary')
+  })
+
+  it('does not let a card be dragged while the board is busy', async () => {
+    const { container } = render(Board, { props: { ...props(), columns: columnsWithCard, busy: true } })
+
+    const cardWrapper = screen.getByText('Fix the thing').closest('[draggable]') as HTMLElement
+
+    expect(cardWrapper.getAttribute('draggable')).toBe('false')
   })
 })

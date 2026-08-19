@@ -16,6 +16,8 @@
     busy?: boolean
     onStart: (card: BoardCard) => void
     onAddCard: (label: string) => void
+    /** Move a dragged card from one column's label to another's. */
+    onMoveCard: (issueNumber: number, fromLabel: string, toLabel: string) => void
     /** Active search terms, forwarded to each Card for highlighting. */
     terms?: SearchTerms
   }
@@ -30,10 +32,17 @@
     busy = false,
     onStart,
     onAddCard,
+    onMoveCard,
     terms = [],
   }: Props = $props()
 
   let openColorLabel = $state<string | null>(null)
+  // The card currently being dragged, and the label of the column it's hovering over
+  // (a valid drop target only — the column it came from never lights up). Column-to-
+  // column moves only: this board has no manual card ordering (see lib/board.ts), so
+  // there's nothing to persist for a drop back inside the same column.
+  let draggedCard = $state<{ issueNumber: number; fromLabel: string } | null>(null)
+  let dragOverLabel = $state<string | null>(null)
   let contextMenu = $state<{ visible: boolean; x: number; y: number; card: BoardCard | null }>({
     visible: false,
     x: 0,
@@ -53,6 +62,12 @@
   function swatchStyle(color: string | null): string {
     if (!color || !HEX6.test(color)) return ''
     return `background-color: #${color};`
+  }
+
+  // Highlight a column's card list only while a card from a *different* column is
+  // being dragged over it — the source column never lights up as its own target.
+  function dropTargetClass(label: string): string {
+    return dragOverLabel === label ? 'outline-2 outline-dashed outline-primary bg-primary/10' : ''
   }
 
   function pickColor(label: string, color: string) {
@@ -80,9 +95,42 @@
     event.stopPropagation()
     onAddCard(label)
   }
+
+  function handleDragStart(event: DragEvent, card: BoardCard, column: BoardColumn) {
+    draggedCard = { issueNumber: card.issueNumber, fromLabel: column.label }
+    event.dataTransfer?.setData('text/plain', String(card.issueNumber))
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
+  }
+
+  function handleDragEnd() {
+    draggedCard = null
+    dragOverLabel = null
+  }
+
+  // Dropping is only offered over a column other than the one the card is being
+  // dragged from — preventDefault is what tells the browser this is a valid target.
+  function handleDragOver(event: DragEvent, column: BoardColumn) {
+    if (!draggedCard || draggedCard.fromLabel === column.label) return
+    event.preventDefault()
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+    dragOverLabel = column.label
+  }
+
+  function handleDragLeave(column: BoardColumn) {
+    if (dragOverLabel === column.label) dragOverLabel = null
+  }
+
+  function handleDrop(event: DragEvent, column: BoardColumn) {
+    event.preventDefault()
+    const dragged = draggedCard
+    draggedCard = null
+    dragOverLabel = null
+    if (!dragged || dragged.fromLabel === column.label) return
+    onMoveCard(dragged.issueNumber, dragged.fromLabel, column.label)
+  }
 </script>
 
-<div class="issues-board p-4 overflow-y-auto h-full">
+<div class="issues-board p-4">
   {#each columns as column (column.label || 'other')}
     <div
       class="issues-column flex-col rounded-box border border-base-300 bg-base-200"
@@ -124,20 +172,39 @@
           <Plus size={14} />
         </button>
       </div>
-      <div class="flex flex-col gap-2 p-2 overflow-y-auto">
+      <!-- Drop target for a dragged card; there's no native ARIA role for this, mirroring
+           the same tradeoff Card.svelte makes for its pointer-only click target. -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
+        class="flex flex-col gap-2 p-2 overflow-y-auto rounded-box transition-colors {dropTargetClass(
+          column.label,
+        )}"
+        ondragover={(e) => handleDragOver(e, column)}
+        ondragleave={() => handleDragLeave(column)}
+        ondrop={(e) => handleDrop(e, column)}
+      >
         {#each column.cards as card (card.issueNumber)}
-          <Card
-            {card}
-            {repo}
-            {terms}
-            onOpen={() => {
-              closeContextMenu()
-              onCardClick(card, column)
-            }}
-            {onOpenUrl}
-            {onCopyLink}
-            onContextMenu={(event) => openContextMenu(event, card)}
-          />
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div
+            draggable={!busy}
+            class="cursor-grab active:cursor-grabbing"
+            class:opacity-40={draggedCard?.issueNumber === card.issueNumber}
+            ondragstart={(e) => handleDragStart(e, card, column)}
+            ondragend={handleDragEnd}
+          >
+            <Card
+              {card}
+              {repo}
+              {terms}
+              onOpen={() => {
+                closeContextMenu()
+                onCardClick(card, column)
+              }}
+              {onOpenUrl}
+              {onCopyLink}
+              onContextMenu={(event) => openContextMenu(event, card)}
+            />
+          </div>
         {/each}
         {#if column.cards.length === 0}
           <p class="text-xs text-base-content/40 text-center py-4 m-0">No issues</p>
@@ -157,6 +224,12 @@
 </div>
 
 <style>
+  /* Masonry-style packing: trays flow into as many ~300px tracks as fit the width and
+     stack vertically, so a short tray doesn't leave a tall gap. Height must stay auto —
+     the scrolling ancestor (IssuesView's content pane) is what scrolls, not this element.
+     A constrained height here would make the browser open extra tracks off to the right
+     to fit everything within that height, turning the board into sideways-scrolling
+     columns instead of a page that only scrolls down. */
   .issues-board {
     columns: 300px;
     column-gap: 0.75rem;

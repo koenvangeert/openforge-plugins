@@ -151,6 +151,30 @@ export function useIssuesBoard(api: FrontendOpenForgeAPI) {
     })
   }
 
+  /**
+   * Move a card from one column to another by dragging: remove `fromLabel`, add
+   * `toLabel` (either may be '' for the "no curated label" / Other column). A
+   * same-column drop is a no-op. Manual ordering within a column isn't part of this
+   * board (cards sort by value/issue number, see lib/board.ts), so this only ever
+   * changes which column a card belongs to.
+   */
+  async function moveCard(issueNumber: number, fromLabel: string, toLabel: string): Promise<void> {
+    const projectId = activeProjectId
+    const activation = projectActivation
+    if (!projectId || !board || fromLabel === toLabel) return
+
+    board = applyRelabel(board, issueNumber, fromLabel, toLabel)
+    await withBusy(async () => {
+      await client.editIssue({
+        projectId,
+        number: issueNumber,
+        addLabels: toLabel ? [toLabel] : [],
+        removeLabels: fromLabel ? [fromLabel] : [],
+      })
+      if (isCurrentActivation(projectId, activation)) await loadBoard()
+    })
+  }
+
   async function closeIssue(issueNumber: number): Promise<boolean> {
     const projectId = activeProjectId
     if (!projectId) return false
@@ -309,6 +333,7 @@ export function useIssuesBoard(api: FrontendOpenForgeAPI) {
     setValue,
     saveText,
     toggleLabel,
+    moveCard,
     closeIssue,
     createIssue,
     refineTicketDraft,

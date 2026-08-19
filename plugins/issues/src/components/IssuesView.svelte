@@ -154,7 +154,7 @@
     {/snippet}
   </PluginPageHeader>
 
-  <div class="flex-1 overflow-hidden">
+  <div class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
     <PluginViewState
       loading={issues.isLoading && !issues.board}
       loadingLabel="Loading board…"
@@ -185,6 +185,9 @@
               void issues.runIssueAction(card)
             }}
             onAddCard={(label) => createDialog.show(label ? [label] : [])}
+            onMoveCard={(issueNumber, fromLabel, toLabel) => {
+              void issues.moveCard(issueNumber, fromLabel, toLabel)
+            }}
           />
         {/if}
       {/if}
