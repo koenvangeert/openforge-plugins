@@ -20,12 +20,10 @@ function makeTask(overrides: Partial<Task>): Task {
     title: null,
     title_source: null,
     title_generated_at: null,
-    summary: null,
     agent: null,
     permission_mode: null,
     worktree_source: null,
     worktree_branch: null,
-    handoff_notes_enabled: true,
     source_ticket_url: null,
     depends_on: [],
     project_id: 'P-1',
@@ -105,8 +103,8 @@ describe('suggestIssueKey', () => {
     expect(await suggestIssueKey(api, TASK_ID)).toBe('PROJ-77')
   })
 
-  it('falls back to the summary when the prompt has no key', async () => {
-    const api = makeApi({ task: makeTask({ initial_prompt: 'no key', summary: 'linked to ABC-3' }) })
+  it('falls back to the title when the prompt has no key', async () => {
+    const api = makeApi({ task: makeTask({ initial_prompt: 'no key', title: 'linked to ABC-3' }) })
     expect(await suggestIssueKey(api, TASK_ID)).toBe('ABC-3')
   })
 
@@ -116,7 +114,7 @@ describe('suggestIssueKey', () => {
   })
 
   it('returns null when no key is present', async () => {
-    const api = makeApi({ task: makeTask({ initial_prompt: 'nothing to see', summary: 'still nothing' }) })
+    const api = makeApi({ task: makeTask({ initial_prompt: 'nothing to see', title: 'still nothing' }) })
     expect(await suggestIssueKey(api, TASK_ID)).toBeNull()
   })
 })

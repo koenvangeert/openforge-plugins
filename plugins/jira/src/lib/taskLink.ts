@@ -48,7 +48,7 @@ export async function clearLink(api: StorageApi, taskId: string): Promise<void> 
 }
 
 /**
- * Scan the task's own text (initial_prompt + summary) for a key-shaped hint.
+ * Scan the task's own text (initial_prompt + title) for a key-shaped hint.
  * Non-authoritative — the caller offers it as a pre-fill the user confirms.
  * Returns null if the task can't be read or no hint is present.
  */
@@ -56,7 +56,7 @@ export async function suggestIssueKey(api: TasksApi, taskId: string): Promise<st
   try {
     const task = await api.tasks.get(taskId)
     if (!task) return null
-    return extractIssueKeyHint(task.initial_prompt, task.summary)
+    return extractIssueKeyHint(task.initial_prompt, task.title)
   } catch {
     return null
   }

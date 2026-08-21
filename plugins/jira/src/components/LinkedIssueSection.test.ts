@@ -20,12 +20,10 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     title: null,
     title_source: null,
     title_generated_at: null,
-    summary: null,
     agent: null,
     permission_mode: null,
     worktree_source: null,
     worktree_branch: null,
-    handoff_notes_enabled: true,
     source_ticket_url: null,
     depends_on: [],
     project_id: 'P-1',
@@ -55,6 +53,7 @@ function makeHarness(options: { task?: Task; results?: IssueResult[] } = {}) {
   const results = [...(options.results ?? [{ ok: true, issue: makeIssue() }])]
   const invoke = vi.fn(async () => results.shift() ?? { ok: true, issue: makeIssue() })
   const openUrl = vi.fn(async () => undefined)
+  const writeClipboardText = vi.fn(async () => undefined)
   const api: FrontendOpenForgeAPI = {
     ...registry.frontendApi,
     backend: {
@@ -67,10 +66,10 @@ function makeHarness(options: { task?: Task; results?: IssueResult[] } = {}) {
       ...registry.frontendApi.tasks,
       get: async () => options.task ?? makeTask(),
     },
-    system: { openUrl },
+    system: { openUrl, writeClipboardText },
   }
 
-  return { api, invoke, openUrl, registry }
+  return { api, invoke, openUrl, writeClipboardText, registry }
 }
 
 function renderSection(api: FrontendOpenForgeAPI, taskId = TASK_ID) {
@@ -80,6 +79,7 @@ function renderSection(api: FrontendOpenForgeAPI, taskId = TASK_ID) {
       context: api.context.getSnapshot(),
       taskId,
       projectId: 'P-1',
+      taskActionPending: false,
     },
   })
 }
