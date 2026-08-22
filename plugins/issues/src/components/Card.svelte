@@ -2,6 +2,7 @@
   import { ExternalLink, Copy, MoreVertical } from '@lucide/svelte'
   import type { BoardCard } from '../lib/board'
   import { cardExcerpt, type SearchTerms } from '../lib/search'
+  import { valueBandColor } from '../lib/valueColor'
   import HighlightedText from './HighlightedText.svelte'
 
   interface Props {
@@ -19,6 +20,13 @@
 
   let issueUrl = $derived(`https://github.com/${repo}/issues/${card.issueNumber}`)
   let excerpt = $derived(cardExcerpt(card, terms))
+
+  // Soft-tint the value badge with its priority-band color, the same
+  // color-mix-over-theme-token approach Board.svelte uses for label swatches.
+  function valueBadgeStyle(value: number): string {
+    const hex = valueBandColor(value)
+    return `background-color: color-mix(in srgb, #${hex} 18%, var(--color-base-100)); border-color: color-mix(in srgb, #${hex} 50%, var(--color-base-300)); color: color-mix(in srgb, #${hex} 70%, var(--color-base-content));`
+  }
 
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -43,7 +51,11 @@
         <HighlightedText text={card.title} {terms} />
       </span>
       {#if card.value !== null}
-        <span class="badge badge-primary badge-sm shrink-0" title="Value">{card.value}</span>
+        <span
+          class="badge badge-sm shrink-0 font-semibold"
+          style={valueBadgeStyle(card.value)}
+          title="Value"
+        >{card.value}</span>
       {/if}
     </div>
     {#if excerpt}
