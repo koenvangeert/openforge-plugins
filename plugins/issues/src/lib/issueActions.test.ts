@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { JsonValue, PluginStorage } from '@openforge-app/plugin-sdk'
 import { createMemoryPluginStorage, createOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
 import type { BoardCard } from './board'
@@ -29,6 +29,32 @@ function withFailingNextIssueTaskLinksGet(storage: PluginStorage): PluginStorage
         async get<T extends JsonValue = JsonValue>(key: string): Promise<T | null> {
           if (key === 'issueTaskLinks' && shouldFail) {
             shouldFail = false
+            throw new Error('transient project storage read failure')
+          }
+          return scope.get<T>(key)
+        },
+        async set<T extends JsonValue = JsonValue>(key: string, value: T): Promise<void> {
+          await scope.set(key, value)
+        },
+        async delete(key: string): Promise<void> {
+          await scope.delete(key)
+        },
+      }
+    },
+    task: (taskId) => storage.task(taskId),
+  }
+}
+
+function withIssueTaskLinksGetFailures(storage: PluginStorage, failureCount: number): PluginStorage {
+  let remainingFailures = failureCount
+  return {
+    global: storage.global,
+    project(projectId) {
+      const scope = storage.project(projectId)
+      return {
+        async get<T extends JsonValue = JsonValue>(key: string): Promise<T | null> {
+          if (key === 'issueTaskLinks' && remainingFailures > 0) {
+            remainingFailures -= 1
             throw new Error('transient project storage read failure')
           }
           return scope.get<T>(key)
@@ -233,6 +259,54 @@ describe('issue actions', () => {
       issueNumber: 42,
       link: { taskId: 'mock-task-2', repo: 'octo/cat', title: 'Add repository docs' },
     })
+  })
+
+  it('rides out a single transient read failure and still returns the stored links, e.g. right after a plugin reload', async () => {
+    const storage = createMemoryPluginStorage()
+    const storedLink = {
+      taskId: 'KVG-42',
+      sessionId: 'session-42',
+      workspacePath: '/tmp/kvg-42',
+      repo: 'octo/cat',
+      title: 'Linked ticket',
+    }
+    await storage.project('P-1').set('issueTaskLinks', { 42: storedLink })
+    const registry = createOpenForgeRegistryFake({
+      pluginId: 'com.openforge.issues',
+      projectId: 'P-1',
+      storage: withIssueTaskLinksGetFailures(storage, 1),
+    })
+
+    await expect(loadIssueTaskLinks(registry.frontendApi, 'P-1')).resolves.toEqual({ 42: storedLink })
+  })
+
+  it('reports a read failure that survives the retry instead of silently looking like every link is gone', async () => {
+    const storage = createMemoryPluginStorage()
+    await storage.project('P-1').set('issueTaskLinks', {
+      42: {
+        taskId: 'KVG-42',
+        sessionId: 'session-42',
+        workspacePath: '/tmp/kvg-42',
+        repo: 'octo/cat',
+        title: 'Linked ticket',
+      },
+    })
+    const registry = createOpenForgeRegistryFake({
+      pluginId: 'com.openforge.issues',
+      projectId: 'P-1',
+      storage: withIssueTaskLinksGetFailures(storage, 2),
+    })
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    // Still resolves -- an unscored board is a normal state the caller already renders --
+    // but the failure is not left indistinguishable from "there was never any data".
+    await expect(loadIssueTaskLinks(registry.frontendApi, 'P-1')).resolves.toEqual({})
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to load issue-task links'),
+      expect.any(Error),
+    )
+
+    consoleError.mockRestore()
   })
 
   it('reverse-lookups the issue linked to a task', () => {
