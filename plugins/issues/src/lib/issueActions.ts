@@ -89,7 +89,22 @@ export async function loadIssueTaskLinks(
   try {
     return await readIssueTaskLinks(api, projectId)
   } catch {
-    return {}
+    // The board reloads this right as the plugin (re)activates -- e.g. right after a
+    // reload or a disable/enable cycle -- so a failure here is more likely a transient
+    // hiccup in the freshly (re)connected storage bridge than a real absence of data.
+    // One retry rides that out. Swallowing it outright used to render exactly like every
+    // task chip had disappeared, with nothing in the console to tell the two apart, so a
+    // failure that survives the retry is still reported -- just not thrown, since callers
+    // (the board) treat "no links yet" as a normal, unscored state.
+    try {
+      return await readIssueTaskLinks(api, projectId)
+    } catch (secondError) {
+      console.error(
+        `[issues] Failed to load issue-task links for project ${projectId} after a retry. Task chips on this board may be missing until the next successful load.`,
+        secondError,
+      )
+      return {}
+    }
   }
 }
 
