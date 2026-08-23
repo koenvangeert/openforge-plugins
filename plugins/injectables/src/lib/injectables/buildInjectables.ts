@@ -1,18 +1,26 @@
 import type { CommandInfo } from '@openforge-app/plugin-sdk'
 import type { Injectable, InjectableOrigin, InjectableTriggerMode, Snippet } from '../injectableDomain'
 
-const CLAUDE_SKILL_DIRS = new Set(['.claude', '.agents'])
-// Every local skill directory the sidecar scans. The rail view browses all of them;
-// the picker stays Claude-scoped because it inserts into a Claude prompt.
-const ALL_SKILL_DIRS = new Set(['.claude', '.agents', '.opencode', '.codex', '.pi'])
-// builtin commands + plugin skills are provided by the tool/plugin and carry no source dir.
+// Directories the picker (`insert` mode) offers for insertion. Historically this was
+// Claude-only ('.claude', '.agents') because the picker only ever inserted into a Claude
+// prompt; now that Codex/Pi/OpenCode/Grok sessions exist too, '.grok' is included so a
+// Grok-authored skill is offered the same way a Claude-authored one is. '.opencode',
+// '.codex', and '.pi' stay out of `insert` deliberately — unlike '.grok', nothing in this
+// plugin has confirmed those tools resolve a plain `/name` the same way Claude and Grok do.
+const INSERT_SKILL_DIRS = new Set(['.claude', '.agents', '.grok'])
+// Every local skill directory the sidecar scans. The rail view browses all of them.
+const ALL_SKILL_DIRS = new Set(['.claude', '.agents', '.opencode', '.codex', '.pi', '.grok'])
+// builtin commands and plugin-provided items are always relevant regardless of source
+// dir: a builtin never has one, and a plugin item may or may not (e.g. a Grok plugin
+// skill does carry one — see GrokProvider::list_commands on the app side).
 const CLAUDE_PROVIDED_ORIGINS = new Set(['builtin', 'plugin'])
 
 /**
  * What the surface is for, which decides how much of the catalog it shows.
  *
  * - `insert` (default): the picker. Only what can be used in this context right now —
- *   Claude-invokable skill dirs, and snippets scoped to the active project.
+ *   skill dirs the active session's tool can actually resolve a plain `/name` from
+ *   (`INSERT_SKILL_DIRS`), and snippets scoped to the active project.
  * - `manage`: the rail view. Everything that exists, so you can see and edit it —
  *   every scanned skill dir, and every snippet regardless of project scope. A snippet
  *   that is not available here still has to be visible, or removing the current project
@@ -26,10 +34,11 @@ function isRelevant(c: CommandInfo, mode: BrowseMode): boolean {
   // Tool/plugin-provided items are always relevant (no source dir to gate on).
   if (c.origin != null && CLAUDE_PROVIDED_ORIGINS.has(c.origin)) return true
   // Everything else — skills AND legacy .md commands — must live in a known source dir.
-  // Under `insert` that drops .pi/.codex/.opencode skills and .opencode/commands, and
-  // yields an empty catalog for non-claude-code providers (which don't emit
-  // origin/sourceDir enrichment). Under `manage` every scanned directory is kept.
-  const allowed = mode === 'manage' ? ALL_SKILL_DIRS : CLAUDE_SKILL_DIRS
+  // Under `insert` that drops .pi/.codex/.opencode skills and .opencode/commands. A
+  // provider whose host-side discovery doesn't emit origin/sourceDir enrichment yields
+  // an empty catalog here regardless of mode (no sourceDir to match against at all).
+  // Under `manage` every scanned directory is kept.
+  const allowed = mode === 'manage' ? ALL_SKILL_DIRS : INSERT_SKILL_DIRS
   return c.sourceDir != null && allowed.has(c.sourceDir)
 }
 
