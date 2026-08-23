@@ -16,11 +16,21 @@ const cmd = (over: Partial<CommandInfo>): CommandInfo => ({
 })
 
 describe('buildInjectables', () => {
-  it('drops non-Claude skills (pi/codex/opencode source dirs)', () => {
+  it('drops non-Claude, non-Grok skills (pi/codex/opencode source dirs)', () => {
     const out = buildInjectables({
       commands: [cmd({ name: 'keep', sourceDir: '.claude' }), cmd({ name: 'drop', sourceDir: '.pi' })],
     })
     expect(out.map((i) => i.name)).toEqual(['keep'])
+  })
+
+  it('keeps .grok skills when inserting, same as .claude and .agents', () => {
+    const out = buildInjectables({
+      commands: [
+        cmd({ name: 'grokskill', sourceDir: '.grok', origin: 'personal' }),
+        cmd({ name: 'codexskill', sourceDir: '.codex' }),
+      ],
+    })
+    expect(out.map((i) => i.name)).toEqual(['grokskill'])
   })
 
   it('keeps every local skill directory under manage mode', () => {
@@ -30,12 +40,14 @@ describe('buildInjectables', () => {
         cmd({ name: 'codexskill', sourceDir: '.codex' }),
         cmd({ name: 'piskill', sourceDir: '.pi' }),
         cmd({ name: 'opencodeskill', sourceDir: '.opencode' }),
+        cmd({ name: 'grokskill', sourceDir: '.grok' }),
       ],
       mode: 'manage',
     })
     expect(out.map((i) => i.name).sort()).toEqual([
       'claudeskill',
       'codexskill',
+      'grokskill',
       'opencodeskill',
       'piskill',
     ])
