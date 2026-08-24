@@ -54,8 +54,8 @@ export const PROJECT_KEY = {
 export const TASK_KEY = {
   /** The explicit Task<->Issue link: { key: string }. */
   link: 'link',
-  /** Cached last successfully loaded issue JSON. */
-  cachedIssue: 'cachedIssue',
+  /** The Task's Issue Snapshot: { issue, refreshedAt }. Key name predates the term. */
+  snapshot: 'cachedIssue',
 } as const
 
 /** Local plugin event fired by the Refresh command; both surfaces re-fetch on it. */

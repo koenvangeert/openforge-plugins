@@ -111,6 +111,22 @@ shows in the list and counts toward the duplicate-intake guard. Active Tasks
 _Avoid_: Jira status, synchronization state, global link count; "active Tasks
 only" (the host's default `tasks.list` excludes done, but this state does not).
 
+**Issue Snapshot**:
+The Jira Plugin's stored copy of one **Jira Issue** for one OpenForge **Task**,
+together with the time it was read. The **Linked Issue Section** paints the
+snapshot immediately and re-reads Jira only once it falls outside a short
+freshness window, so moving between Tasks does not re-read Jira every time. A
+snapshot recorded for a different **Issue Key** never stands in for the linked
+one, and refreshing on demand always re-reads Jira. A re-read that happens while
+a snapshot is already on screen stays silent: it neither shows progress nor
+reports a failure, so a stale snapshot can sit on screen with only its read time
+to give it away.
+_Avoid_: "sync", "mirror", "poll" (nothing is written back, and no timer keeps a
+snapshot current; a re-read happens when a **Task** with a stale snapshot is
+opened, or when the user refreshes); treating a snapshot as authoritative, since
+**Jira Authority** still holds; one snapshot shared across Tasks (each Task
+keeps its own).
+
 **Linked Issue Section**:
 The collapsible Jira Plugin section present in every OpenForge **Task**'s detail
 stack. It shows compact current Jira context and a path back to Jira when linked;

@@ -1,11 +1,13 @@
 <script lang="ts">
+  import { onMount } from 'svelte'
   import type { PluginTaskUISectionProps } from '@openforge-app/plugin-sdk/frontend'
   import { isValidIssueKey } from '../lib/issueKey'
   import type { JiraIssue } from '../lib/jiraTypes'
+  import { REFRESH_EVENT } from '../lib/protocol'
   import {
     clearLink,
     loadIssue,
-    readCachedIssue,
+    readIssueSnapshot,
     readLinkedKey,
     saveLinkedKey,
     suggestIssueKey,
@@ -53,26 +55,37 @@
     return detail ? `${action}: ${detail}` : action
   }
 
-  async function refresh() {
+  /**
+   * Load the linked Issue. A silent load neither shows the busy state nor
+   * reports an error: it is revalidating something the user is already reading,
+   * and disturbing that is the churn this section is meant to avoid.
+   */
+  async function refresh({ force = false }: { force?: boolean } = {}) {
     const key = linkedKey
     if (!key) return
 
+    const silent = !force && issue !== null
     const expectedTaskId = taskId
     const expectedLifecycle = lifecycleGeneration
     const generation = ++refreshGeneration
-    loading = true
-    error = null
+    if (!silent) {
+      loading = true
+      error = null
+    }
     try {
-      const result = await loadIssue(api, expectedTaskId, key)
+      const result = await loadIssue(api, expectedTaskId, key, { force })
       if (!isCurrentTask(expectedTaskId, expectedLifecycle) || generation !== refreshGeneration || linkedKey !== key) return
       if (result.ok) {
         issue = result.issue
         refreshedAt = result.refreshedAt
-      } else {
+        // A read that succeeded outranks a stale alert, even a silent one: the
+        // section must not report a failure it has since disproved.
+        error = null
+      } else if (!silent) {
         error = result.message
       }
     } catch (cause) {
-      if (isCurrentTask(expectedTaskId, expectedLifecycle) && generation === refreshGeneration && linkedKey === key) {
+      if (!silent && isCurrentTask(expectedTaskId, expectedLifecycle) && generation === refreshGeneration && linkedKey === key) {
         error = unexpectedMessage(cause, 'Could not refresh the Jira Issue')
       }
     } finally {
@@ -105,7 +118,7 @@
       suggestion = null
       issue = null
       refreshedAt = null
-      await refresh()
+      await refresh({ force: true })
     } catch (cause) {
       if (isCurrentTask(expectedTaskId, expectedLifecycle)) {
         error = unexpectedMessage(cause, 'Could not link the Jira Issue')
@@ -153,6 +166,13 @@
     }
   }
 
+  onMount(() => {
+    const subscription = api.events.on(REFRESH_EVENT, () => void refresh({ force: true }))
+    return () => {
+      void subscription.dispose()
+    }
+  })
+
   $effect(() => {
     const expectedTaskId = taskId
     const expectedLifecycle = ++lifecycleGeneration
@@ -174,7 +194,7 @@
         if (!isCurrentTask(expectedTaskId, expectedLifecycle)) return
         linkedKey = key
         if (key) {
-          const cached = await readCachedIssue(api, expectedTaskId)
+          const cached = await readIssueSnapshot(api, expectedTaskId, key)
           if (!isCurrentTask(expectedTaskId, expectedLifecycle)) return
           issue = cached?.issue ?? null
           refreshedAt = cached?.refreshedAt ?? null
@@ -251,7 +271,7 @@
                   Open in Jira
                 </button>
               {/if}
-              <button class="btn btn-ghost btn-xs" type="button" onclick={() => void refresh()} disabled={loading}>
+              <button class="btn btn-ghost btn-xs" type="button" onclick={() => void refresh({ force: true })} disabled={loading}>
                 {loading ? 'Refreshing…' : 'Refresh'}
               </button>
               <button class="btn btn-ghost btn-xs" type="button" onclick={() => void unlink()} disabled={unlinking}>
