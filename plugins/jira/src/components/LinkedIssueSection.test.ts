@@ -393,4 +393,34 @@ describe('LinkedIssueSection', () => {
     expect(screen.queryByRole('alert')).toBeNull()
     expect(invoke).toHaveBeenCalledTimes(1)
   })
+  it('keeps an unlinked Task painted through host re-renders of the same Task', async () => {
+    const get = vi.fn(async () => makeTask({ initial_prompt: 'Investigate PROJ-7.' }))
+    const { api: base } = makeHarness()
+    const api: FrontendOpenForgeAPI = { ...base, tasks: { ...base.tasks, get } }
+
+    const view = renderSection(api)
+    const input = await screen.findByLabelText('Issue Key') as HTMLInputElement
+    await waitFor(() => expect(input.value).toBe('PROJ-7'))
+    expect(get).toHaveBeenCalledTimes(1)
+
+    // The host hands over a fresh context object on unrelated store ticks, and
+    // an unlinked Task has nothing cached to repaint from: a reload here is the
+    // visible flash.
+    const content = view.container.querySelector('[aria-busy]') as HTMLElement
+    const repaints: string[] = []
+    const observer = new MutationObserver(() => repaints.push(content.textContent ?? ''))
+    observer.observe(content, { childList: true, subtree: true, characterData: true })
+
+    for (let tick = 0; tick < 3; tick += 1) {
+      await view.rerender({ api: { ...api }, context: api.context.getSnapshot(), taskId: TASK_ID, projectId: 'P-1' })
+      await settled()
+    }
+    observer.disconnect()
+
+    expect(repaints).toEqual([])
+    expect(get).toHaveBeenCalledTimes(1)
+    expect(input.isConnected).toBe(true)
+    expect(input.value).toBe('PROJ-7')
+    expect(screen.queryByText('Loading Issue Link…')).toBeNull()
+  })
 })

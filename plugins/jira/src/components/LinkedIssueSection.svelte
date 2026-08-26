@@ -28,6 +28,7 @@
   let error = $state<string | null>(null)
   let refreshGeneration = 0
   let lifecycleGeneration = 0
+  let loadedTaskId: string | null = null
   let contentId = $derived(`jira-linked-issue-${taskId}`)
 
   function isCurrentTask(expectedTaskId: string, expectedLifecycle: number): boolean {
@@ -166,15 +167,13 @@
     }
   }
 
-  onMount(() => {
-    const subscription = api.events.on(REFRESH_EVENT, () => void refresh({ force: true }))
-    return () => {
-      void subscription.dispose()
-    }
-  })
+  /** Discard in-flight work: a late result must never paint into a dead section. */
+  function invalidate() {
+    ++lifecycleGeneration
+    ++refreshGeneration
+  }
 
-  $effect(() => {
-    const expectedTaskId = taskId
+  async function initialize(expectedTaskId: string) {
     const expectedLifecycle = ++lifecycleGeneration
     ++refreshGeneration
     initialized = false
@@ -188,36 +187,49 @@
     unlinking = false
     error = null
 
-    void (async () => {
-      try {
-        const key = await readLinkedKey(api, expectedTaskId)
+    try {
+      const key = await readLinkedKey(api, expectedTaskId)
+      if (!isCurrentTask(expectedTaskId, expectedLifecycle)) return
+      linkedKey = key
+      if (key) {
+        const cached = await readIssueSnapshot(api, expectedTaskId, key)
         if (!isCurrentTask(expectedTaskId, expectedLifecycle)) return
-        linkedKey = key
-        if (key) {
-          const cached = await readIssueSnapshot(api, expectedTaskId, key)
-          if (!isCurrentTask(expectedTaskId, expectedLifecycle)) return
-          issue = cached?.issue ?? null
-          refreshedAt = cached?.refreshedAt ?? null
-          initialized = true
-          if (expanded) await refresh()
-        } else {
-          initialized = true
-          await offerSuggestion(expectedTaskId, expectedLifecycle)
-        }
-      } catch (cause) {
-        if (isCurrentTask(expectedTaskId, expectedLifecycle)) {
-          initialized = true
-          error = unexpectedMessage(cause, 'Could not load the Issue Link')
-        }
+        issue = cached?.issue ?? null
+        refreshedAt = cached?.refreshedAt ?? null
+        initialized = true
+        if (expanded) await refresh()
+      } else {
+        initialized = true
+        await offerSuggestion(expectedTaskId, expectedLifecycle)
       }
-    })()
-
-    return () => {
-      if (lifecycleGeneration === expectedLifecycle) {
-        ++lifecycleGeneration
-        ++refreshGeneration
+    } catch (cause) {
+      if (isCurrentTask(expectedTaskId, expectedLifecycle)) {
+        initialized = true
+        error = unexpectedMessage(cause, 'Could not load the Issue Link')
       }
     }
+  }
+
+  onMount(() => {
+    const subscription = api.events.on(REFRESH_EVENT, () => void refresh({ force: true }))
+    return () => {
+      invalidate()
+      void subscription.dispose()
+    }
+  })
+
+  /**
+   * Initialize once per Task. The host re-renders this section on store ticks
+   * that have nothing to do with the Task (it hands over a fresh context object
+   * every time), and re-running the reset on each of those repainted the
+   * placeholder and dropped the suggested Key: the constant flashing an unlinked
+   * Task showed. The Task's identity is the only thing that warrants a reload.
+   */
+  $effect(() => {
+    const nextTaskId = taskId
+    if (nextTaskId === loadedTaskId) return
+    loadedTaskId = nextTaskId
+    void initialize(nextTaskId)
   })
 </script>
 
