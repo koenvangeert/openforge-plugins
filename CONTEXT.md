@@ -177,6 +177,50 @@ current **Jira Issue** using its **Issue Key**. It is available to the agent
 workflow but is not supplied by the Jira Plugin or its **Issue Link**.
 _Avoid_: Jira SDK, plugin backend access, assuming every agent has it configured.
 
+## Handoff Notes plugin
+
+Domain language owned by the Handoff Notes Workflow plugin
+(`com.openforge.handoff-notes-workflow`), ported from the upstream
+`koenvg/openforge-plugins` repo. A **Plugin-owned Domain**: OpenForge's **Task**
+stays the unit of work; the terms below name the agent-written brief attached to
+it.
+
+**Handoff Notes**:
+The single Markdown brief the agent maintains for one OpenForge **Task**, held in
+task-scoped plugin storage. Every update replaces the whole brief; there is no
+append and no history. Never part of the core Task record.
+_Avoid_: "the task summary" (a removed Task field, not a Handoff Notes store);
+notes, log, changelog, comment thread.
+
+**Handoff**:
+The cadence unit for updating **Handoff Notes**: the moment the agent returns
+control while implementation work remains unfinished (opening a pull request and
+waiting on CI is one). Commands, edits, test runs, and commits group inside the
+current handoff; the next update waits for the next handoff or for final
+completion.
+_Avoid_: per-command updates, per-commit updates, timed or continuous updates.
+
+**Handoff Notes Template**:
+The Project-owned Markdown skeleton whose headings the **Handoff Notes** are
+expected to fill. Each Project edits its own; a blank save
+restores the default. Reserved workflow tags and templates that push the prompt
+past the host's 16,000-character limit are rejected.
+_Avoid_: a global template, per-Task templates, treating the template as the notes.
+
+**Handoff Notes Contribution**:
+The start-prompt contribution (`handoff-notes-workflow`) the plugin persists per
+Project so an **Agent Session** receives the cadence rules, the active **Handoff
+Notes Template**, and the two command invocations. Missing or empty contributions
+are repaired; valid custom templates are preserved.
+_Avoid_: injecting the notes themselves into the prompt; a user-editable prompt
+block.
+
+**Handoff Notes Views**:
+The read-only Task tab and Task-sidebar section that render the stored **Handoff
+Notes** Markdown. No editor, save control, template action, or manual refresh; an
+agent update emits a plugin event so open views repaint.
+_Avoid_: an editing surface, user-authored notes, a refresh button.
+
 ## Example dialogue
 
 > **Developer:** I found `PROJ-123` in Jira. Can I bring it into OpenForge?

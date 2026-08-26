@@ -1,0 +1,57 @@
+{
+  "name": "@openforge/plugin-handoff-notes-workflow",
+  "version": "0.1.0",
+  "description": "Opinionated Handoff Notes workflow for OpenForge tasks.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "openforge",
+    "openforge-plugin",
+    "handoff-notes"
+  ],
+  "scripts": {
+    "build": "vite build && vite build --config vite.backend.config.ts",
+    "typecheck": "svelte-check --tsconfig ./tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@openforge-app/plugin-sdk": "link:../../../openforge/packages/plugin-sdk"
+  },
+  "peerDependencies": {
+    "svelte": "^5.0.0"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "catalog:",
+    "@types/node": "catalog:",
+    "svelte": "catalog:",
+    "svelte-check": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "package.json"
+  ],
+  "openforge": {
+    "id": "com.openforge.handoff-notes-workflow",
+    "apiVersion": 1,
+    "displayName": "Handoff Notes Workflow",
+    "description": "Stores agent-maintained Handoff Notes locally for each OpenForge task.",
+    "icon": "notebook-pen",
+    "frontend": "./dist/frontend.js",
+    "backend": "./dist/backend.js",
+    "frontendStyles": ["./dist/plugin-handoff-notes-workflow.css"],
+    "requires": [
+      "taskPane",
+      "commands",
+      "tasks",
+      "events",
+      "storage",
+      "projectConfig",
+      "system.openUrl",
+      "settings"
+    ]
+  }
+}

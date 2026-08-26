@@ -1,0 +1,93 @@
+.handoff-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  min-height: 100%;
+  overflow: auto;
+  padding: 1rem;
+}
+
+.handoff-pane.task-info {
+  min-height: 0;
+  overflow: visible;
+  padding: 0.75rem;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.handoff-pane p {
+  margin: 0;
+}
+
+.handoff-pane .state-card {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0;
+}
+
+.handoff-pane .state-card strong {
+  font-weight: 600;
+}
+
+.handoff-pane .state-card span {
+  opacity: 0.68;
+}
+
+.handoff-pane .error {
+  color: color-mix(in srgb, currentColor 80%, #b00020);
+}
+
+.handoff-pane .notes {
+  overflow-wrap: anywhere;
+}
+
+.handoff-pane.task-info .notes .markdown-body {
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.handoff-pane.task-info .notes .markdown-body :where(h1, h2, h3, h4, h5, h6) {
+  margin: 0.75rem 0 0.25rem;
+  font-size: inherit;
+  font-weight: 600;
+  line-height: inherit;
+}
+
+.handoff-pane.task-info .notes .markdown-body :where(p, ul, ol) {
+  margin: 0.25rem 0;
+}
+
+.handoff-pane.task-info .notes .markdown-body :where(ul, ol) {
+  padding-left: 1.125rem;
+}
+
+.handoff-pane.task-info .notes .markdown-body > :first-child {
+  margin-top: 0;
+}
+
+.handoff-pane.task-info .notes .markdown-body > :last-child {
+  margin-bottom: 0;
+}
+
+.handoff-section {
+  flex-shrink: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, currentColor 2%, transparent);
+}
+
+.handoff-section-header {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  padding: 0.5rem 0.75rem;
+}
+
+.handoff-section-header h3 {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+}
