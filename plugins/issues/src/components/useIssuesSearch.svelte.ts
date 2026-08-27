@@ -1,5 +1,5 @@
 import type { BoardModel } from '../lib/board'
-import { parseQuery, filterBoard, countIssues } from '../lib/search'
+import { parseQuery, filterBoard, countIssues, countMatchingIssues } from '../lib/search'
 
 /**
  * Board-local keyword search. `getBoard` is the same style of live-board accessor
@@ -12,7 +12,13 @@ export function useIssuesSearch(getBoard: () => BoardModel | null) {
   const terms = $derived(parseQuery(query))
   const sourceBoard = $derived(getBoard())
   const board = $derived(sourceBoard ? filterBoard(sourceBoard, terms) : null)
-  const matchCount = $derived(board ? countIssues(board) : 0)
+  const matchCount = $derived(
+    sourceBoard
+      ? terms.length === 0
+        ? countIssues(sourceBoard)
+        : countMatchingIssues(sourceBoard, terms)
+      : 0,
+  )
   const totalCount = $derived(sourceBoard ? countIssues(sourceBoard) : 0)
   const active = $derived(terms.length > 0)
 

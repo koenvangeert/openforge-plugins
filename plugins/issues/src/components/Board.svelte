@@ -2,6 +2,7 @@
   import { Plus } from '@lucide/svelte'
   import type { BoardCard, BoardColumn } from '../lib/board'
   import type { SearchTerms } from '../lib/search'
+  import { flattenCards } from '../lib/board'
   import Card from './Card.svelte'
   import ColorPicker from './ColorPicker.svelte'
   import IssueContextMenu from './IssueContextMenu.svelte'
@@ -49,6 +50,9 @@
     y: 0,
     card: null,
   })
+  // Sub-issue trees start collapsed so a parent with many children does not fill
+  // the column. Search expands every node so a match in a nested card is visible.
+  let expandedIssueNumbers = $state(new Set<number>())
 
   const HEX6 = /^[0-9a-fA-F]{6}$/
 
@@ -96,7 +100,24 @@
     onAddCard(label)
   }
 
+  function isExpanded(issueNumber: number): boolean {
+    return terms.length > 0 || expandedIssueNumbers.has(issueNumber)
+  }
+
+  function toggleExpanded(issueNumber: number): void {
+    if (terms.length > 0) return
+    const next = new Set(expandedIssueNumbers)
+    if (next.has(issueNumber)) next.delete(issueNumber)
+    else next.add(issueNumber)
+    expandedIssueNumbers = next
+  }
+
   function handleDragStart(event: DragEvent, card: BoardCard, column: BoardColumn) {
+    const target = event.target
+    if (target instanceof Element && (target.closest('.sub-issue-row') || target.closest('button'))) {
+      event.preventDefault()
+      return
+    }
     draggedCard = { issueNumber: card.issueNumber, fromLabel: column.label }
     event.dataTransfer?.setData('text/plain', String(card.issueNumber))
     if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
@@ -160,7 +181,7 @@
           </span>
         {/if}
         <span class="text-sm font-semibold text-base-content truncate">{column.title}</span>
-        <span class="badge badge-ghost badge-sm ml-auto shrink-0">{column.cards.length}</span>
+        <span class="badge badge-ghost badge-sm ml-auto shrink-0">{flattenCards(column.cards).length}</span>
         <button
           type="button"
           class="btn btn-ghost btn-xs btn-square shrink-0"
@@ -187,7 +208,7 @@
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
             draggable={!busy}
-            class="cursor-grab active:cursor-grabbing"
+            class="issue-group cursor-grab active:cursor-grabbing"
             class:opacity-40={draggedCard?.issueNumber === card.issueNumber}
             ondragstart={(e) => handleDragStart(e, card, column)}
             ondragend={handleDragEnd}
@@ -196,13 +217,21 @@
               {card}
               {repo}
               {terms}
+              expanded={isExpanded(card.issueNumber)}
+              {isExpanded}
+              onToggleExpand={toggleExpanded}
               onOpen={() => {
                 closeContextMenu()
                 onCardClick(card, column)
               }}
+              onOpenChild={(child) => {
+                closeContextMenu()
+                onCardClick(child, column)
+              }}
               {onOpenUrl}
               {onCopyLink}
               onContextMenu={(event) => openContextMenu(event, card)}
+              onChildContextMenu={(event, child) => openContextMenu(event, child)}
             />
           </div>
         {/each}
@@ -241,5 +270,10 @@
     margin-bottom: 0.75rem;
     vertical-align: top;
     width: 100%;
+  }
+
+  .issue-group {
+    display: flex;
+    flex-direction: column;
   }
 </style>

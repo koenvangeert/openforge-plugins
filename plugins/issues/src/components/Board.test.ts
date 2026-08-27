@@ -2,7 +2,7 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
 import Board from './Board.svelte'
-import type { BoardCard, BoardColumn } from '../lib/board'
+import { emptyHierarchy, type BoardCard, type BoardColumn } from '../lib/board'
 
 const columns: BoardColumn[] = [
   { label: 'bug', isOther: false, title: 'bug', color: null, cards: [] },
@@ -16,6 +16,7 @@ const bugCard: BoardCard = {
   labels: ['bug'],
   value: null,
   taskLink: null,
+  ...emptyHierarchy(),
 }
 
 const columnsWithCard: BoardColumn[] = [
@@ -123,5 +124,66 @@ describe('Board drag and drop', () => {
     const cardWrapper = screen.getByText('Fix the thing').closest('[draggable]') as HTMLElement
 
     expect(cardWrapper.getAttribute('draggable')).toBe('false')
+  })
+})
+
+describe('Board sub-issues', () => {
+  const parent: BoardCard = {
+    ...bugCard,
+    issueNumber: 35,
+    title: "Add 'Blocked By' field to tasks",
+    subIssuesSummary: { total: 2, completed: 0, percentCompleted: 0 },
+    subIssues: [
+      {
+        ...emptyHierarchy(),
+        issueNumber: 506,
+        title: 'item a',
+        body: null,
+        labels: ['bug'],
+        value: null,
+        taskLink: null,
+        parentIssueNumber: 35,
+      },
+    ],
+  }
+
+  const nestedColumns: BoardColumn[] = [
+    { label: 'bug', isOther: false, title: 'bug', color: null, cards: [parent] },
+    { label: '', isOther: true, title: 'No label / Other', color: null, cards: [] },
+  ]
+
+  it('keeps nested sub-issues collapsed inside the parent card', () => {
+    render(Board, { props: { ...props(), columns: nestedColumns } })
+
+    expect(screen.getByText("Add 'Blocked By' field to tasks")).toBeTruthy()
+    expect(screen.getByLabelText('0 of 2 sub-issues complete')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Show 1 sub-issue of #35' })).toBeTruthy()
+    expect(screen.queryByRole('list', { name: 'Sub-issues of #35' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Issue #506: item a' })).toBeNull()
+  })
+
+  it('expands nested sub-issues inside the parent card and opens one', async () => {
+    const onCardClick = vi.fn()
+    render(Board, { props: { ...props(), onCardClick, columns: nestedColumns } })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Show 1 sub-issue of #35' }))
+
+    expect(screen.getByRole('button', { name: 'Hide 1 sub-issue of #35' })).toBeTruthy()
+    expect(screen.getByRole('list', { name: 'Sub-issues of #35' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Issue #506: item a' })).toBeTruthy()
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Issue #506: item a' }))
+
+    expect(onCardClick).toHaveBeenCalledWith(
+      expect.objectContaining({ issueNumber: 506, title: 'item a' }),
+      expect.objectContaining({ label: 'bug' }),
+    )
+  })
+
+  it('expands nested sub-issues while a search is active so matches stay visible', () => {
+    render(Board, { props: { ...props(), columns: nestedColumns, terms: ['item'] } })
+
+    expect(screen.getByRole('button', { name: 'Hide 1 sub-issue of #35' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Issue #506: item a' })).toBeTruthy()
   })
 })

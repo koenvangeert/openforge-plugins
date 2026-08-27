@@ -3,6 +3,7 @@ import {
   applyCreate,
   applyRelabel,
   applyRename,
+  emptyHierarchy,
   type BoardCard,
   type BoardModel,
 } from '../lib/board'
@@ -199,6 +200,7 @@ export function useIssuesBoard(api: FrontendOpenForgeAPI) {
         labels: issue.labels.map((label) => label.name),
         value: null,
         taskLink: null,
+        ...emptyHierarchy(),
       }
       pendingCreatedCards = [
         ...pendingCreatedCards.filter((card) => card.issueNumber !== newCard.issueNumber),

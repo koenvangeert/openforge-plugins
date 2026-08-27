@@ -251,6 +251,29 @@
         </div>
       </div>
 
+      {#if card.parentIssueNumber !== null || card.subIssues.length > 0 || card.subIssuesSummary}
+        <div class="flex flex-col gap-2">
+          <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wide">Sub-issues</span>
+          {#if card.parentIssueNumber !== null}
+            <p class="text-sm m-0 text-base-content/70">Parent issue #{card.parentIssueNumber}</p>
+          {/if}
+          {#if card.subIssuesSummary}
+            <p class="text-sm m-0 text-base-content/70">
+              {card.subIssuesSummary.completed} of {card.subIssuesSummary.total} complete
+            </p>
+          {/if}
+          {#if card.subIssues.length > 0}
+            <ul class="m-0 pl-4 flex flex-col gap-1">
+              {#each card.subIssues as child (child.issueNumber)}
+                <li class="text-sm">
+                  #{child.issueNumber} {child.title}
+                </li>
+              {/each}
+            </ul>
+          {/if}
+        </div>
+      {/if}
+
       <div class="flex flex-col gap-2">
         <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wide">Labels</span>
         {#if allLabels.length === 0}

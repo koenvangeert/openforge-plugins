@@ -54,6 +54,37 @@ describe('listOpenIssues', () => {
     expect((init.headers as Record<string, string>)['Content-Type']).toBeUndefined()
   })
 
+  it('keeps GitHub parent and sub-issue fields on listed issues', async () => {
+    stubFetch(
+      jsonResponse(200, [
+        {
+          number: 35,
+          title: 'Parent',
+          labels: [],
+          parent_issue_url: null,
+          sub_issues_summary: { total: 1, completed: 0, percent_completed: 0 },
+        },
+        {
+          number: 506,
+          title: 'item a',
+          labels: [],
+          parent_issue_url: 'https://api.github.com/repos/acme/repo/issues/35',
+        },
+      ]),
+    )
+
+    const issues = await listOpenIssues(TOKEN, REPO)
+
+    expect(issues[0]).toMatchObject({
+      number: 35,
+      sub_issues_summary: { total: 1, completed: 0, percent_completed: 0 },
+    })
+    expect(issues[1]).toMatchObject({
+      number: 506,
+      parent_issue_url: 'https://api.github.com/repos/acme/repo/issues/35',
+    })
+  })
+
   it('drops pull requests, which the issues endpoint also returns', async () => {
     stubFetch(
       jsonResponse(200, [

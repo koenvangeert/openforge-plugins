@@ -2,7 +2,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
 import CardDrawer from './CardDrawer.svelte'
-import type { BoardCard } from '../lib/board'
+import { emptyHierarchy, type BoardCard } from '../lib/board'
 import type { RepoLabel } from '../lib/types'
 
 const card: BoardCard = {
@@ -12,6 +12,7 @@ const card: BoardCard = {
   labels: ['bug'],
   value: 5,
   taskLink: null,
+  ...emptyHierarchy(),
 }
 
 const labels: RepoLabel[] = [
@@ -52,6 +53,32 @@ async function makeDirty() {
 }
 
 describe('CardDrawer', () => {
+  it('lists the parent and nested sub-issues', () => {
+    renderDrawer({
+      card: {
+        ...card,
+        parentIssueNumber: 35,
+        subIssuesSummary: { total: 2, completed: 1, percentCompleted: 50 },
+        subIssues: [
+          {
+            ...emptyHierarchy(),
+            issueNumber: 506,
+            title: 'item a',
+            body: null,
+            labels: [],
+            value: null,
+            taskLink: null,
+            parentIssueNumber: 42,
+          },
+        ],
+      },
+    })
+
+    expect(screen.getByText('Parent issue #35')).toBeTruthy()
+    expect(screen.getByText('1 of 2 complete')).toBeTruthy()
+    expect(screen.getByText('#506 item a')).toBeTruthy()
+  })
+
   it('uses shared modal close behavior for Escape and backdrop clicks', async () => {
     const onClose = vi.fn()
     renderDrawer({ onClose })

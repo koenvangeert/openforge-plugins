@@ -30,6 +30,7 @@ function makeFrontendHarness() {
     apiVersion: 1,
     packageMetadata: packageJson.openforge,
     subscriptions,
+    onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
   } as FrontendPluginContext
   return { api, context, subscriptions }
 }
@@ -141,6 +142,7 @@ describe('issues backend plugin', () => {
       apiVersion: 1,
       packageMetadata: packageJson.openforge,
       subscriptions,
+      onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
     } as BackendPluginContext
 
     await backend.activate(api, context)
@@ -168,6 +170,7 @@ describe('issues backend plugin', () => {
       apiVersion: 1,
       packageMetadata: packageJson.openforge,
       subscriptions: { add: vi.fn() },
+      onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
     } as unknown as BackendPluginContext
 
     await backend.activate(api, context)

@@ -1,4 +1,4 @@
-import type { BoardCard, BoardColumn, BoardModel } from '../lib/board'
+import { flattenCards, type BoardCard, type BoardColumn, type BoardModel } from '../lib/board'
 import { stepIndex } from '../lib/queue'
 
 export interface IssuesDrawerQueue {
@@ -15,7 +15,7 @@ export function useIssuesDrawer(getBoard: () => BoardModel | null) {
     const board = getBoard()
     if (board) {
       for (const column of board.columns) {
-        for (const card of column.cards) {
+        for (const card of flattenCards(column.cards)) {
           present.add(card.issueNumber)
         }
       }
@@ -29,7 +29,7 @@ export function useIssuesDrawer(getBoard: () => BoardModel | null) {
     if (issueNumber === null || !board) return null
 
     for (const column of board.columns) {
-      const card = column.cards.find((candidate) => candidate.issueNumber === issueNumber)
+      const card = flattenCards(column.cards).find((candidate) => candidate.issueNumber === issueNumber)
       if (card) return card
     }
     return null
@@ -40,10 +40,11 @@ export function useIssuesDrawer(getBoard: () => BoardModel | null) {
   }
 
   function openFrom(card: BoardCard, column: BoardColumn): void {
+    const issueNumbers = flattenCards(column.cards).map((candidate) => candidate.issueNumber)
     open = {
       groupTitle: column.title,
-      issueNumbers: column.cards.map((candidate) => candidate.issueNumber),
-      index: column.cards.findIndex((candidate) => candidate.issueNumber === card.issueNumber),
+      issueNumbers,
+      index: issueNumbers.indexOf(card.issueNumber),
     }
   }
 

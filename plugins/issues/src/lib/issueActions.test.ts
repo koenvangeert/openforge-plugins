@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { JsonValue, PluginStorage } from '@openforge-app/plugin-sdk'
 import { createMemoryPluginStorage, createOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
-import type { BoardCard } from './board'
+import { emptyHierarchy, type BoardCard } from './board'
 import {
   buildIssueTaskPrompt,
   findIssueTaskLinkForTask,
@@ -17,6 +17,7 @@ const card: BoardCard = {
   labels: ['enhancement', 'github'],
   value: 8,
   taskLink: null,
+  ...emptyHierarchy(),
 }
 
 function withFailingNextIssueTaskLinksGet(storage: PluginStorage): PluginStorage {

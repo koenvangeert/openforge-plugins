@@ -14,6 +14,13 @@ export interface IssueLabel {
   color: string
 }
 
+/** GitHub's rollup of how many sub-issues are done, including closed ones. */
+export interface SubIssuesSummaryRaw {
+  total: number
+  completed: number
+  percent_completed: number
+}
+
 /** A GitHub issue from the core board response. */
 export interface Issue {
   number: number
@@ -22,6 +29,10 @@ export interface Issue {
   state: string
   html_url: string
   labels: IssueLabel[]
+  /** REST `parent_issue_url`; absent or null when this issue has no parent. */
+  parent_issue_url?: string | null
+  /** REST `sub_issues_summary`; absent when GitHub has no sub-issue rollup. */
+  sub_issues_summary?: SubIssuesSummaryRaw | null
 }
 
 /** A repository label (column source). */
