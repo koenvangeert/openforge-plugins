@@ -33,22 +33,28 @@ different thing from the source checkout.
 
 **SDK**:
 `@openforge-app/plugin-sdk` and its subpaths (`/frontend`, `/backend`, `/testing`,
-`/vite`). The only OpenForge code a plugin may import. Consumed here via a local
-**SDK Link**, not a published package.
+`/vite`). The only OpenForge code a plugin may import. Published to npm, and
+reachable two ways in this repo: by version from the registry, or through an
+**SDK Link** into the **OpenForge Checkout**. A plugin uses one or the other,
+never both.
 _Avoid_: OpenForge app internals, renderer stores, Electron/preload, Rust internals.
 
 **SDK Link**:
 The per-plugin `link:` dependency pointing at the SDK inside the **OpenForge
-Checkout**. A live symlink: a rebuilt SDK is picked up without reinstalling.
-_Avoid_: vendored SDK copy, npm/registry dependency (neither exists today —
-see `docs/adr/0001`).
+Checkout**. A live symlink: a rebuilt SDK is picked up without reinstalling, which
+is what makes it worth keeping while co-developing the SDK and a plugin together.
+Its cost is that the plugin cannot be built without the Checkout present and
+built. Every plugin authored before the SDK was published to npm still uses one.
+_Avoid_: vendored SDK copy; describing a registry dependency as unavailable (the
+SDK is published); mixing a Link and a registry version in one plugin.
 
 **Catalog**:
 The pnpm catalog in `pnpm-workspace.yaml` that pins the shared build toolchain
 (svelte, vite, vitest, typescript, …) so every plugin builds against one identical
 toolchain. The **SDK** is deliberately excluded from it.
-_Avoid_: per-plugin version drift; putting the SDK link in the catalog (pnpm
-rejects `link:` there).
+_Avoid_: per-plugin version drift; putting an **SDK Link** in the catalog (pnpm
+rejects `link:` there, which is the only reason the SDK sits outside it; a
+registry version of the SDK could live in the catalog).
 
 **Frontend Entry / Backend Entry**:
 The two independent built artifacts a plugin may ship (`dist/frontend.js`,
@@ -229,3 +235,111 @@ _Avoid_: an editing surface, user-authored notes, a refresh button.
 > will create a new **Task**, record an **Issue Link** to `PROJ-123`, and can
 > start an **Implementation Run** after you confirm. The agent can use **Agent
 > Jira Access** to retrieve current details from the Issue Key.
+
+## Claude Code Usage plugin
+
+Domain language owned by the Claude Code Usage plugin. A **Plugin-owned Domain**:
+these concepts belong to the plugin. Note that "Claude Code" here names the
+Anthropic CLI that OpenForge drives as an agent provider, not OpenForge's own
+unrelated plugin system.
+
+**Spend**:
+The real US-dollar amount Anthropic bills for token consumption, at API list
+prices. Not notional, not an estimate of what a subscription would have cost:
+this account is billed per token, so a Spend figure is money actually owed.
+Always derived by applying the **Price Table** to recorded token counts, using
+one formula for every session and every model so figures stay comparable across
+all of history.
+_Avoid_: "notional cost", "API-equivalent cost", "credits", "usage" as a synonym
+for Spend (usage is tokens, Spend is dollars).
+
+**Price Table**:
+The plugin-owned mapping from model id to per-token prices, covering input,
+output, and the separately-priced cache-write and cache-read rates. The single
+place a price lives, and the one thing that must be updated when Anthropic
+changes prices or ships a model. A model absent from the Price Table is reported
+as unpriced, never silently priced at zero.
+_Avoid_: hardcoding prices at call sites; treating a missing model as free;
+reusing Claude Code's own internal table (it is not part of any contract the
+plugin may depend on).
+
+**Billed Response**:
+One Anthropic API response, and therefore the unit Anthropic charges for.
+Identified by its message id. A single Billed Response is written to a transcript
+as *several* records, one per content block (thinking, text, each tool call).
+Counting transcript records instead of Billed Responses roughly doubles **Spend**.
+Those records do not all agree: while a response streams, its earlier records
+carry a partial output count that grows monotonically, so only the *last* record
+for a message id holds the response's complete usage. Collapsing to the first
+record instead undercounts output by roughly a quarter.
+_Avoid_: "message" or "record" as a synonym (a Billed Response spans several
+records); deduplicating on a record's own identity rather than the message id;
+assuming the records for one message id are interchangeable.
+
+**Cost State**:
+Claude Code's own cost total, written into a transcript as a `cost-state` record.
+Covers only the single Claude Code *process* that wrote it, from its `startTime`
+onward: resuming a session restarts the total while continuing to append to the
+same transcript, so one transcript can hold a week of work and a Cost State
+describing only its last hour. It is therefore neither a session total nor a
+transcript total, and never a display value. Its one use is as a test oracle,
+and only for **Billed Responses** timestamped at or after its `startTime`.
+Even inside its own window it is not reproducible: it bills responses that have
+no usage record anywhere in the transcript, which is why computed **Spend** sits
+a few percent below it.
+_Avoid_: treating it as the cost of a session, a transcript, or a **Task**;
+summing Cost States across transcripts; presenting it next to computed **Spend**;
+treating a gap against it as an arithmetic error.
+
+**Spend Dashboard**:
+The plugin's single cross-project surface, contributed as a sidebar-placed view
+and reached without picking a **Project** first. It is App-Enabled rather than
+enabled per Project, because the whole point is one figure spanning every
+Project. Its primary axis is the OpenForge **Task**, rolling up to **Project**.
+_Avoid_: an icon-rail entry (the rail is the per-Project surface, and a rail
+entry showing cross-project totals misstates its own scope); a settings section;
+a per-Project spend tab; requiring enablement in each Project.
+
+**Spend Attribution**:
+The assignment of each **Billed Response** to an OpenForge **Task** or
+**Project**, derived from the working directory Claude Code recorded for it. A
+directory inside an OpenForge worktree attributes to that worktree's Task, and
+therefore to the Task's Project; a directory inside a Project checkout
+attributes to that Project with no Task; anything else is reported as
+unattributed rather than hidden or spread across Projects. Matching is by
+directory prefix, since an agent may record a path deeper inside the tree.
+_Avoid_: silently dropping unattributed spend; splitting one Billed Response
+across Tasks; treating the worktree's directory name as a Project id.
+
+**Spend Index**:
+The plugin's persisted rollup of token counts per recorded working directory, UTC
+hour, and model, maintained by a background service so the **Spend Dashboard**
+opens without rereading transcripts. Rows are grouped per transcript, so
+re-reading an appended file replaces that file's rows and disturbs no others.
+Rows key on the raw directory rather than a resolved scope, leaving **Spend
+Attribution** to happen on read: a **Task** created today then picks up the spend
+its worktree already accumulated. Rows hold tokens only, never dollars: **Spend** is
+computed from the **Price Table** on every render, so correcting a price
+re-prices all recorded history at once and a row can never carry a stale dollar
+figure. Rows are bucketed by UTC hour rather than by day so the Dashboard can
+present days in the reader's own timezone without the stored buckets depending
+on which timezone aggregated them.
+Because Claude Code prunes its own transcripts after roughly a month, the Spend
+Index is not merely a cache of them: for any period whose transcripts have been
+pruned it is the only surviving record. It therefore only ever grows by merging
+newly-read files into what it already holds. Rebuilding it from the transcripts
+present today would silently erase every pruned period, so a rebuild merges and
+never replaces.
+_Avoid_: storing computed cost in a row; storing a resolved scope in a row;
+bucketing by local day; describing the index as a cache; a destructive rebuild;
+assuming a period absent from the transcripts was a period without **Spend**.
+
+**Unpriced Model**:
+A model id observed in the transcripts that the **Price Table** has no entry for.
+Its tokens are excluded from **Spend** and it is named on the **Spend Dashboard**
+alongside its token volume, so an out-of-date Price Table shows up as a visible
+gap rather than as a total that is quietly too low. The plugin has no fallback
+rate: guessing a price would make a wrong number indistinguishable from a right
+one.
+_Avoid_: pricing an unknown model at zero, at a sibling model's rate, or at a
+default; omitting it from the Dashboard.

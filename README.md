@@ -5,8 +5,8 @@ packages that extend the OpenForge desktop app at runtime through the
 `@openforge-app/plugin-sdk` contract.
 
 Each plugin lives in its own package under `plugins/`. They share one pinned
-toolchain (via a pnpm catalog) and one SDK (linked from a local OpenForge
-checkout). The authoritative domain contract lives in the OpenForge repo:
+toolchain (via a pnpm catalog) and one SDK. The authoritative domain contract
+lives in the OpenForge repo:
 
 - `../openforge/docs/plugin-authoring.md` — the human-facing authoring guide
 - `../openforge/docs/adr/0002-openforge-plugin-package-runtime.md` — runtime rationale
@@ -26,16 +26,20 @@ workspace/tmp/
 └── openforge-plugins/    <- this repo
 ```
 
-Why a local link and not an npm dependency: `@openforge-app/plugin-sdk` is not
-published to any registry yet. See [`docs/adr/0001`](./docs/adr/0001-link-sdk-from-local-openforge-checkout.md).
+`@openforge-app/plugin-sdk` is published to npm, and this repo's own
+devDependency tracks `^0.2.9` as the reference contract. The four plugins under
+`plugins/` still link the SDK from the sibling checkout, which is why the layout
+above is still required to build them; new plugins depend on the published
+version instead.
 
 Requirements:
 
 - Node `>=20`
 - pnpm `11.5.0` (pinned via `packageManager`)
-- A built OpenForge SDK. The SDK's `exports` point at `dist/`, so the package
-  must be built before any plugin can resolve `@openforge-app/plugin-sdk` or its
-  types.
+- A built OpenForge SDK, for the plugins that link it. The SDK's `exports` point
+  at `dist/`, so a linked package must be built before those plugins can resolve
+  `@openforge-app/plugin-sdk` or its types. Plugins on the published version need
+  nothing extra.
 
 ## Getting started
 
@@ -53,8 +57,8 @@ pnpm install
 ```
 
 Re-run `pnpm run build:sdk` whenever the SDK changes in the OpenForge checkout;
-the per-plugin `link:` is a live symlink, so a rebuild is picked up without
-reinstalling.
+a per-plugin `link:` is a live symlink, so a rebuild is picked up without
+reinstalling. Plugins depending on the published SDK ignore all of this.
 
 ## Repo layout
 
@@ -65,7 +69,7 @@ openforge-plugins/
 ├── tsconfig.base.json     # shared TS config; each plugin extends it
 ├── CONTEXT.md             # glossary (ubiquitous language for this repo)
 ├── docs/adr/              # decisions specific to this repo
-└── plugins/               # one package per plugin (empty until you add one)
+└── plugins/               # one package per plugin
 ```
 
 ## Adding a plugin
@@ -97,7 +101,7 @@ collides with core (`com.openforge.*`). Declare only the capabilities you use in
     "test": "vitest run"
   },
   "dependencies": {
-    "@openforge-app/plugin-sdk": "link:../../../openforge/packages/plugin-sdk"
+    "@openforge-app/plugin-sdk": "^0.2.9"
   },
   "peerDependencies": {
     "svelte": "^5.0.0"
@@ -127,8 +131,10 @@ collides with core (`com.openforge.*`). Declare only the capabilities you use in
 
 Notes:
 
-- `link:../../../openforge/packages/plugin-sdk` is the path from `plugins/<name>/`
-  to the SDK in the sibling checkout.
+- Depend on the published SDK by version. Use
+  `link:../../../openforge/packages/plugin-sdk` instead only while co-developing
+  the SDK and the plugin together, and remember the plugin then cannot build
+  without the sibling checkout.
 - Drop `frontend` or `backend` (and the matching vite build) if the plugin only
   needs one runtime. A frontend-only plugin still gets host capabilities like
   `tasks`, `storage`, and `notifications`.
@@ -267,8 +273,10 @@ path sources):
 /absolute/path/to/openforge-plugins/plugins/<name>
 ```
 
-Install is app-wide; **enablement is per project** — accept the "Enable for this
-project?" prompt. Use OpenForge's plugin reload action after rebuilding.
+Install is app-wide. Enablement is per project by default: accept the "Enable for
+this project?" prompt. A plugin declaring `openforge.enablement: "app"` is instead
+enabled once for the whole app (`openforge plugin app enable --plugin-id <id>`).
+Use OpenForge's plugin reload action after rebuilding.
 
 ## What plugins may and may not do
 

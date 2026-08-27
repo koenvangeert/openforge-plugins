@@ -45,6 +45,7 @@ async function activateBackendWithProject(projectPath: string): Promise<Map<stri
       description: 'Browse and insert Claude skills, slash-commands, and personal snippets',
     },
     subscriptions: { add: vi.fn() },
+    onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
   })
 
   return methods

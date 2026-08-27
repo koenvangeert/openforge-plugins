@@ -10,8 +10,9 @@ packages:
 # NOTE: @openforge-app/plugin-sdk is intentionally NOT in this catalog. It is linked
 # per-plugin from the sibling OpenForge checkout with
 #   "@openforge-app/plugin-sdk": "link:../../../openforge/packages/plugin-sdk"
-# because pnpm does not yet support the link: protocol inside a catalog
-# (ERR_PNPM_CATALOG_ENTRY_INVALID_SPEC). See docs/adr/0001.
+# because pnpm does not support the link: protocol inside a catalog
+# (ERR_PNPM_CATALOG_ENTRY_INVALID_SPEC). A registry version of the SDK could live
+# here; a link: cannot.
 catalog:
   # EXACT pin (no caret): plugin frontend bundles externalize `svelte/internal/*`
   # and resolve it at runtime to the host's shared Svelte instance
@@ -27,3 +28,6 @@ catalog:
   vitest: ^4.1.8
   typescript: ^6.0.3
   '@types/node': ^25.9.3
+
+minimumReleaseAgeExclude:
+  - '@openforge-app/plugin-sdk'

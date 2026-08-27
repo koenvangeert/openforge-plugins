@@ -26,14 +26,23 @@ failure explicitly instead of asking the user to test. If the plugin is not
 installed or enabled, install it from its local plugin source and enable it for
 the Project first.
 
+`plugin reload` reloads built artifacts only. The host stores
+`package.json#openforge` at install time, so any manifest change (a new
+capability in `requires`, a new `frontendStyles` entry, a changed `enablement`)
+needs `openforge plugin install --path <plugin dir>` before the reload, or the
+host keeps serving the metadata it captured earlier. A declared stylesheet that
+never got installed shows up as a plugin whose layout classes silently do
+nothing.
+
 Plugin ids come from each plugin's `package.json#openforge.id`:
 
-| Plugin                           | Plugin id                             |
-| -------------------------------- | ------------------------------------- |
+| Plugin                           | Plugin id                              |
+| -------------------------------- | -------------------------------------- |
+| `plugins/claude-usage`           | `dev.kvg.claude-usage`                 |
 | `plugins/handoff-notes-workflow` | `com.openforge.handoff-notes-workflow` |
-| `plugins/injectables`            | `com.openforge.injectables`           |
-| `plugins/issues`                 | `com.openforge.issues`                |
-| `plugins/jira`                   | `dev.kvg.jira`                        |
+| `plugins/injectables`            | `com.openforge.injectables`            |
+| `plugins/issues`                 | `com.openforge.issues`                 |
+| `plugins/jira`                   | `dev.kvg.jira`                         |
 
 Use the installed `openforge` launcher for plugin management; do not call app
 internals or the launcher's underlying scripts directly.
