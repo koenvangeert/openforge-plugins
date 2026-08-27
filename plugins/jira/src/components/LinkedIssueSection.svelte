@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
+  import Link from '@lucide/svelte/icons/link'
   import type { PluginTaskUISectionProps } from '@openforge-app/plugin-sdk/frontend'
   import { isValidIssueKey } from '../lib/issueKey'
   import type { JiraIssue } from '../lib/jiraTypes'
@@ -233,30 +234,45 @@
   })
 </script>
 
+<!--
+  The header geometry, the caret column and the content inset below are the
+  host's own collapsible-info-section contract, copied class for class. A plugin
+  section sits between host sections, so anything less than an exact copy shows
+  up as a misaligned chevron, icon and body against Details and Dependencies.
+-->
 <section
   data-task-info-card="linked-issue"
   data-card-sizing="natural"
-  class="shrink-0 overflow-hidden rounded-lg border border-base-300/70 bg-base-100"
+  class="shrink-0 overflow-hidden rounded-lg border border-base-300/70 bg-base-100 [--section-inset:0.75rem] [--section-caret-column:1.25rem]"
   aria-label="Linked Issue"
 >
-  <h3 class="m-0">
-    <button
-      type="button"
-      class="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm font-semibold text-base-content hover:bg-base-200/40 focus-visible:ring-2 focus-visible:ring-primary"
-      aria-expanded={expanded}
-      aria-controls={contentId}
-      onclick={toggleExpanded}
-    >
-      <span
-        class="shrink-0 text-[0.7rem] leading-none text-base-content/40 transition-transform duration-150 {expanded ? '' : '-rotate-90'}"
-        aria-hidden="true"
-      >▾</span>
-      <span class="truncate">Linked Issue</span>
-    </button>
-  </h3>
+  <div class="flex items-stretch {expanded ? 'border-b border-base-300/70' : ''}">
+    <h3 class="m-0 min-w-0 flex-1">
+      <button
+        type="button"
+        class="flex w-full items-center gap-2 rounded px-[var(--section-inset)] py-2 text-left text-sm font-semibold text-base-content hover:bg-base-200/40 focus-visible:ring-2 focus-visible:ring-primary"
+        aria-expanded={expanded}
+        aria-controls={contentId}
+        onclick={toggleExpanded}
+      >
+        <span
+          class="w-3 shrink-0 text-center text-[0.7rem] leading-none text-base-content/40 transition-transform duration-150 {expanded ? '' : '-rotate-90'}"
+          aria-hidden="true"
+        >▾</span>
+        <span class="flex shrink-0 items-center text-base-content/50" aria-hidden="true">
+          <Link size={14} />
+        </span>
+        <span class="truncate">Linked Issue</span>
+      </button>
+    </h3>
+  </div>
 
   {#if expanded}
-    <div id={contentId} class="border-t border-base-300/70 px-3 py-2" aria-busy={loading}>
+    <div
+      id={contentId}
+      class="py-2 pl-[calc(var(--section-inset)_+_var(--section-caret-column))] pr-[var(--section-inset)]"
+      aria-busy={loading}
+    >
       {#if !initialized}
         <p class="m-0 text-sm text-base-content/60">Loading Issue Link…</p>
       {:else if linkedKey}

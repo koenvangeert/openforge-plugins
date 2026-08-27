@@ -10,7 +10,9 @@
 .handoff-pane.task-info {
   min-height: 0;
   overflow: visible;
-  padding: 0.75rem;
+  /* Horizontal inset belongs to the section's content wrapper, which aligns
+     the body with the header icon the way the host's sections do. */
+  padding: 0.5rem 0;
   font-family: inherit;
   font-size: 0.8125rem;
   line-height: 1.4;
@@ -70,7 +72,16 @@
   margin-bottom: 0;
 }
 
+/*
+ * Header geometry below reproduces the host's collapsible info sections: a
+ * 0.75rem inset, a 1.25rem caret column (0.75rem caret + 0.5rem gap) and a
+ * 14px icon. A plugin section sits between host sections, so anything that
+ * differs reads as a misaligned chevron, icon and body next to Details and
+ * Dependencies.
+ */
 .handoff-section {
+  --section-inset: 0.75rem;
+  --section-caret-column: 1.25rem;
   flex-shrink: 0;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
@@ -80,14 +91,75 @@
 
 .handoff-section-header {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   border-bottom: 1px solid color-mix(in srgb, currentColor 18%, transparent);
-  padding: 0.5rem 0.75rem;
 }
 
-.handoff-section-header h3 {
+.handoff-section-header.collapsed {
+  border-bottom: 0;
+}
+
+.handoff-section-heading {
+  min-width: 0;
+  flex: 1;
   margin: 0;
+}
+
+.handoff-section-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem var(--section-inset);
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
   font-size: 0.875rem;
   font-weight: 600;
   line-height: 1.25rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.handoff-section-toggle:hover {
+  background: color-mix(in srgb, currentColor 6%, transparent);
+}
+
+.handoff-section-toggle:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
+}
+
+.handoff-section-chevron {
+  width: 0.75rem;
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  line-height: 1;
+  text-align: center;
+  opacity: 0.4;
+  transition: transform 150ms;
+}
+
+.handoff-section-chevron.collapsed {
+  transform: rotate(-90deg);
+}
+
+.handoff-section-icon {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  opacity: 0.6;
+}
+
+.handoff-section-title {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.handoff-section-content {
+  padding-right: var(--section-inset);
+  padding-left: calc(var(--section-inset) + var(--section-caret-column));
 }

@@ -100,6 +100,15 @@ function renderSection(api: FrontendOpenForgeAPI, taskId = TASK_ID) {
 }
 
 describe('LinkedIssueSection', () => {
+  it('heads the section with a decorative icon that leaves the toggle name intact', async () => {
+    const { api } = makeHarness()
+
+    renderSection(api)
+
+    const toggle = await screen.findByRole('button', { name: 'Linked Issue' })
+    expect(toggle.querySelector('[aria-hidden="true"] svg')).toBeTruthy()
+  })
+
   it('shows the compact unlinked state for a Task without an Issue Link', async () => {
     const { api, invoke } = makeHarness()
 

@@ -15,6 +15,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@lucide/svelte": "^1.25.0",
     "@openforge-app/plugin-sdk": "link:../../../openforge/packages/plugin-sdk"
   },
   "peerDependencies": {
@@ -22,7 +23,9 @@
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "catalog:",
+    "@testing-library/svelte": "catalog:",
     "@types/node": "catalog:",
+    "jsdom": "^26.0.0",
     "svelte": "catalog:",
     "svelte-check": "catalog:",
     "typescript": "catalog:",

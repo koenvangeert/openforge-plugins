@@ -8,6 +8,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@lucide/svelte": "^1.25.0",
     "@openforge-app/plugin-sdk": "link:../../../openforge/packages/plugin-sdk"
   },
   "peerDependencies": {
