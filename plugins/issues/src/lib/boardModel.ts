@@ -1,11 +1,25 @@
 import {
   applyCreate,
   buildBoard,
+  mapCardTree,
   type BoardCard,
   type BoardModel,
   type IssueTaskLink,
+  type SubIssuesSummary,
 } from './board'
-import type { IssuesBoard } from './types'
+import { parentIssueNumberFromUrl } from './github/parentIssue'
+import type { IssuesBoard, SubIssuesSummaryRaw } from './types'
+
+export function mapSubIssuesSummary(
+  raw: SubIssuesSummaryRaw | null | undefined,
+): SubIssuesSummary | null {
+  if (!raw || typeof raw.total !== 'number' || raw.total < 1) return null
+  return {
+    total: raw.total,
+    completed: typeof raw.completed === 'number' ? raw.completed : 0,
+    percentCompleted: typeof raw.percent_completed === 'number' ? raw.percent_completed : 0,
+  }
+}
 
 export interface PendingCardReconciliation {
   board: BoardModel
@@ -33,6 +47,8 @@ export function modelFromIssuesBoard(
       title: issue.title,
       body: issue.body,
       labels: issue.labels.map((label) => label.name),
+      parentIssueNumber: parentIssueNumberFromUrl(issue.parent_issue_url, raw.repo),
+      subIssuesSummary: mapSubIssuesSummary(issue.sub_issues_summary),
     })),
     columnLabels: raw.columnLabels,
     labelColors,
@@ -69,7 +85,7 @@ export function patchBoardCardValue(
     ...board,
     columns: board.columns.map((column) => ({
       ...column,
-      cards: column.cards.map((card) =>
+      cards: mapCardTree(column.cards, (card) =>
         card.issueNumber === issueNumber ? { ...card, value } : card,
       ),
     })),

@@ -170,6 +170,7 @@ describe('issues backend plugin', () => {
       apiVersion: 1,
       packageMetadata: packageJson.openforge,
       subscriptions: { add: vi.fn() },
+      onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
     } as unknown as BackendPluginContext
 
     await backend.activate(api, context)

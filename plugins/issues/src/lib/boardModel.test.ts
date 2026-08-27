@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { BoardCard, IssueTaskLink } from './board'
+import { emptyHierarchy, type BoardCard, type IssueTaskLink } from './board'
 import {
+  mapSubIssuesSummary,
   modelFromIssuesBoard,
   patchBoardCardValue,
   patchBoardLabelColor,
@@ -40,9 +41,20 @@ const pendingCard: BoardCard = {
   labels: [],
   value: null,
   taskLink: null,
+  ...emptyHierarchy(),
 }
 
 describe('board model', () => {
+  it('maps a GitHub sub-issues summary and ignores an empty rollup', () => {
+    expect(mapSubIssuesSummary({ total: 4, completed: 1, percent_completed: 25 })).toEqual({
+      total: 4,
+      completed: 1,
+      percentCompleted: 25,
+    })
+    expect(mapSubIssuesSummary({ total: 0, completed: 0, percent_completed: 0 })).toBeNull()
+    expect(mapSubIssuesSummary(null)).toBeNull()
+  })
+
   it('hydrates backend wire data and task links into the board model', () => {
     const model = modelFromIssuesBoard(rawBoard, { 7: taskLink })
 
@@ -95,5 +107,27 @@ describe('board model', () => {
     expect(recolored.columns[0]?.color).toBe('abcdef')
     expect(model.columns[0]?.cards[0]?.value).toBe(8)
     expect(model.columns[0]?.color).toBe('ff0000')
+  })
+
+  it('nests GitHub sub-issues under the parent on the same board', () => {
+    const grouped = modelFromIssuesBoard({
+      ...rawBoard,
+      issues: [
+        rawBoard.issues[0]!,
+        {
+          number: 8,
+          title: 'Child',
+          body: null,
+          state: 'open',
+          html_url: 'https://github.com/octo/cat/issues/8',
+          labels: [{ name: 'alpha', color: 'ff0000' }],
+          parent_issue_url: 'https://api.github.com/repos/octo/cat/issues/7',
+          sub_issues_summary: null,
+        },
+      ],
+    })
+
+    expect(grouped.columns[0]?.cards.map((card) => card.issueNumber)).toEqual([7])
+    expect(grouped.columns[0]?.cards[0]?.subIssues.map((card) => card.issueNumber)).toEqual([8])
   })
 })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { BoardModel } from '../lib/board'
+import { emptyHierarchy, type BoardModel } from '../lib/board'
 import { useIssuesSearch } from './useIssuesSearch.svelte'
 
 function makeBoard(): BoardModel {
@@ -12,8 +12,8 @@ function makeBoard(): BoardModel {
         title: 'bug',
         color: null,
         cards: [
-          { issueNumber: 1, title: 'Refresh token expiry', body: 'auth handshake', labels: ['bug'], value: null, taskLink: null },
-          { issueNumber: 2, title: 'Unrelated crash', body: null, labels: ['bug'], value: null, taskLink: null },
+          { issueNumber: 1, title: 'Refresh token expiry', body: 'auth handshake', labels: ['bug'], value: null, taskLink: null, ...emptyHierarchy() },
+          { issueNumber: 2, title: 'Unrelated crash', body: null, labels: ['bug'], value: null, taskLink: null, ...emptyHierarchy() },
         ],
       },
       {
@@ -22,7 +22,7 @@ function makeBoard(): BoardModel {
         title: 'No label / Other',
         color: null,
         cards: [
-          { issueNumber: 3, title: 'auth docs are stale', body: null, labels: [], value: null, taskLink: null },
+          { issueNumber: 3, title: 'auth docs are stale', body: null, labels: [], value: null, taskLink: null, ...emptyHierarchy() },
         ],
       },
     ],

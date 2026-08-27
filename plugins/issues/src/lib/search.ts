@@ -2,7 +2,7 @@
 // filtering happens entirely against data the board already fetched, so it recomputes
 // synchronously on every keystroke. See lib/board.ts for the model this operates on.
 
-import type { BoardCard, BoardColumn, BoardModel } from './board'
+import { flattenCards, type BoardCard, type BoardColumn, type BoardModel } from './board'
 
 /** Bare-word tokens: lowercased, deduped, whitespace-split. Empty for a blank query. */
 export type SearchTerms = string[]
@@ -35,6 +35,21 @@ export function matchesCard(card: BoardCard, terms: SearchTerms): boolean {
 }
 
 /**
+ * Keep a parent group when the parent or any descendant matches. A matching parent
+ * keeps its full subtree so the group stays intact; a non-matching parent stays as
+ * context around the descendants that did match.
+ */
+function filterCardTree(card: BoardCard, terms: SearchTerms): BoardCard | null {
+  if (matchesCard(card, terms)) return card
+
+  const children = card.subIssues
+    .map((child) => filterCardTree(child, terms))
+    .filter((child): child is BoardCard => child !== null)
+  if (children.length === 0) return null
+  return { ...card, subIssues: children }
+}
+
+/**
  * Filter a board to only cards matching every term, dropping any column left with
  * no cards. An empty `terms` list returns the board unchanged. Pure — the input
  * board and its cards are never mutated.
@@ -44,21 +59,38 @@ export function filterBoard(board: BoardModel, terms: SearchTerms): BoardModel {
 
   const columns: BoardColumn[] = []
   for (const column of board.columns) {
-    const cards = column.cards.filter((card) => matchesCard(card, terms))
+    const cards = column.cards
+      .map((card) => filterCardTree(card, terms))
+      .filter((card): card is BoardCard => card !== null)
     if (cards.length > 0) columns.push({ ...column, cards })
   }
   return { ...board, columns }
 }
 
 /**
- * Distinct issue count across a board. A multi-label card appears in every curated
- * column whose label it carries (see placeCards in lib/board.ts), so summing column
- * lengths would over-count it.
+ * Distinct issue count across a board, including nested sub-issues. A multi-label
+ * card appears in every curated column whose label it carries (see placeCards in
+ * lib/board.ts), so summing column lengths would over-count it.
  */
 export function countIssues(board: BoardModel): number {
   const seen = new Set<number>()
   for (const column of board.columns) {
-    for (const card of column.cards) seen.add(card.issueNumber)
+    for (const card of flattenCards(column.cards)) seen.add(card.issueNumber)
+  }
+  return seen.size
+}
+
+/**
+ * Distinct issues whose title, body, or number hits every term, walking nested
+ * sub-issues. Context-only parents kept by `filterBoard` are not counted.
+ */
+export function countMatchingIssues(board: BoardModel, terms: SearchTerms): number {
+  if (terms.length === 0) return countIssues(board)
+  const seen = new Set<number>()
+  for (const column of board.columns) {
+    for (const card of flattenCards(column.cards)) {
+      if (matchesCard(card, terms)) seen.add(card.issueNumber)
+    }
   }
   return seen.size
 }

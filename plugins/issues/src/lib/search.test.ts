@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { buildBoard, type BoardCard } from './board'
+import { buildBoard, emptyHierarchy, type BoardCard } from './board'
 import {
   parseQuery,
   matchesCard,
   filterBoard,
   countIssues,
+  countMatchingIssues,
   cardExcerpt,
   highlightSegments,
 } from './search'
@@ -16,6 +17,7 @@ const card = (overrides: Partial<BoardCard> = {}): BoardCard => ({
   labels: [],
   value: null,
   taskLink: null,
+  ...emptyHierarchy(),
   ...overrides,
 })
 
@@ -144,6 +146,49 @@ describe('countIssues', () => {
 
   it('returns 0 for an empty board', () => {
     expect(countIssues(buildBoard({ repo: 'a/b', issues: [], columnLabels: [], values: {} }))).toBe(0)
+  })
+
+  it('counts nested sub-issues as distinct issues', () => {
+    const board = buildBoard({
+      repo: 'a/b',
+      issues: [
+        { number: 1, title: 'parent', body: null, labels: ['bug'] },
+        { number: 2, title: 'child', body: null, labels: ['bug'], parentIssueNumber: 1 },
+      ],
+      columnLabels: ['bug'],
+      values: {},
+    })
+    expect(countIssues(board)).toBe(2)
+  })
+})
+
+describe('filterBoard nested sub-issues', () => {
+  const board = () =>
+    buildBoard({
+      repo: 'a/b',
+      issues: [
+        { number: 35, title: 'Blocked By field', body: null, labels: ['bug'] },
+        { number: 506, title: 'item a', body: 'child work', labels: ['bug'], parentIssueNumber: 35 },
+        { number: 11, title: 'Unrelated crash', body: null, labels: ['bug'] },
+      ],
+      columnLabels: ['bug'],
+      values: {},
+    })
+
+  it('keeps the parent group when only a nested sub-issue matches', () => {
+    const out = filterBoard(board(), ['item'])
+    const cards = out.columns[0]!.cards
+    expect(cards.map((c) => c.issueNumber)).toEqual([35])
+    expect(cards[0]!.subIssues.map((c) => c.issueNumber)).toEqual([506])
+  })
+
+  it('does not count a context-only parent as a match', () => {
+    expect(countMatchingIssues(board(), ['item'])).toBe(1)
+  })
+
+  it('keeps the full subtree when the parent matches', () => {
+    const out = filterBoard(board(), ['blocked'])
+    expect(out.columns[0]!.cards[0]!.subIssues.map((c) => c.issueNumber)).toEqual([506])
   })
 })
 

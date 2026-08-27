@@ -6,7 +6,10 @@ import {
   applyCreate,
   applyRename,
   applyRelabel,
+  flattenCards,
+  groupSubIssues,
   OTHER_TITLE,
+  emptyHierarchy,
   type BoardCard,
 } from './board'
 
@@ -17,6 +20,7 @@ const card = (n: number, labels: string[], value: number | null = null): BoardCa
   labels,
   value,
   taskLink: null,
+  ...emptyHierarchy(),
 })
 
 describe('placeCards', () => {
@@ -204,6 +208,150 @@ describe('applyRename', () => {
   })
 })
 
+describe('groupSubIssues', () => {
+  it('nests a child under its parent and keeps the parent as the only root', () => {
+    const parent = { ...card(35, ['bug']), title: 'Parent' }
+    const child = { ...card(506, ['bug']), parentIssueNumber: 35, title: 'item a' }
+
+    const roots = groupSubIssues([parent, child])
+
+    expect(roots.map((c) => c.issueNumber)).toEqual([35])
+    expect(roots[0]!.subIssues.map((c) => c.issueNumber)).toEqual([506])
+  })
+
+  it('keeps a child as a root when its parent is not on the board', () => {
+    const child = { ...card(506, ['bug']), parentIssueNumber: 35 }
+    expect(groupSubIssues([child]).map((c) => c.issueNumber)).toEqual([506])
+  })
+
+  it('nests grandchildren under their parent', () => {
+    const root = { ...card(1, []), title: 'root' }
+    const mid = { ...card(2, []), parentIssueNumber: 1, title: 'mid' }
+    const leaf = { ...card(3, []), parentIssueNumber: 2, title: 'leaf' }
+
+    const roots = groupSubIssues([leaf, mid, root])
+
+    expect(roots.map((c) => c.issueNumber)).toEqual([1])
+    expect(roots[0]!.subIssues.map((c) => c.issueNumber)).toEqual([2])
+    expect(roots[0]!.subIssues[0]!.subIssues.map((c) => c.issueNumber)).toEqual([3])
+  })
+
+  it('does not nest a cyclic parent link', () => {
+    const a = { ...card(1, []), parentIssueNumber: 2 }
+    const b = { ...card(2, []), parentIssueNumber: 1 }
+
+    const roots = groupSubIssues([a, b])
+
+    expect(roots.map((c) => c.issueNumber).sort()).toEqual([1, 2])
+    expect(roots.flatMap((c) => c.subIssues)).toEqual([])
+  })
+})
+
+describe('buildBoard grouping', () => {
+  it('nests a sub-issue under its parent only in a column they share', () => {
+    const model = buildBoard({
+      repo: 'a/b',
+      issues: [
+        { number: 35, title: 'Parent', body: null, labels: ['bug'] },
+        {
+          number: 506,
+          title: 'item a',
+          body: null,
+          labels: ['bug'],
+          parentIssueNumber: 35,
+        },
+      ],
+      columnLabels: ['bug', 'enhancement'],
+      values: {},
+    })
+
+    const bug = model.columns.find((c) => c.label === 'bug')!
+    expect(bug.cards.map((c) => c.issueNumber)).toEqual([35])
+    expect(bug.cards[0]!.subIssues.map((c) => c.issueNumber)).toEqual([506])
+
+    const enhancement = model.columns.find((c) => c.label === 'enhancement')!
+    expect(enhancement.cards.map((c) => c.issueNumber)).toEqual([])
+  })
+
+  it('keeps a differently labelled sub-issue in its own column, not under the parent', () => {
+    const model = buildBoard({
+      repo: 'a/b',
+      issues: [
+        { number: 35, title: 'Parent', body: null, labels: ['bug'] },
+        {
+          number: 506,
+          title: 'item a',
+          body: null,
+          labels: ['enhancement'],
+          parentIssueNumber: 35,
+        },
+      ],
+      columnLabels: ['bug', 'enhancement'],
+      values: {},
+    })
+
+    const bug = model.columns.find((c) => c.label === 'bug')!
+    expect(bug.cards.map((c) => c.issueNumber)).toEqual([35])
+    expect(bug.cards[0]!.subIssues).toEqual([])
+
+    const enhancement = model.columns.find((c) => c.label === 'enhancement')!
+    expect(enhancement.cards.map((c) => c.issueNumber)).toEqual([506])
+    expect(enhancement.cards[0]).toMatchObject({ issueNumber: 506, parentIssueNumber: 35 })
+    expect(enhancement.cards[0]!.subIssues).toEqual([])
+  })
+
+  it('nests a child in the shared column and also shows it where the parent is absent', () => {
+    const model = buildBoard({
+      repo: 'a/b',
+      issues: [
+        { number: 35, title: 'Parent', body: null, labels: ['bug'] },
+        {
+          number: 506,
+          title: 'item a',
+          body: null,
+          labels: ['bug', 'enhancement'],
+          parentIssueNumber: 35,
+        },
+      ],
+      columnLabels: ['bug', 'enhancement'],
+      values: {},
+    })
+
+    const bug = model.columns.find((c) => c.label === 'bug')!
+    expect(bug.cards.map((c) => c.issueNumber)).toEqual([35])
+    expect(bug.cards[0]!.subIssues.map((c) => c.issueNumber)).toEqual([506])
+
+    const enhancement = model.columns.find((c) => c.label === 'enhancement')!
+    expect(enhancement.cards.map((c) => c.issueNumber)).toEqual([506])
+    expect(enhancement.cards[0]!.parentIssueNumber).toBe(35)
+  })
+
+  it('sorts nested sub-issues by value then number, matching column sort', () => {
+    const model = buildBoard({
+      repo: 'a/b',
+      issues: [
+        { number: 1, title: 'Parent', body: null, labels: ['bug'] },
+        { number: 3, title: 'low', body: null, labels: ['bug'], parentIssueNumber: 1 },
+        { number: 2, title: 'high', body: null, labels: ['bug'], parentIssueNumber: 1 },
+      ],
+      columnLabels: ['bug'],
+      values: { 2: 9, 3: 2 },
+    })
+
+    expect(model.columns[0]!.cards[0]!.subIssues.map((c) => c.issueNumber)).toEqual([2, 3])
+  })
+})
+
+describe('flattenCards', () => {
+  it('walks parent then descendants in depth-first order', () => {
+    const leaf = { ...card(3, []), parentIssueNumber: 2 }
+    const mid = { ...card(2, []), parentIssueNumber: 1, subIssues: [leaf] }
+    const root = { ...card(1, []), subIssues: [mid] }
+
+    expect(flattenCards([root]).map((c) => c.issueNumber)).toEqual([1, 2, 3])
+  })
+})
+
 describe('applyRelabel', () => {
   const board = () =>
     buildBoard({
@@ -238,5 +386,44 @@ describe('applyRelabel', () => {
     expect(out.columns[0].cards.map((c) => c.issueNumber)).toContain(1) // still bug
     expect(out.columns[1].cards.map((c) => c.issueNumber)).toContain(1) // now also enh
     expect(out.columns[1].cards.find((c) => c.issueNumber === 1)!.labels).toEqual(['bug', 'enh'])
+  })
+
+  it('moves a nested sub-issue to its own column when it no longer shares the parent label', () => {
+    const grouped = buildBoard({
+      repo: 'a/b',
+      issues: [
+        { number: 35, title: 'Parent', body: null, labels: ['bug'] },
+        { number: 506, title: 'item a', body: null, labels: ['bug'], parentIssueNumber: 35 },
+      ],
+      columnLabels: ['bug', 'enh'],
+      values: {},
+    })
+
+    const out = applyRelabel(grouped, 506, 'bug', 'enh')
+    expect(out.columns[0]!.cards.map((c) => c.issueNumber)).toEqual([35])
+    expect(out.columns[0]!.cards[0]!.subIssues).toEqual([])
+    expect(out.columns[1]!.cards.map((c) => c.issueNumber)).toEqual([506])
+    expect(out.columns[1]!.cards[0]).toMatchObject({
+      issueNumber: 506,
+      labels: ['enh'],
+      parentIssueNumber: 35,
+    })
+  })
+})
+
+describe('applyRename nested', () => {
+  it('renames a nested sub-issue under its parent', () => {
+    const grouped = buildBoard({
+      repo: 'a/b',
+      issues: [
+        { number: 35, title: 'Parent', body: null, labels: ['bug'] },
+        { number: 506, title: 'item a', body: null, labels: ['bug'], parentIssueNumber: 35 },
+      ],
+      columnLabels: ['bug'],
+      values: {},
+    })
+
+    const out = applyRename(grouped, 506, 'item a renamed')
+    expect(out.columns[0]!.cards[0]!.subIssues[0]!.title).toBe('item a renamed')
   })
 })

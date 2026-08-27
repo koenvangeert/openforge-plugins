@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { BoardModel } from '../lib/board'
+import { emptyHierarchy, type BoardModel } from '../lib/board'
 import { useIssuesDrawer } from './useIssuesDrawer.svelte'
 
 function makeBoard(issueNumbers: number[]): BoardModel {
@@ -18,6 +18,7 @@ function makeBoard(issueNumbers: number[]): BoardModel {
           labels: ['alpha'],
           value: null,
           taskLink: null,
+          ...emptyHierarchy(),
         })),
       },
     ],
@@ -72,5 +73,48 @@ describe('useIssuesDrawer', () => {
     drawer.advancePastClosed(2)
 
     expect(drawer.openIssueNumber).toBe(1)
+  })
+
+  it('includes nested sub-issues in the frozen pager queue', () => {
+    const child = {
+      issueNumber: 506,
+      title: 'item a',
+      body: '',
+      labels: ['alpha'],
+      value: null,
+      taskLink: null,
+      parentIssueNumber: 35,
+      subIssues: [],
+      subIssuesSummary: null,
+    }
+    const parent = {
+      issueNumber: 35,
+      title: 'Parent',
+      body: '',
+      labels: ['alpha'],
+      value: null,
+      taskLink: null,
+      parentIssueNumber: null,
+      subIssues: [child],
+      subIssuesSummary: { total: 1, completed: 0, percentCompleted: 0 },
+    }
+    const board: BoardModel = {
+      repo: 'octo/cat',
+      columns: [
+        {
+          label: 'alpha',
+          isOther: false,
+          title: 'alpha',
+          color: null,
+          cards: [parent],
+        },
+      ],
+    }
+    const drawer = useIssuesDrawer(() => board)
+
+    drawer.openFrom(child, board.columns[0]!)
+
+    expect(drawer.open).toMatchObject({ issueNumbers: [35, 506], index: 1 })
+    expect(drawer.selectedCard?.title).toBe('item a')
   })
 })
