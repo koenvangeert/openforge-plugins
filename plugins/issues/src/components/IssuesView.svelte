@@ -9,11 +9,13 @@
   import CreateDialog from './CreateDialog.svelte'
   import ColumnSettingsModal from './ColumnSettingsModal.svelte'
   import SearchInput from './SearchInput.svelte'
+  import ValueFilter from './ValueFilter.svelte'
   import { useIssuesBoard } from './useIssuesBoard.svelte'
   import { useIssuesColumnSettings } from './useIssuesColumnSettings.svelte'
   import { useIssuesCreateDialog } from './useIssuesCreateDialog.svelte'
   import { useIssuesDrawer } from './useIssuesDrawer.svelte'
   import { useIssuesSearch } from './useIssuesSearch.svelte'
+  import { useIssuesValueFilter } from './useIssuesValueFilter.svelte'
   import { isSearchFocusKey, isTypingTarget } from '../lib/searchHotkey'
 
   interface Props {
@@ -35,6 +37,8 @@
   // it always has the full set to filter from.
   const drawer = useIssuesDrawer(() => issues.board)
   const search = useIssuesSearch(() => issues.board)
+  // Value filter reads the search-filtered board and filters by selected values
+  const valueFilter = useIssuesValueFilter(() => search.board)
   // svelte-ignore state_referenced_locally
   const createDialog = useIssuesCreateDialog(api, issues)
   const columnSettings = useIssuesColumnSettings(issues)
@@ -50,6 +54,7 @@
       createDialog.close()
       columnSettings.close()
       search.clear()
+      valueFilter.clear()
     }
   })
 
@@ -93,6 +98,12 @@
     await issues.setValue(drawer.openIssueNumber, value)
   }
 
+  // Same call as setValue above, but for the board's per-card value chip, which sets
+  // a value without opening the drawer and so must name the issue explicitly.
+  async function setCardValue(issueNumber: number, value: number | null): Promise<void> {
+    await issues.setValue(issueNumber, value)
+  }
+
   async function saveText(title: string, body: string): Promise<boolean> {
     if (drawer.openIssueNumber === null) return false
     return issues.saveText(drawer.openIssueNumber, title, body)
@@ -133,7 +144,14 @@
     subtitle={issues.repoSlug || 'Issues board'}
   >
     {#snippet actions()}
-      <div class="flex items-center gap-2 shrink-0">
+      <div class="flex items-center gap-2 shrink-0 w-full flex-wrap">
+        {#if issues.board}
+          <ValueFilter
+            selectedValues={valueFilter.selectedValues}
+            onToggleValue={valueFilter.toggleValue}
+            onClear={valueFilter.clear}
+          />
+        {/if}
         <SearchInput
           bind:value={search.query}
           bind:inputEl={searchInputEl}
@@ -169,15 +187,21 @@
             <p class="text-sm text-base-content/60 m-0">No issues match "{search.query}".</p>
             <button class="btn btn-sm" onclick={search.clear}>Clear</button>
           </div>
-        {:else if search.board}
+        {:else if valueFilter.hasSelection && valueFilter.board && valueFilter.board.columns.every((col) => col.cards.length === 0)}
+          <div class="flex flex-col items-center justify-center h-full gap-3 text-center px-4">
+            <p class="text-sm text-base-content/60 m-0">No issues match the selected value filters.</p>
+            <button class="btn btn-sm" onclick={valueFilter.clear}>Clear</button>
+          </div>
+        {:else if valueFilter.board}
           <Board
-            columns={search.board.columns}
+            columns={valueFilter.board.columns}
             repo={issues.repoSlug}
             busy={issues.busy}
             terms={search.terms}
             onCardClick={drawer.openFrom}
             onOpenUrl={openUrl}
             onCopyLink={copyLink}
+            onSetValue={setCardValue}
             onRecolor={(name, color) => {
               void issues.recolorLabel(name, color).catch(() => undefined)
             }}

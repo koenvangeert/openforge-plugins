@@ -31,6 +31,7 @@ function props(onAddCard = vi.fn()) {
     onCardClick: vi.fn(),
     onOpenUrl: vi.fn(),
     onCopyLink: vi.fn(),
+    onSetValue: vi.fn(),
     onRecolor: vi.fn(),
     onStart: vi.fn(),
     onAddCard,
@@ -124,6 +125,49 @@ describe('Board drag and drop', () => {
     const cardWrapper = screen.getByText('Fix the thing').closest('[draggable]') as HTMLElement
 
     expect(cardWrapper.getAttribute('draggable')).toBe('false')
+  })
+})
+
+describe('Board card value chip', () => {
+  it('shows a placeholder chip for a card with no value', () => {
+    render(Board, { props: { ...props(), columns: columnsWithCard } })
+
+    expect(screen.getByRole('button', { name: 'Set value' }).textContent).toBe('+')
+  })
+
+  it('shows the current value on the chip', () => {
+    const columns: BoardColumn[] = [
+      { label: 'bug', isOther: false, title: 'bug', color: null, cards: [{ ...bugCard, value: 7 }] },
+    ]
+    render(Board, { props: { ...props(), columns } })
+
+    expect(screen.getByRole('button', { name: 'Value: 7. Click to change.' }).textContent).toBe('7')
+  })
+
+  it('opens a picker on click and reports the picked value without opening the card', async () => {
+    const onCardClick = vi.fn()
+    const onSetValue = vi.fn()
+    render(Board, { props: { ...props(), columns: columnsWithCard, onCardClick, onSetValue } })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Set value' }))
+    await fireEvent.click(screen.getByRole('option', { name: 'Set value 6' }))
+
+    expect(onSetValue).toHaveBeenCalledWith(1, 6)
+    expect(onCardClick).not.toHaveBeenCalled()
+    expect(screen.queryByRole('listbox', { name: 'Set value' })).toBeNull()
+  })
+
+  it('clears the value from the picker', async () => {
+    const columns: BoardColumn[] = [
+      { label: 'bug', isOther: false, title: 'bug', color: null, cards: [{ ...bugCard, value: 7 }] },
+    ]
+    const onSetValue = vi.fn()
+    render(Board, { props: { ...props(), columns, onSetValue } })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Value: 7. Click to change.' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+
+    expect(onSetValue).toHaveBeenCalledWith(1, null)
   })
 })
 

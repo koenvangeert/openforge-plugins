@@ -13,6 +13,7 @@
     onCardClick: (card: BoardCard, column: BoardColumn) => void
     onOpenUrl: (url: string) => void
     onCopyLink: (issueNumber: number) => void
+    onSetValue: (issueNumber: number, value: number | null) => void
     onRecolor: (label: string, color: string) => void
     busy?: boolean
     onStart: (card: BoardCard) => void
@@ -29,6 +30,7 @@
     onCardClick,
     onOpenUrl,
     onCopyLink,
+    onSetValue,
     onRecolor,
     busy = false,
     onStart,
@@ -230,6 +232,7 @@
               }}
               {onOpenUrl}
               {onCopyLink}
+              {onSetValue}
               onContextMenu={(event) => openContextMenu(event, card)}
               onChildContextMenu={(event, child) => openContextMenu(event, child)}
             />
