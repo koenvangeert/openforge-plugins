@@ -95,6 +95,48 @@ export function countMatchingIssues(board: BoardModel, terms: SearchTerms): numb
   return seen.size
 }
 
+/**
+ * Check if a card's value matches the selected value filter.
+ * If no values are selected, all cards match.
+ * If values are selected, the card must have a value matching one of them.
+ */
+export function cardMatchesValueFilter(card: BoardCard, selectedValues: Set<number | 'none'>): boolean {
+  if (selectedValues.size === 0) return true
+  if (selectedValues.has('none') && card.value === null) return true
+  if (card.value !== null && selectedValues.has(card.value)) return true
+  return false
+}
+
+/**
+ * Filter a card tree by value. Keeps a parent when the parent or any descendant matches.
+ */
+function filterCardTreeByValue(card: BoardCard, selectedValues: Set<number | 'none'>): BoardCard | null {
+  if (cardMatchesValueFilter(card, selectedValues)) return card
+
+  const children = card.subIssues
+    .map((child) => filterCardTreeByValue(child, selectedValues))
+    .filter((child): child is BoardCard => child !== null)
+  if (children.length === 0) return null
+  return { ...card, subIssues: children }
+}
+
+/**
+ * Filter a board to only cards matching the value filter. Empty `selectedValues` returns
+ * the board unchanged. Pure — the input board and its cards are never mutated.
+ */
+export function filterBoardByValue(board: BoardModel, selectedValues: Set<number | 'none'>): BoardModel {
+  if (selectedValues.size === 0) return board
+
+  const columns: BoardColumn[] = []
+  for (const column of board.columns) {
+    const cards = column.cards
+      .map((card) => filterCardTreeByValue(card, selectedValues))
+      .filter((card): card is BoardCard => card !== null)
+    if (cards.length > 0) columns.push({ ...column, cards })
+  }
+  return { ...board, columns }
+}
+
 const EXCERPT_RADIUS = 60
 const ELLIPSIS = '…'
 
