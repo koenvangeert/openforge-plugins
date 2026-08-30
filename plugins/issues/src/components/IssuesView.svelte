@@ -200,6 +200,7 @@
             terms={search.terms}
             onCardClick={drawer.openFrom}
             onOpenUrl={openUrl}
+            onOpenTask={openTask}
             onCopyLink={copyLink}
             onSetValue={setCardValue}
             onRecolor={(name, color) => {

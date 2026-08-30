@@ -12,6 +12,7 @@
     repo: string
     onCardClick: (card: BoardCard, column: BoardColumn) => void
     onOpenUrl: (url: string) => void
+    onOpenTask: (taskId: string) => void
     onCopyLink: (issueNumber: number) => void
     onSetValue: (issueNumber: number, value: number | null) => void
     onRecolor: (label: string, color: string) => void
@@ -29,6 +30,7 @@
     repo,
     onCardClick,
     onOpenUrl,
+    onOpenTask,
     onCopyLink,
     onSetValue,
     onRecolor,
@@ -231,6 +233,7 @@
                 onCardClick(child, column)
               }}
               {onOpenUrl}
+              {onOpenTask}
               {onCopyLink}
               {onSetValue}
               onContextMenu={(event) => openContextMenu(event, card)}

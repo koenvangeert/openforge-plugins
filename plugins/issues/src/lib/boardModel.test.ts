@@ -130,4 +130,32 @@ describe('board model', () => {
     expect(grouped.columns[0]?.cards.map((card) => card.issueNumber)).toEqual([7])
     expect(grouped.columns[0]?.cards[0]?.subIssues.map((card) => card.issueNumber)).toEqual([8])
   })
+
+  it('attaches linked pull requests from the backend wire data', () => {
+    const model = modelFromIssuesBoard({
+      ...rawBoard,
+      issues: [
+        {
+          ...rawBoard.issues[0]!,
+          linked_pull_requests: [
+            {
+              number: 99,
+              title: 'Fix hydrate',
+              html_url: 'https://github.com/octo/cat/pull/99',
+              state: 'open',
+            },
+          ],
+        },
+      ],
+    })
+
+    expect(model.columns[0]?.cards[0]?.linkedPullRequests).toEqual([
+      {
+        number: 99,
+        title: 'Fix hydrate',
+        htmlUrl: 'https://github.com/octo/cat/pull/99',
+        state: 'open',
+      },
+    ])
+  })
 })

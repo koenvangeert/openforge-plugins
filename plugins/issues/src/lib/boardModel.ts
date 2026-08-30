@@ -49,6 +49,12 @@ export function modelFromIssuesBoard(
       labels: issue.labels.map((label) => label.name),
       parentIssueNumber: parentIssueNumberFromUrl(issue.parent_issue_url, raw.repo),
       subIssuesSummary: mapSubIssuesSummary(issue.sub_issues_summary),
+      linkedPullRequests: (issue.linked_pull_requests ?? []).map((pr) => ({
+        number: pr.number,
+        title: pr.title,
+        htmlUrl: pr.html_url,
+        state: pr.state,
+      })),
     })),
     columnLabels: raw.columnLabels,
     labelColors,

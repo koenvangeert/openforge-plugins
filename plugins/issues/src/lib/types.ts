@@ -33,6 +33,19 @@ export interface Issue {
   parent_issue_url?: string | null
   /** REST `sub_issues_summary`; absent when GitHub has no sub-issue rollup. */
   sub_issues_summary?: SubIssuesSummaryRaw | null
+  /**
+   * Pull requests GitHub lists as linked to this issue (Development sidebar and
+   * closing references). Assembled from GraphQL, not from `GET /issues`.
+   */
+  linked_pull_requests?: LinkedPullRequest[]
+}
+
+/** A pull request GitHub links to an issue. */
+export interface LinkedPullRequest {
+  number: number
+  title: string
+  html_url: string
+  state: string
 }
 
 /** A repository label (column source). */

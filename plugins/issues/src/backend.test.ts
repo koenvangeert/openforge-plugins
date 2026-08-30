@@ -8,12 +8,21 @@ function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 }
 
+const EMPTY_GRAPHQL = {
+  data: {
+    repository: {
+      issues: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] },
+    },
+  },
+}
+
 /** Route each GitHub call by URL so tests do not depend on request ordering. */
 function stubGitHub(routes: Record<string, unknown>) {
+  const all: Record<string, unknown> = { '/graphql': EMPTY_GRAPHQL, ...routes }
   const spy = vi.fn(async (url: string) => {
-    const match = Object.keys(routes).find((fragment) => url.includes(fragment))
+    const match = Object.keys(all).find((fragment) => url.includes(fragment))
     if (!match) throw new Error(`unstubbed GitHub call: ${url}`)
-    return jsonResponse(200, routes[match])
+    return jsonResponse(200, all[match])
   })
   vi.stubGlobal('fetch', spy)
   return spy
@@ -91,6 +100,49 @@ describe('issues_get_board', () => {
     const board = await invoke<IssuesBoard>(registry, 'issues_get_board', { projectId: 'P-1' })
 
     expect(board.columnLabels).toEqual(['bug'])
+  })
+
+  it('attaches GraphQL-linked pull requests to matching issues', async () => {
+    const registry = await setup()
+    stubGitHub({
+      '/issues?state=open': OPEN_ISSUES,
+      '/labels?per_page': REPO_LABELS,
+      '/graphql': {
+        data: {
+          repository: {
+            issues: {
+              pageInfo: { hasNextPage: false, endCursor: null },
+              nodes: [
+                {
+                  number: 1,
+                  closedByPullRequestsReferences: {
+                    nodes: [
+                      {
+                        number: 99,
+                        title: 'Fix the bug',
+                        url: 'https://github.com/acme/repo/pull/99',
+                        state: 'OPEN',
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        },
+      },
+    })
+
+    const board = await invoke<IssuesBoard>(registry, 'issues_get_board', { projectId: 'P-1' })
+
+    expect(board.issues[0]?.linked_pull_requests).toEqual([
+      {
+        number: 99,
+        title: 'Fix the bug',
+        html_url: 'https://github.com/acme/repo/pull/99',
+        state: 'open',
+      },
+    ])
   })
 
   it('fails with an actionable message when no GitHub token is configured', async () => {

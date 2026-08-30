@@ -4,8 +4,10 @@ import {
   editIssue,
   encodePathSegment,
   listLabels,
+  listLinkedPullRequestsByIssue,
   listOpenIssues,
   nextPageUrl,
+  parseLinkedPullRequest,
   resolveLabels,
   updateLabelColor,
 } from './client'
@@ -254,5 +256,123 @@ describe('encodePathSegment', () => {
     expect(encodePathSegment('bug-fix_v2.0~x')).toBe('bug-fix_v2.0~x')
     expect(encodePathSegment('needs review')).toBe('needs%20review')
     expect(encodePathSegment('a/b')).toBe('a%2Fb')
+  })
+})
+
+describe('parseLinkedPullRequest', () => {
+  it('maps a GraphQL pull request node onto the board wire shape', () => {
+    expect(
+      parseLinkedPullRequest({
+        number: 99,
+        title: 'Fix hydrate',
+        url: 'https://github.com/acme/repo/pull/99',
+        state: 'OPEN',
+      }),
+    ).toEqual({
+      number: 99,
+      title: 'Fix hydrate',
+      html_url: 'https://github.com/acme/repo/pull/99',
+      state: 'open',
+    })
+  })
+
+  it('drops nodes that are missing a usable number or URL', () => {
+    expect(parseLinkedPullRequest({ number: 0, url: 'https://github.com/acme/repo/pull/0' })).toBeNull()
+    expect(parseLinkedPullRequest({ number: 99, url: '' })).toBeNull()
+    expect(parseLinkedPullRequest(null)).toBeNull()
+  })
+})
+
+describe('listLinkedPullRequestsByIssue', () => {
+  const graphqlUrl = 'https://api.github.com/graphql'
+
+  function graphqlResponse(nodes: unknown[], pageInfo = { hasNextPage: false, endCursor: null as string | null }) {
+    return jsonResponse(200, {
+      data: {
+        repository: {
+          issues: { pageInfo, nodes },
+        },
+      },
+    })
+  }
+
+  it('asks GraphQL for linked pull requests on open issues', async () => {
+    const spy = stubFetch(
+      graphqlResponse([
+        {
+          number: 1,
+          closedByPullRequestsReferences: {
+            nodes: [
+              {
+                number: 99,
+                title: 'Fix the bug',
+                url: 'https://github.com/acme/repo/pull/99',
+                state: 'OPEN',
+              },
+            ],
+          },
+        },
+        { number: 3, closedByPullRequestsReferences: { nodes: [] } },
+      ]),
+    )
+
+    const linked = await listLinkedPullRequestsByIssue(TOKEN, REPO)
+
+    expect(spy.mock.calls[0][0]).toBe(graphqlUrl)
+    const init = spy.mock.calls[0][1] as RequestInit
+    expect(init.method).toBe('POST')
+    const body = JSON.parse(init.body as string) as { query: string; variables: Record<string, unknown> }
+    expect(body.query).toContain('closedByPullRequestsReferences')
+    expect(body.query).toContain('includeClosedPrs')
+    expect(body.variables).toEqual({ owner: 'acme', name: 'repo', cursor: null })
+    expect(linked.get(1)).toEqual([
+      {
+        number: 99,
+        title: 'Fix the bug',
+        html_url: 'https://github.com/acme/repo/pull/99',
+        state: 'open',
+      },
+    ])
+    expect(linked.has(3)).toBe(false)
+  })
+
+  it('follows GraphQL pageInfo to fetch every page of issues', async () => {
+    const spy = stubFetch(
+      graphqlResponse(
+        [
+          {
+            number: 1,
+            closedByPullRequestsReferences: {
+              nodes: [{ number: 10, title: 'One', url: 'https://github.com/acme/repo/pull/10', state: 'MERGED' }],
+            },
+          },
+        ],
+        { hasNextPage: true, endCursor: 'cursor-2' },
+      ),
+      graphqlResponse([
+        {
+          number: 2,
+          closedByPullRequestsReferences: {
+            nodes: [{ number: 20, title: 'Two', url: 'https://github.com/acme/repo/pull/20', state: 'CLOSED' }],
+          },
+        },
+      ]),
+    )
+
+    const linked = await listLinkedPullRequestsByIssue(TOKEN, REPO)
+
+    expect(spy).toHaveBeenCalledTimes(2)
+    const secondBody = JSON.parse((spy.mock.calls[1][1] as RequestInit).body as string) as {
+      variables: Record<string, unknown>
+    }
+    expect(secondBody.variables.cursor).toBe('cursor-2')
+    expect(linked.get(1)?.[0]?.state).toBe('merged')
+    expect(linked.get(2)?.[0]?.state).toBe('closed')
+  })
+
+  it('surfaces a GraphQL error message', async () => {
+    stubFetch(jsonResponse(200, { errors: [{ message: 'API rate limit exceeded' }] }))
+
+    await expect(listLinkedPullRequestsByIssue(TOKEN, REPO)).rejects.toThrow(/rate limit/)
   })
 })

@@ -1,11 +1,11 @@
 // A minimal GitHub REST client for the Issues board.
 //
 // Ported from OpenForge's Rust `github_client` (issues.rs + labels.rs), which the
-// board used to reach through core commands. Only the five calls the board makes
+// board used to reach through core commands. Only the calls the board makes
 // live here. The host's ETag response cache does not come along: the board fetches
 // on open and after each edit rather than polling, so the cache bought little.
 
-import type { Issue, RepoLabel, RepoRef } from '../types'
+import type { Issue, LinkedPullRequest, RepoLabel, RepoRef } from '../types'
 
 const API_ROOT = 'https://api.github.com'
 
@@ -207,4 +207,117 @@ export async function updateLabelColor(
     method: 'PATCH',
     body: JSON.stringify({ color }),
   })
+}
+
+const GRAPHQL_URL = `${API_ROOT}/graphql`
+
+const LINKED_PULL_REQUESTS_QUERY = `query($owner: String!, $name: String!, $cursor: String) {
+  repository(owner: $owner, name: $name) {
+    issues(states: [OPEN], first: 100, after: $cursor) {
+      pageInfo { hasNextPage endCursor }
+      nodes {
+        number
+        closedByPullRequestsReferences(first: 10, includeClosedPrs: true) {
+          nodes { number title url state }
+        }
+      }
+    }
+  }
+}`
+
+interface GraphqlErrorBody {
+  message?: unknown
+}
+
+interface GraphqlLinkedPrNode {
+  number?: unknown
+  title?: unknown
+  url?: unknown
+  state?: unknown
+}
+
+interface GraphqlIssueNode {
+  number?: unknown
+  closedByPullRequestsReferences?: { nodes?: GraphqlLinkedPrNode[] | null } | null
+}
+
+interface GraphqlLinkedPrsData {
+  repository?: {
+    issues?: {
+      pageInfo: { hasNextPage: boolean; endCursor: string | null }
+      nodes?: GraphqlIssueNode[] | null
+    } | null
+  } | null
+}
+
+interface GraphqlResponse {
+  data?: GraphqlLinkedPrsData
+  errors?: GraphqlErrorBody[]
+}
+
+async function graphqlLinkedPrs(
+  token: string,
+  variables: Record<string, unknown>,
+): Promise<GraphqlLinkedPrsData> {
+  const response = await request<GraphqlResponse>(GRAPHQL_URL, token, {
+    method: 'POST',
+    body: JSON.stringify({ query: LINKED_PULL_REQUESTS_QUERY, variables }),
+  })
+  const message = response.errors?.map((error) => error.message).find((value) => typeof value === 'string')
+  if (typeof message === 'string') throw new Error(`GitHub request failed: ${message}`)
+  if (!response.data) throw new Error('GitHub request failed: empty GraphQL response')
+  return response.data
+}
+
+/** Map a GraphQL pull-request node onto the board wire shape, or null if unusable. */
+export function parseLinkedPullRequest(raw: unknown): LinkedPullRequest | null {
+  if (!raw || typeof raw !== 'object') return null
+  const node = raw as GraphqlLinkedPrNode
+  if (typeof node.number !== 'number' || !Number.isInteger(node.number) || node.number < 1) return null
+  if (typeof node.url !== 'string' || node.url.length === 0) return null
+  return {
+    number: node.number,
+    title: typeof node.title === 'string' ? node.title : '',
+    html_url: node.url,
+    state: typeof node.state === 'string' ? node.state.toLowerCase() : 'open',
+  }
+}
+
+/**
+ * Linked pull requests for each open issue, keyed by issue number.
+ *
+ * GitHub's REST issue list does not include the Development-sidebar links; this
+ * reads `closedByPullRequestsReferences` over GraphQL. Issues with no linked PR
+ * are omitted from the map.
+ */
+export async function listLinkedPullRequestsByIssue(
+  token: string,
+  repo: RepoRef,
+): Promise<Map<number, LinkedPullRequest[]>> {
+  const byIssue = new Map<number, LinkedPullRequest[]>()
+  let cursor: string | null = null
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const data = await graphqlLinkedPrs(token, {
+      owner: repo.owner,
+      name: repo.name,
+      cursor,
+    })
+    const connection = data.repository?.issues
+    if (!connection) break
+
+    for (const issue of connection.nodes ?? []) {
+      if (typeof issue.number !== 'number') continue
+      const prs = (issue.closedByPullRequestsReferences?.nodes ?? [])
+        .map(parseLinkedPullRequest)
+        .filter((pr): pr is LinkedPullRequest => pr !== null)
+      if (prs.length > 0) byIssue.set(issue.number, prs)
+    }
+
+    if (!connection.pageInfo.hasNextPage) break
+    cursor = connection.pageInfo.endCursor
+    if (!cursor) break
+  }
+
+  return byIssue
 }

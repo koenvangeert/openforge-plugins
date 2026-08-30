@@ -4,6 +4,7 @@
   import { cardExcerpt, type SearchTerms } from '../lib/search'
   import { valueBandColor } from '../lib/valueColor'
   import HighlightedText from './HighlightedText.svelte'
+  import LinkedPullRequestLinks from './LinkedPullRequestLinks.svelte'
   import SubIssueList from './SubIssueList.svelte'
   import ValuePicker from './ValuePicker.svelte'
 
@@ -12,6 +13,7 @@
     repo: string
     onOpen: () => void
     onOpenUrl: (url: string) => void
+    onOpenTask: (taskId: string) => void
     onCopyLink: (issueNumber: number) => void
     onSetValue: (issueNumber: number, value: number | null) => void
     onContextMenu: (event: MouseEvent) => void
@@ -29,6 +31,7 @@
     repo,
     onOpen,
     onOpenUrl,
+    onOpenTask,
     onCopyLink,
     onSetValue,
     onContextMenu,
@@ -119,7 +122,7 @@
       {/if}
       <!-- Ticket number and per-card actions share this row — keeping the actions off
            the title row above is what lets the title use the card's full width. -->
-      <div class="flex items-center gap-1">
+      <div class="flex items-center gap-1 flex-wrap">
         <span class="text-xs text-base-content/40">#{card.issueNumber}</span>
         {#if card.parentIssueNumber !== null}
           <span class="text-xs text-base-content/50">Parent #{card.parentIssueNumber}</span>
@@ -131,8 +134,23 @@
             aria-label={`${card.subIssuesSummary.completed} of ${card.subIssuesSummary.total} sub-issues complete`}
           >{card.subIssuesSummary.completed}/{card.subIssuesSummary.total}</span>
         {/if}
+        <LinkedPullRequestLinks pullRequests={card.linkedPullRequests} {onOpenUrl} />
         {#if card.taskLink}
-          <span class="badge badge-outline badge-xs" title="OpenForge task">{card.taskLink.taskId}</span>
+          <!-- Bind the id here: the click handler runs later, and a board refresh that
+               clears taskLink in between would otherwise dereference null. -->
+          {@const taskId = card.taskLink.taskId}
+          {@const taskTitle = card.taskLink.title}
+          <button
+            type="button"
+            class="issue-meta-chip badge badge-outline badge-xs font-normal shrink-0 cursor-pointer"
+            title="OpenForge task"
+            aria-label={taskTitle ? `Open OpenForge task ${taskId}: ${taskTitle}` : `Open OpenForge task ${taskId}`}
+            onclick={(event) => {
+              event.stopPropagation()
+              onOpenTask(taskId)
+            }}
+            onkeydown={(event) => event.stopPropagation()}
+          >{taskId}</button>
         {/if}
         <div class="ml-auto flex items-center gap-1 shrink-0">
           <button
@@ -192,8 +210,34 @@
           onToggleExpand={onToggleExpand}
           onOpen={onOpenChild}
           onContextMenu={onChildContextMenu}
+          {onOpenUrl}
         />
       {/if}
     {/if}
   </div>
 </article>
+
+<style>
+  /* Task id and linked-PR chips share one hover/focus treatment so they read as the same control. */
+  :global(.issue-meta-chip) {
+    transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;
+  }
+
+  :global(.issue-meta-chip:hover),
+  :global(.issue-meta-chip:focus-visible) {
+    border-color: color-mix(in srgb, var(--color-primary) 70%, var(--color-base-300));
+    background-color: color-mix(in srgb, var(--color-primary) 14%, var(--color-base-100));
+    color: color-mix(in srgb, var(--color-primary) 80%, var(--color-base-content));
+  }
+
+  :global(.issue-meta-chip:focus-visible) {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :global(.issue-meta-chip) {
+      transition: none;
+    }
+  }
+</style>

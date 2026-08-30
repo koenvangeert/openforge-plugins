@@ -3,7 +3,14 @@ import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
 import { describeAiError, refineTicket, reviseTicket } from './lib/ai'
 import { loadRepoContext } from './lib/ai/context'
 import { readAiSettings, resolveProvider } from './lib/settings/aiSettings'
-import { createIssue, editIssue, listLabels, listOpenIssues, updateLabelColor } from './lib/github/client'
+import {
+  createIssue,
+  editIssue,
+  listLabels,
+  listLinkedPullRequestsByIssue,
+  listOpenIssues,
+  updateLabelColor,
+} from './lib/github/client'
 import { resolveRepoRef } from './lib/github/repoRef'
 import { normalizeLabelColor } from './lib/labelColors'
 import {
@@ -67,15 +74,20 @@ export default defineBackendPlugin({
       openforge.backend.registerMethod<{ projectId: string }, IssuesBoard>('issues_get_board', {
         handler: async ({ projectId }) => {
           const { repo, token } = await connect(openforge, projectId)
-          const [issues, labels] = await Promise.all([
+          const [issues, labels, linkedByIssue] = await Promise.all([
             listOpenIssues(token, repo),
             listLabels(token, repo),
+            listLinkedPullRequestsByIssue(token, repo),
           ])
+          const issuesWithLinks = issues.map((issue) => ({
+            ...issue,
+            linked_pull_requests: linkedByIssue.get(issue.number) ?? [],
+          }))
           const [values, columnLabels] = await Promise.all([
             readValues(openforge.storage, projectId),
-            resolveColumnLabels(openforge.storage, projectId, labels, issues),
+            resolveColumnLabels(openforge.storage, projectId, labels, issuesWithLinks),
           ])
-          return { repo, issues, labels, values, columnLabels }
+          return { repo, issues: issuesWithLinks, labels, values, columnLabels }
         },
       }),
     )
