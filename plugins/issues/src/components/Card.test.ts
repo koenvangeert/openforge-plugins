@@ -14,19 +14,20 @@ const card: BoardCard = {
   ...emptyHierarchy(),
 }
 
-function renderCard(overrides: Partial<BoardCard> = {}, onOpen = vi.fn(), onOpenUrl = vi.fn()) {
+function renderCard(overrides: Partial<BoardCard> = {}, onOpen = vi.fn(), onOpenUrl = vi.fn(), onOpenTask = vi.fn()) {
   render(Card, {
     props: {
       card: { ...card, ...overrides },
       repo: 'octo/cat',
       onOpen,
       onOpenUrl,
+      onOpenTask,
       onCopyLink: vi.fn(),
       onSetValue: vi.fn(),
       onContextMenu: vi.fn(),
     },
   })
-  return { onOpen, onOpenUrl }
+  return { onOpen, onOpenUrl, onOpenTask }
 }
 
 describe('Card task and pull-request chips', () => {
@@ -49,8 +50,25 @@ describe('Card task and pull-request chips', () => {
       ],
     })
 
-    expect(screen.getByText('KVG-9')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Open OpenForge task KVG-9: Fix the thing' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Open pull request #99: Fix hydrate' })).toBeTruthy()
+  })
+
+  it('opens the linked task without opening the issue card', async () => {
+    const { onOpen, onOpenTask } = renderCard({
+      taskLink: {
+        taskId: 'KVG-9',
+        sessionId: 'session-9',
+        workspacePath: '/tmp/kvg-9',
+        repo: 'octo/cat',
+        title: 'Fix the thing',
+      },
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Open OpenForge task KVG-9: Fix the thing' }))
+
+    expect(onOpenTask).toHaveBeenCalledWith('KVG-9')
+    expect(onOpen).not.toHaveBeenCalled()
   })
 })
 
@@ -136,6 +154,7 @@ describe('Card linked pull requests', () => {
         repo: 'octo/cat',
         onOpen: vi.fn(),
         onOpenUrl,
+        onOpenTask: vi.fn(),
         onCopyLink: vi.fn(),
         onSetValue: vi.fn(),
         onContextMenu: vi.fn(),

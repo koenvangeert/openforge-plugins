@@ -108,6 +108,46 @@ export async function loadIssueTaskLinks(
   }
 }
 
+/**
+ * Complete and Delete remove a Task from every board surface. Plugin storage
+ * still holds the issue link, so the board must drop links whose Task is no
+ * longer in the live project list.
+ */
+export function keepLiveIssueTaskLinks(
+  links: Record<number, IssueTaskLink>,
+  liveTaskIds: Iterable<string>,
+): Record<number, IssueTaskLink> {
+  const live = liveTaskIds instanceof Set ? liveTaskIds : new Set(liveTaskIds)
+  const kept: Record<number, IssueTaskLink> = {}
+  for (const [issueNumber, link] of Object.entries(links)) {
+    if (live.has(link.taskId)) kept[Number(issueNumber)] = link
+  }
+  return kept
+}
+
+async function loadLiveTaskIds(
+  api: FrontendOpenForgeAPI,
+  projectId: string,
+): Promise<Set<string> | null> {
+  try {
+    const tasks = await api.tasks.list({ projectId })
+    return new Set(tasks.map((task) => task.id))
+  } catch {
+    return null
+  }
+}
+
+export async function loadVisibleIssueTaskLinks(
+  api: FrontendOpenForgeAPI,
+  projectId: string | null,
+): Promise<Record<number, IssueTaskLink>> {
+  const stored = await loadIssueTaskLinks(api, projectId)
+  if (!projectId) return stored
+  const liveTaskIds = await loadLiveTaskIds(api, projectId)
+  if (liveTaskIds === null) return stored
+  return keepLiveIssueTaskLinks(stored, liveTaskIds)
+}
+
 export function findIssueTaskLinkForTask(
   links: Record<number, IssueTaskLink>,
   taskId: string,

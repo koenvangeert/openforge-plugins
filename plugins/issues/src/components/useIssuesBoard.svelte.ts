@@ -14,7 +14,7 @@ import {
   reconcilePendingCreatedCards,
 } from '../lib/boardModel'
 import { normalizeLabelColor } from '../lib/labelColors'
-import { loadIssueTaskLinks, startIssueAction } from '../lib/issueActions'
+import { loadVisibleIssueTaskLinks, startIssueAction } from '../lib/issueActions'
 import { createIssuesClient } from '../lib/issuesClient'
 import type { RefineTicketRequest, RepoLabel, IssuesConfig, TicketDraft } from '../lib/types'
 
@@ -53,8 +53,10 @@ export function useIssuesBoard(api: FrontendOpenForgeAPI) {
     isLoading = true
     error = null
     try {
-      const raw = await client.getBoard(projectId)
-      const taskLinks = await loadIssueTaskLinks(api, projectId)
+      const [raw, taskLinks] = await Promise.all([
+        client.getBoard(projectId),
+        loadVisibleIssueTaskLinks(api, projectId),
+      ])
       if (!isCurrentActivation(projectId, activation)) return
 
       const reconciliation = reconcilePendingCreatedCards(

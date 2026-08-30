@@ -13,6 +13,7 @@
     repo: string
     onOpen: () => void
     onOpenUrl: (url: string) => void
+    onOpenTask: (taskId: string) => void
     onCopyLink: (issueNumber: number) => void
     onSetValue: (issueNumber: number, value: number | null) => void
     onContextMenu: (event: MouseEvent) => void
@@ -30,6 +31,7 @@
     repo,
     onOpen,
     onOpenUrl,
+    onOpenTask,
     onCopyLink,
     onSetValue,
     onContextMenu,
@@ -134,7 +136,21 @@
         {/if}
         <LinkedPullRequestLinks pullRequests={card.linkedPullRequests} {onOpenUrl} />
         {#if card.taskLink}
-          <span class="issue-meta-chip badge badge-outline badge-xs" title="OpenForge task">{card.taskLink.taskId}</span>
+          <!-- Bind the id here: the click handler runs later, and a board refresh that
+               clears taskLink in between would otherwise dereference null. -->
+          {@const taskId = card.taskLink.taskId}
+          {@const taskTitle = card.taskLink.title}
+          <button
+            type="button"
+            class="issue-meta-chip badge badge-outline badge-xs font-normal shrink-0 cursor-pointer"
+            title="OpenForge task"
+            aria-label={taskTitle ? `Open OpenForge task ${taskId}: ${taskTitle}` : `Open OpenForge task ${taskId}`}
+            onclick={(event) => {
+              event.stopPropagation()
+              onOpenTask(taskId)
+            }}
+            onkeydown={(event) => event.stopPropagation()}
+          >{taskId}</button>
         {/if}
         <div class="ml-auto flex items-center gap-1 shrink-0">
           <button

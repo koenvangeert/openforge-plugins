@@ -30,6 +30,7 @@ function props(onAddCard = vi.fn()) {
     repo: 'octo/cat',
     onCardClick: vi.fn(),
     onOpenUrl: vi.fn(),
+    onOpenTask: vi.fn(),
     onCopyLink: vi.fn(),
     onSetValue: vi.fn(),
     onRecolor: vi.fn(),
@@ -168,6 +169,39 @@ describe('Board card value chip', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
 
     expect(onSetValue).toHaveBeenCalledWith(1, null)
+  })
+})
+
+describe('Board linked-task chip', () => {
+  it('opens the linked task without opening the issue card', async () => {
+    const onCardClick = vi.fn()
+    const onOpenTask = vi.fn()
+    const columns: BoardColumn[] = [
+      {
+        label: 'bug',
+        isOther: false,
+        title: 'bug',
+        color: null,
+        cards: [
+          {
+            ...bugCard,
+            taskLink: {
+              taskId: 'KVG-9',
+              sessionId: 'session-9',
+              workspacePath: '/tmp/kvg-9',
+              repo: 'octo/cat',
+              title: 'Fix the thing',
+            },
+          },
+        ],
+      },
+    ]
+    render(Board, { props: { ...props(), columns, onCardClick, onOpenTask } })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Open OpenForge task KVG-9: Fix the thing' }))
+
+    expect(onOpenTask).toHaveBeenCalledWith('KVG-9')
+    expect(onCardClick).not.toHaveBeenCalled()
   })
 })
 

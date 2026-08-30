@@ -1,12 +1,15 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { JsonValue, PluginStorage } from '@openforge-app/plugin-sdk'
+import type { Task } from '@openforge-app/plugin-sdk/domain'
 import { createMemoryPluginStorage, createOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
-import { emptyHierarchy, type BoardCard } from './board'
+import { emptyHierarchy, type BoardCard, type IssueTaskLink } from './board'
 import {
   buildIssueTaskPrompt,
   findIssueTaskLinkForTask,
+  keepLiveIssueTaskLinks,
   loadIssueTaskLinkForTask,
   loadIssueTaskLinks,
+  loadVisibleIssueTaskLinks,
   startIssueAction,
 } from './issueActions'
 
@@ -326,4 +329,118 @@ describe('issue actions', () => {
 
     expect(findIssueTaskLinkForTask({}, 'KVG-42')).toBeNull()
   })
+
+  it('drops stored links whose Task is no longer on any board surface', () => {
+    const live: IssueTaskLink = {
+      taskId: 'KVG-live',
+      sessionId: 'session-live',
+      workspacePath: '/tmp/live',
+      repo: 'octo/cat',
+      title: 'Still open',
+    }
+    const completed: IssueTaskLink = {
+      taskId: 'KVG-done',
+      sessionId: 'session-done',
+      workspacePath: '/tmp/done',
+      repo: 'octo/cat',
+      title: 'Completed away',
+    }
+
+    expect(
+      keepLiveIssueTaskLinks(
+        { 10: live, 11: completed },
+        ['KVG-live'],
+      ),
+    ).toEqual({ 10: live })
+  })
+
+  it('hides the chip after Complete, when the Task is gone from the live project list', async () => {
+    const storage = createMemoryPluginStorage()
+    const liveLink = {
+      taskId: 'KVG-live',
+      sessionId: 'session-live',
+      workspacePath: '/tmp/live',
+      repo: 'octo/cat',
+      title: 'Still open',
+    }
+    const completedLink = {
+      taskId: 'KVG-done',
+      sessionId: 'session-done',
+      workspacePath: '/tmp/done',
+      repo: 'octo/cat',
+      title: 'Completed away',
+    }
+    await storage.project('P-1').set('issueTaskLinks', { 10: liveLink, 11: completedLink })
+    const registry = createOpenForgeRegistryFake({
+      pluginId: 'com.openforge.issues',
+      projectId: 'P-1',
+      storage,
+      tasks: [makeTask('KVG-live')],
+    })
+
+    await expect(loadVisibleIssueTaskLinks(registry.frontendApi, 'P-1')).resolves.toEqual({ 10: liveLink })
+  })
+
+  it('hides a stored link when Complete has set the Task status to done', async () => {
+    const storage = createMemoryPluginStorage()
+    const completedLink = {
+      taskId: 'KVG-done',
+      sessionId: 'session-done',
+      workspacePath: '/tmp/done',
+      repo: 'octo/cat',
+      title: 'Completed away',
+    }
+    await storage.project('P-1').set('issueTaskLinks', { 11: completedLink })
+    const registry = createOpenForgeRegistryFake({
+      pluginId: 'com.openforge.issues',
+      projectId: 'P-1',
+      storage,
+      tasks: [{ ...makeTask('KVG-done'), status: 'done' }],
+    })
+
+    await expect(loadVisibleIssueTaskLinks(registry.frontendApi, 'P-1')).resolves.toEqual({})
+  })
+
+  it('keeps stored chips when the live Task list cannot be read', async () => {
+    const storage = createMemoryPluginStorage()
+    const storedLink = {
+      taskId: 'KVG-42',
+      sessionId: 'session-42',
+      workspacePath: '/tmp/kvg-42',
+      repo: 'octo/cat',
+      title: 'Linked ticket',
+    }
+    await storage.project('P-1').set('issueTaskLinks', { 42: storedLink })
+    const registry = createOpenForgeRegistryFake({
+      pluginId: 'com.openforge.issues',
+      projectId: 'P-1',
+      storage,
+    })
+    registry.frontendApi.tasks.list = async () => {
+      throw new Error('task list unavailable')
+    }
+
+    await expect(loadVisibleIssueTaskLinks(registry.frontendApi, 'P-1')).resolves.toEqual({ 42: storedLink })
+  })
 })
+
+function makeTask(id: string): Task {
+  return {
+    id,
+    initial_prompt: '',
+    status: 'backlog',
+    prompt: null,
+    title: null,
+    title_source: null,
+    title_generated_at: null,
+    agent: null,
+    permission_mode: null,
+    worktree_source: null,
+    worktree_branch: null,
+    source_ticket_url: null,
+    depends_on: [],
+    project_id: 'P-1',
+    created_at: 0,
+    updated_at: 0,
+  }
+}
