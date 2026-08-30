@@ -83,9 +83,8 @@ describe('useIssuesDrawer', () => {
       labels: ['alpha'],
       value: null,
       taskLink: null,
+      ...emptyHierarchy(),
       parentIssueNumber: 35,
-      subIssues: [],
-      subIssuesSummary: null,
     }
     const parent = {
       issueNumber: 35,
@@ -94,7 +93,7 @@ describe('useIssuesDrawer', () => {
       labels: ['alpha'],
       value: null,
       taskLink: null,
-      parentIssueNumber: null,
+      ...emptyHierarchy(),
       subIssues: [child],
       subIssuesSummary: { total: 1, completed: 0, percentCompleted: 0 },
     }

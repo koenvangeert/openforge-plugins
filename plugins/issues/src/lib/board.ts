@@ -1,12 +1,19 @@
 // Pure board-assembly logic, ported from the standalone github-roadmap app
 // (src/lib/board/{columns,sort,build,optimistic}.ts). Adapted for the OpenForge
-// MVP: no PRs, no manual ordering, no comments. Cards sort by value descending,
+// MVP: no manual ordering, no comments. Cards sort by value descending,
 // then issue number descending. All functions are pure.
 
 export interface SubIssuesSummary {
   total: number
   completed: number
   percentCompleted: number
+}
+
+export interface LinkedPullRequest {
+  number: number
+  title: string
+  htmlUrl: string
+  state: string
 }
 
 export interface BoardIssue {
@@ -16,6 +23,7 @@ export interface BoardIssue {
   labels: string[]
   parentIssueNumber?: number | null
   subIssuesSummary?: SubIssuesSummary | null
+  linkedPullRequests?: LinkedPullRequest[]
 }
 export interface IssueTaskLink {
   taskId: string
@@ -35,6 +43,7 @@ export interface BoardCard {
   parentIssueNumber: number | null
   subIssues: BoardCard[]
   subIssuesSummary: SubIssuesSummary | null
+  linkedPullRequests: LinkedPullRequest[]
 }
 
 export interface BoardColumn {
@@ -69,9 +78,9 @@ export const OTHER_TITLE = 'No label / Other'
 
 export function emptyHierarchy(): Pick<
   BoardCard,
-  'parentIssueNumber' | 'subIssues' | 'subIssuesSummary'
+  'parentIssueNumber' | 'subIssues' | 'subIssuesSummary' | 'linkedPullRequests'
 > {
-  return { parentIssueNumber: null, subIssues: [], subIssuesSummary: null }
+  return { parentIssueNumber: null, subIssues: [], subIssuesSummary: null, linkedPullRequests: [] }
 }
 
 /** Depth-first flattening of a card tree, parent before its sub-issues. */
@@ -230,6 +239,7 @@ export function buildBoard(input: BuildBoardInput): BoardModel {
     parentIssueNumber: i.parentIssueNumber ?? null,
     subIssues: [],
     subIssuesSummary: i.subIssuesSummary ?? null,
+    linkedPullRequests: i.linkedPullRequests ?? [],
   }))
 
   return {

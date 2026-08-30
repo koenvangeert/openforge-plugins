@@ -148,6 +148,28 @@ describe('buildBoard', () => {
     })
     expect(cards.find((c) => c.issueNumber === 2)!.taskLink).toBeNull()
   })
+
+  it('attaches linked pull requests to matching issue cards', () => {
+    const linked = {
+      number: 99,
+      title: 'Fix hydrate',
+      htmlUrl: 'https://github.com/a/b/pull/99',
+      state: 'open',
+    }
+    const model = buildBoard({
+      repo: 'a/b',
+      issues: [
+        { number: 1, title: 'linked', body: null, labels: ['bug'], linkedPullRequests: [linked] },
+        { number: 2, title: 'plain', body: null, labels: ['bug'] },
+      ],
+      columnLabels: ['bug'],
+      values: {},
+    })
+
+    const cards = model.columns.find((c) => c.label === 'bug')!.cards
+    expect(cards.find((c) => c.issueNumber === 1)!.linkedPullRequests).toEqual([linked])
+    expect(cards.find((c) => c.issueNumber === 2)!.linkedPullRequests).toEqual([])
+  })
 })
 
 describe('applyCreate', () => {

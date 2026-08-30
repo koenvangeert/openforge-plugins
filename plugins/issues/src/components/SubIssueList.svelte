@@ -3,6 +3,7 @@
   import type { BoardCard } from '../lib/board'
   import { cardExcerpt, type SearchTerms } from '../lib/search'
   import HighlightedText from './HighlightedText.svelte'
+  import LinkedPullRequestLinks from './LinkedPullRequestLinks.svelte'
   import SubIssueList from './SubIssueList.svelte'
 
   interface Props {
@@ -11,11 +12,12 @@
     terms?: SearchTerms
     onOpen: (card: BoardCard) => void
     onContextMenu: (event: MouseEvent, card: BoardCard) => void
+    onOpenUrl: (url: string) => void
     isExpanded: (issueNumber: number) => boolean
     onToggleExpand: (issueNumber: number) => void
   }
 
-  let { issues, parentNumber, terms = [], onOpen, onContextMenu, isExpanded, onToggleExpand }: Props =
+  let { issues, parentNumber, terms = [], onOpen, onContextMenu, onOpenUrl, isExpanded, onToggleExpand }: Props =
     $props()
 
   function handleKeydown(event: KeyboardEvent, card: BoardCard) {
@@ -78,6 +80,7 @@
                 aria-label={`${issue.subIssuesSummary.completed} of ${issue.subIssuesSummary.total} sub-issues complete`}
               >{issue.subIssuesSummary.completed}/{issue.subIssuesSummary.total}</span>
             {/if}
+            <LinkedPullRequestLinks pullRequests={issue.linkedPullRequests} {onOpenUrl} />
           </div>
           {#if excerpt}
             <p class="sub-issue-excerpt">
@@ -95,6 +98,7 @@
           {onToggleExpand}
           {onOpen}
           {onContextMenu}
+          {onOpenUrl}
         />
       {/if}
     </li>
