@@ -3,8 +3,9 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import type { Task } from '@openforge-app/plugin-sdk/domain'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
+import { clearCollapsedSections } from '@openforge-app/plugin-sdk/collapsibleSectionState'
 import { createOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import HandoffNotesTaskSection from './HandoffNotesTaskSection.svelte'
 import { HANDOFF_NOTES_STORAGE_KEY } from './handoffNotesStorage'
 
@@ -66,6 +67,10 @@ function renderSection(api: FrontendOpenForgeAPI) {
 }
 
 describe('HandoffNotesTaskSection', () => {
+  beforeEach(() => {
+    clearCollapsedSections()
+  })
+
   it('heads the section with a decorative icon that leaves the toggle name intact', async () => {
     const { api } = await makeHarness('Ready to hand off.')
 
@@ -93,6 +98,19 @@ describe('HandoffNotesTaskSection', () => {
     expect(await screen.findByText('Ready to hand off.')).toBeTruthy()
   })
 
+  it('remembers a collapsed section across remounts', async () => {
+    const { api } = await makeHarness('Ready to hand off.')
+
+    const view = renderSection(api)
+    await fireEvent.click(screen.getByRole('button', { name: 'Handoff Notes' }))
+    view.unmount()
+
+    renderSection(api)
+
+    const toggle = screen.getByRole('button', { name: 'Handoff Notes' })
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+  })
+
   it('keeps the notes painted through host re-renders of the same Task', async () => {
     const { api: base } = await makeHarness('Ready to hand off.')
     const get = vi.fn(async () => makeTask())
@@ -103,7 +121,7 @@ describe('HandoffNotesTaskSection', () => {
     await settled()
     expect(get).toHaveBeenCalledTimes(1)
 
-    const content = view.container.querySelector('.handoff-section-content') as HTMLElement
+    const content = view.container.querySelector('[id^="info-section-"]') as HTMLElement
     const repaints: string[] = []
     const observer = new MutationObserver(() => repaints.push(content.textContent ?? ''))
     observer.observe(content, { childList: true, subtree: true, characterData: true })

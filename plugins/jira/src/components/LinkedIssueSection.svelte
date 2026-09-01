@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import Link from '@lucide/svelte/icons/link'
+  import { collapsedSections, isSectionCollapsed, pluginSectionKey } from '@openforge-app/plugin-sdk/collapsibleSectionState'
   import type { PluginTaskUISectionProps } from '@openforge-app/plugin-sdk/frontend'
+  import CollapsibleSection from '@openforge-app/plugin-sdk/ui/CollapsibleSection.svelte'
   import { isValidIssueKey } from '../lib/issueKey'
   import type { JiraIssue } from '../lib/jiraTypes'
   import { REFRESH_EVENT } from '../lib/protocol'
@@ -14,9 +16,8 @@
     suggestIssueKey,
   } from '../lib/taskLink'
 
-  let { api, taskId }: PluginTaskUISectionProps = $props()
+  let { api, context, taskId }: PluginTaskUISectionProps = $props()
 
-  let expanded = $state(true)
   let initialized = $state(false)
   let linkedKey = $state<string | null>(null)
   let issue = $state<JiraIssue | null>(null)
@@ -30,7 +31,9 @@
   let refreshGeneration = 0
   let lifecycleGeneration = 0
   let loadedTaskId: string | null = null
-  let contentId = $derived(`jira-linked-issue-${taskId}`)
+  let sectionKey = $derived(pluginSectionKey(context.pluginId, 'linked-issue'))
+  let expanded = $derived(!isSectionCollapsed($collapsedSections, sectionKey))
+  let observedExpanded: boolean | null = null
 
   function isCurrentTask(expectedTaskId: string, expectedLifecycle: number): boolean {
     return taskId === expectedTaskId && lifecycleGeneration === expectedLifecycle
@@ -154,11 +157,6 @@
     }
   }
 
-  function toggleExpanded() {
-    expanded = !expanded
-    if (expanded && initialized && linkedKey) void refresh()
-  }
-
   async function openInJira() {
     if (!issue) return
     try {
@@ -232,108 +230,84 @@
     loadedTaskId = nextTaskId
     void initialize(nextTaskId)
   })
+
+  /**
+   * Revalidate on reopen. The shared section chrome owns the toggle, so the
+   * collapsed-state transition is the only signal left that the body came back
+   * on screen; the mount transition is excluded because `initialize` covers it.
+   */
+  $effect(() => {
+    const nextExpanded = expanded
+    const wasExpanded = observedExpanded
+    observedExpanded = nextExpanded
+    if (wasExpanded === null || wasExpanded === nextExpanded || !nextExpanded) return
+    if (initialized && linkedKey) void refresh()
+  })
 </script>
 
-<!--
-  The header geometry, the caret column and the content inset below are the
-  host's own collapsible-info-section contract, copied class for class. A plugin
-  section sits between host sections, so anything less than an exact copy shows
-  up as a misaligned chevron, icon and body against Details and Dependencies.
--->
-<section
-  data-task-info-card="linked-issue"
-  data-card-sizing="natural"
-  class="shrink-0 overflow-hidden rounded-lg border border-base-300/70 bg-base-100 [--section-inset:0.75rem] [--section-caret-column:1.25rem]"
-  aria-label="Linked Issue"
->
-  <div class="flex items-stretch {expanded ? 'border-b border-base-300/70' : ''}">
-    <h3 class="m-0 min-w-0 flex-1">
-      <button
-        type="button"
-        class="flex w-full items-center gap-2 rounded px-[var(--section-inset)] py-2 text-left text-sm font-semibold text-base-content hover:bg-base-200/40 focus-visible:ring-2 focus-visible:ring-primary"
-        aria-expanded={expanded}
-        aria-controls={contentId}
-        onclick={toggleExpanded}
-      >
-        <span
-          class="w-3 shrink-0 text-center text-[0.7rem] leading-none text-base-content/40 transition-transform duration-150 {expanded ? '' : '-rotate-90'}"
-          aria-hidden="true"
-        >▾</span>
-        <span class="flex shrink-0 items-center text-base-content/50" aria-hidden="true">
-          <Link size={14} />
-        </span>
-        <span class="truncate">Linked Issue</span>
-      </button>
-    </h3>
-  </div>
-
-  {#if expanded}
-    <div
-      id={contentId}
-      class="py-2 pl-[calc(var(--section-inset)_+_var(--section-caret-column))] pr-[var(--section-inset)]"
-      aria-busy={loading}
-    >
-      {#if !initialized}
-        <p class="m-0 text-sm text-base-content/60">Loading Issue Link…</p>
-      {:else if linkedKey}
-        <div class="flex flex-col gap-2">
-          <div class="flex flex-wrap items-center gap-2">
-            <span class="font-mono text-sm font-semibold text-base-content">{linkedKey}</span>
-            {#if issue}<span class="badge badge-outline badge-sm">{issue.status}</span>{/if}
-          </div>
-
-          {#if issue}
-            <p class="m-0 text-sm font-medium text-base-content">{issue.summary}</p>
-            <p class="m-0 text-sm text-base-content/70">{descriptionExcerpt(issue.descriptionHtml)}</p>
-          {:else if loading}
-            <p class="m-0 text-sm text-base-content/60">Loading {linkedKey}…</p>
-          {/if}
-
-          {#if error}<p class="alert alert-error m-0 py-2 text-sm" role="alert">{error}</p>{/if}
-
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <span class="text-xs text-base-content/50">{formatRefreshTime(refreshedAt)}</span>
-            <div class="flex flex-wrap items-center gap-1">
-              {#if issue}
-                <button class="btn btn-ghost btn-xs" type="button" onclick={openInJira}>
-                  Open in Jira
-                </button>
-              {/if}
-              <button class="btn btn-ghost btn-xs" type="button" onclick={() => void refresh({ force: true })} disabled={loading}>
-                {loading ? 'Refreshing…' : 'Refresh'}
-              </button>
-              <button class="btn btn-ghost btn-xs" type="button" onclick={() => void unlink()} disabled={unlinking}>
-                {unlinking ? 'Unlinking…' : 'Unlink'}
-              </button>
-            </div>
-          </div>
+<CollapsibleSection {sectionKey} title="Linked Issue" cardId="linked-issue">
+  {#snippet icon()}<Link size={14} />{/snippet}
+  <div class="py-2" aria-busy={loading}>
+    {#if !initialized}
+      <p class="m-0 text-sm text-base-content/60">Loading Issue Link…</p>
+    {:else if linkedKey}
+      <div class="flex flex-col gap-2">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="font-mono text-sm font-semibold text-base-content">{linkedKey}</span>
+          {#if issue}<span class="badge badge-outline badge-sm">{issue.status}</span>{/if}
         </div>
-      {:else}
-        <div class="flex flex-col gap-2">
-          <p class="m-0 text-sm text-base-content/60">This Task isn't linked to a Jira Issue.</p>
-          {#if suggestion}
-            <p class="m-0 text-xs text-base-content/60">
-              Suggested from Task text: <strong class="font-mono text-base-content">{suggestion}</strong>. Confirm to link.
-            </p>
-          {/if}
-          <form class="flex flex-wrap items-end gap-2" onsubmit={(event) => { event.preventDefault(); void link() }}>
-            <label class="form-control min-w-32 flex-1 gap-1">
-              <span class="text-xs text-base-content/60">Issue Key</span>
-              <input
-                class="input input-bordered input-sm w-full"
-                type="text"
-                placeholder="PROJ-123"
-                autocomplete="off"
-                bind:value={inputKey}
-              />
-            </label>
-            <button class="btn btn-primary btn-sm" type="submit" disabled={linking}>
-              {linking ? 'Linking…' : 'Link Issue'}
+
+        {#if issue}
+          <p class="m-0 text-sm font-medium text-base-content">{issue.summary}</p>
+          <p class="m-0 text-sm text-base-content/70">{descriptionExcerpt(issue.descriptionHtml)}</p>
+        {:else if loading}
+          <p class="m-0 text-sm text-base-content/60">Loading {linkedKey}…</p>
+        {/if}
+
+        {#if error}<p class="alert alert-error m-0 py-2 text-sm" role="alert">{error}</p>{/if}
+
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <span class="text-xs text-base-content/50">{formatRefreshTime(refreshedAt)}</span>
+          <div class="flex flex-wrap items-center gap-1">
+            {#if issue}
+              <button class="btn btn-ghost btn-xs" type="button" onclick={openInJira}>
+                Open in Jira
+              </button>
+            {/if}
+            <button class="btn btn-ghost btn-xs" type="button" onclick={() => void refresh({ force: true })} disabled={loading}>
+              {loading ? 'Refreshing…' : 'Refresh'}
             </button>
-          </form>
-          {#if error}<p class="alert alert-error m-0 py-2 text-sm" role="alert">{error}</p>{/if}
+            <button class="btn btn-ghost btn-xs" type="button" onclick={() => void unlink()} disabled={unlinking}>
+              {unlinking ? 'Unlinking…' : 'Unlink'}
+            </button>
+          </div>
         </div>
-      {/if}
-    </div>
-  {/if}
-</section>
+      </div>
+    {:else}
+      <div class="flex flex-col gap-2">
+        <p class="m-0 text-sm text-base-content/60">This Task isn't linked to a Jira Issue.</p>
+        {#if suggestion}
+          <p class="m-0 text-xs text-base-content/60">
+            Suggested from Task text: <strong class="font-mono text-base-content">{suggestion}</strong>. Confirm to link.
+          </p>
+        {/if}
+        <form class="flex flex-wrap items-end gap-2" onsubmit={(event) => { event.preventDefault(); void link() }}>
+          <label class="form-control min-w-32 flex-1 gap-1">
+            <span class="text-xs text-base-content/60">Issue Key</span>
+            <input
+              class="input input-bordered input-sm w-full"
+              type="text"
+              placeholder="PROJ-123"
+              autocomplete="off"
+              bind:value={inputKey}
+            />
+          </label>
+          <button class="btn btn-primary btn-sm" type="submit" disabled={linking}>
+            {linking ? 'Linking…' : 'Link Issue'}
+          </button>
+        </form>
+        {#if error}<p class="alert alert-error m-0 py-2 text-sm" role="alert">{error}</p>{/if}
+      </div>
+    {/if}
+  </div>
+</CollapsibleSection>

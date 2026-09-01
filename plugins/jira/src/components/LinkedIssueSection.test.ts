@@ -4,8 +4,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import type { JsonValue } from '@openforge-app/plugin-sdk'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import type { Task } from '@openforge-app/plugin-sdk/domain'
+import { clearCollapsedSections } from '@openforge-app/plugin-sdk/collapsibleSectionState'
 import { createOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { IssueResult, JiraIssue } from '../lib/jiraTypes'
 import { REFRESH_EVENT, TASK_KEY } from '../lib/protocol'
 import LinkedIssueSection from './LinkedIssueSection.svelte'
@@ -100,6 +101,10 @@ function renderSection(api: FrontendOpenForgeAPI, taskId = TASK_ID) {
 }
 
 describe('LinkedIssueSection', () => {
+  beforeEach(() => {
+    clearCollapsedSections()
+  })
+
   it('heads the section with a decorative icon that leaves the toggle name intact', async () => {
     const { api } = makeHarness()
 
@@ -107,6 +112,19 @@ describe('LinkedIssueSection', () => {
 
     const toggle = await screen.findByRole('button', { name: 'Linked Issue' })
     expect(toggle.querySelector('[aria-hidden="true"] svg')).toBeTruthy()
+  })
+
+  it('remembers a collapsed section across remounts', async () => {
+    const { api } = makeHarness()
+
+    const view = renderSection(api)
+    await fireEvent.click(await screen.findByRole('button', { name: 'Linked Issue' }))
+    view.unmount()
+
+    renderSection(api)
+
+    const toggle = await screen.findByRole('button', { name: 'Linked Issue' })
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
   })
 
   it('shows the compact unlinked state for a Task without an Issue Link', async () => {

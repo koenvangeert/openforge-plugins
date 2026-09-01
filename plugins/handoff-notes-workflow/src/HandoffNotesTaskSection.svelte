@@ -1,37 +1,17 @@
 <script lang="ts">
   import NotebookPen from '@lucide/svelte/icons/notebook-pen'
+  import { pluginSectionKey } from '@openforge-app/plugin-sdk/collapsibleSectionState'
   import type { PluginTaskUISectionProps } from '@openforge-app/plugin-sdk/frontend'
+  import CollapsibleSection from '@openforge-app/plugin-sdk/ui/CollapsibleSection.svelte'
   import HandoffNotesTaskPane from './HandoffNotesTaskPane.svelte'
   import './HandoffNotesTaskView.css'
 
-  let { api, taskId, projectId }: PluginTaskUISectionProps = $props()
+  let { api, context, taskId, projectId }: PluginTaskUISectionProps = $props()
 
-  let expanded = $state(true)
-  let contentId = $derived(`handoff-notes-section-${taskId}`)
+  let sectionKey = $derived(pluginSectionKey(context.pluginId, 'handoff-notes'))
 </script>
 
-<section class="handoff-section" data-task-info-card="handoff-notes" data-card-sizing="natural" aria-label="Handoff Notes">
-  <div class="handoff-section-header" class:collapsed={!expanded}>
-    <h3 class="handoff-section-heading">
-      <button
-        type="button"
-        class="handoff-section-toggle"
-        aria-expanded={expanded}
-        aria-controls={contentId}
-        onclick={() => { expanded = !expanded }}
-      >
-        <span class="handoff-section-chevron" class:collapsed={!expanded} aria-hidden="true">▾</span>
-        <span class="handoff-section-icon" aria-hidden="true">
-          <NotebookPen size={14} />
-        </span>
-        <span class="handoff-section-title">Handoff Notes</span>
-      </button>
-    </h3>
-  </div>
-
-  {#if expanded}
-    <div id={contentId} class="handoff-section-content">
-      <HandoffNotesTaskPane {api} {taskId} {projectId} layout="task-info" />
-    </div>
-  {/if}
-</section>
+<CollapsibleSection {sectionKey} title="Handoff Notes" cardId="handoff-notes">
+  {#snippet icon()}<NotebookPen size={14} />{/snippet}
+  <HandoffNotesTaskPane {api} {taskId} {projectId} layout="task-info" />
+</CollapsibleSection>
