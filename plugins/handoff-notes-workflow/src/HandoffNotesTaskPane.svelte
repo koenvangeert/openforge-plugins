@@ -17,14 +17,26 @@
 
   const loadTracker = createHandoffNotesLoadTracker()
   let requestSequence = 0
+  let loadedTaskId: string | null = null
+  let loadedProjectId: string | null = null
+  let hasLoaded = false
   let loading = $state(true)
   let unavailableMessage = $state<string | null>(null)
   let loadError = $state<string | null>(null)
   let notes = $state('')
 
+  /**
+   * Load once per Task/Project pair. The host re-renders this pane on store
+   * ticks unrelated to the Task, handing over a fresh api object each time, and
+   * reloading on those re-fetched the notes and flashed the placeholder.
+   */
   $effect(() => {
     const selectedTaskId = taskId
     const activeProjectId = projectId
+    if (hasLoaded && selectedTaskId === loadedTaskId && activeProjectId === loadedProjectId) return
+    hasLoaded = true
+    loadedTaskId = selectedTaskId
+    loadedProjectId = activeProjectId
     const request = ++requestSequence
     void load(selectedTaskId, activeProjectId, request)
   })

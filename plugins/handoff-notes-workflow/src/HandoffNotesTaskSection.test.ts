@@ -4,7 +4,7 @@ import { fireEvent, render, screen } from '@testing-library/svelte'
 import type { Task } from '@openforge-app/plugin-sdk/domain'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import { createOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import HandoffNotesTaskSection from './HandoffNotesTaskSection.svelte'
 import { HANDOFF_NOTES_STORAGE_KEY } from './handoffNotesStorage'
 
@@ -48,6 +48,11 @@ async function makeHarness(notes: string) {
   return { api }
 }
 
+/** Let the in-flight load finish so an absent repaint means absent, not late. */
+async function settled(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0))
+}
+
 function renderSection(api: FrontendOpenForgeAPI) {
   return render(HandoffNotesTaskSection, {
     props: {
@@ -86,5 +91,38 @@ describe('HandoffNotesTaskSection', () => {
     await fireEvent.click(toggle)
     expect(toggle.getAttribute('aria-expanded')).toBe('true')
     expect(await screen.findByText('Ready to hand off.')).toBeTruthy()
+  })
+
+  it('keeps the notes painted through host re-renders of the same Task', async () => {
+    const { api: base } = await makeHarness('Ready to hand off.')
+    const get = vi.fn(async () => makeTask())
+    const api: FrontendOpenForgeAPI = { ...base, tasks: { ...base.tasks, get } }
+
+    const view = renderSection(api)
+    expect(await screen.findByText('Ready to hand off.')).toBeTruthy()
+    await settled()
+    expect(get).toHaveBeenCalledTimes(1)
+
+    const content = view.container.querySelector('.handoff-section-content') as HTMLElement
+    const repaints: string[] = []
+    const observer = new MutationObserver(() => repaints.push(content.textContent ?? ''))
+    observer.observe(content, { childList: true, subtree: true, characterData: true })
+
+    for (let tick = 0; tick < 3; tick += 1) {
+      await view.rerender({
+        api: { ...api },
+        context: api.context.getSnapshot(),
+        taskId: TASK_ID,
+        projectId: PROJECT_ID,
+        taskActionPending: false,
+      })
+      await settled()
+    }
+    observer.disconnect()
+
+    expect(repaints).toEqual([])
+    expect(get).toHaveBeenCalledTimes(1)
+    expect(screen.getByText('Ready to hand off.')).toBeTruthy()
+    expect(screen.queryByText('Loading Handoff Notes…')).toBeNull()
   })
 })
