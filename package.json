@@ -15,6 +15,6 @@
     "typecheck": "pnpm -r run typecheck"
   },
   "devDependencies": {
-    "@openforge-app/plugin-sdk": "^0.2.9"
+    "@openforge-app/plugin-sdk": "^0.3.1"
   }
 }

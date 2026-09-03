@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@lucide/svelte": "^1.25.0",
-    "@openforge-app/plugin-sdk": "^0.2.9",
+    "@openforge-app/plugin-sdk": "^0.3.1",
     "chart.js": "^4.5.1"
   },
   "peerDependencies": {

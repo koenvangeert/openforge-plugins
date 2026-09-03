@@ -27,7 +27,7 @@ workspace/tmp/
 ```
 
 `@openforge-app/plugin-sdk` is published to npm, and this repo's own
-devDependency tracks `^0.2.9` as the reference contract. The four plugins under
+devDependency tracks `^0.3.1` as the reference contract. The four plugins under
 `plugins/` still link the SDK from the sibling checkout, which is why the layout
 above is still required to build them; new plugins depend on the published
 version instead.
@@ -101,7 +101,7 @@ collides with core (`com.openforge.*`). Declare only the capabilities you use in
     "test": "vitest run"
   },
   "dependencies": {
-    "@openforge-app/plugin-sdk": "^0.2.9"
+    "@openforge-app/plugin-sdk": "^0.3.1"
   },
   "peerDependencies": {
     "svelte": "^5.0.0"
