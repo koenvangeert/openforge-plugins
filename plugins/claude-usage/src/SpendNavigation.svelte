@@ -44,7 +44,15 @@
   {/snippet}
   {#snippet trailing()}
     {#if last30Days !== null}
-      <span class="text-xs tabular-nums text-base-content/45">{formatMoney(last30Days)}</span>
+      <span class="usage-sidebar-amount">{formatMoney(last30Days)}</span>
     {/if}
   {/snippet}
 </PluginSidebarLink>
+
+<style>
+  .usage-sidebar-amount {
+    color: var(--of-text-muted);
+    font-size: var(--of-text-xs);
+    font-variant-numeric: tabular-nums;
+  }
+</style>
