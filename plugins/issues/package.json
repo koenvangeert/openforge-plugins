@@ -10,7 +10,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.111.0",
     "@lucide/svelte": "^1.25.0",
-    "@openforge-app/plugin-sdk": "link:../../../openforge/packages/plugin-sdk"
+    "@openforge-app/plugin-sdk": "^0.3.2"
   },
   "peerDependencies": {
     "svelte": "^5.0.0"

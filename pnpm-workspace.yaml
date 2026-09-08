@@ -7,20 +7,20 @@ packages:
 # in the OpenForge repo). Plugins reference these with "catalog:" so every plugin
 # in this monorepo builds against one identical toolchain and cannot drift.
 #
-# NOTE: @openforge-app/plugin-sdk is intentionally NOT in this catalog. It is linked
-# per-plugin from the sibling OpenForge checkout with
-#   "@openforge-app/plugin-sdk": "link:../../../openforge/packages/plugin-sdk"
-# because pnpm does not support the link: protocol inside a catalog
-# (ERR_PNPM_CATALOG_ENTRY_INVALID_SPEC). A registry version of the SDK could live
-# here; a link: cannot.
+# NOTE: @openforge-app/plugin-sdk is intentionally NOT in this catalog. Plugins
+# depend on it by registry version, and a plugin co-developed with the SDK swaps
+# that for "link:../../../openforge/packages/plugin-sdk". pnpm rejects the link:
+# protocol inside a catalog (ERR_PNPM_CATALOG_ENTRY_INVALID_SPEC), so the SDK stays
+# a per-plugin dependency.
 catalog:
   # EXACT pin (no caret): plugin frontend bundles externalize `svelte/internal/*`
   # and resolve it at runtime to the host's shared Svelte instance
   # (plugin://host-runtime/svelte). That internal API is private and version-locked,
   # so the version a plugin COMPILES against must exactly equal the version the host
-  # SHIPS — a caret range let this float to 5.56.5 against a 5.56.4 host and threw
-  # `effect_orphan` on mount. Keep this equal to `svelte` in ../openforge/package.json.
-  svelte: 5.56.5
+  # SHIPS. A caret range let this float to 5.56.5 against a 5.56.4 host and threw
+  # `effect_orphan` on mount. Keep this equal to the `pinned` catalog's `svelte` in
+  # ../openforge/pnpm-workspace.yaml.
+  svelte: 5.57.0
   svelte-check: ^4.7.2
   '@sveltejs/vite-plugin-svelte': ^7.1.2
   '@testing-library/svelte': ^5.3.1

@@ -16,8 +16,8 @@ catalogs:
       specifier: ^25.9.3
       version: 25.9.5
     svelte:
-      specifier: 5.56.5
-      version: 5.56.5
+      specifier: 5.57.0
+      version: 5.57.0
     svelte-check:
       specifier: ^4.7.2
       version: 4.7.2
@@ -36,27 +36,27 @@ importers:
   .:
     devDependencies:
       '@openforge-app/plugin-sdk':
-        specifier: ^0.3.1
-        version: 0.3.1(svelte@5.56.5)
+        specifier: ^0.3.2
+        version: 0.3.2(svelte@5.57.0)
 
   plugins/claude-usage:
     dependencies:
       '@lucide/svelte':
         specifier: ^1.25.0
-        version: 1.25.0(svelte@5.56.5)
+        version: 1.25.0(svelte@5.57.0)
       '@openforge-app/plugin-sdk':
-        specifier: ^0.3.1
-        version: 0.3.1(svelte@5.56.5)
+        specifier: ^0.3.2
+        version: 0.3.2(svelte@5.57.0)
       chart.js:
         specifier: ^4.5.1
         version: 4.5.1
     devDependencies:
       '@sveltejs/vite-plugin-svelte':
         specifier: 'catalog:'
-        version: 7.2.0(svelte@5.56.5)(vite@8.1.3(@types/node@25.9.5))
+        version: 7.2.0(svelte@5.57.0)(vite@8.1.3(@types/node@25.9.5))
       '@testing-library/svelte':
         specifier: 'catalog:'
-        version: 5.4.2(svelte@5.56.5)(vite@8.1.3(@types/node@25.9.5))(vitest@4.1.10(@types/node@25.9.5)(jsdom@26.1.0)(vite@8.1.3(@types/node@25.9.5)))
+        version: 5.4.2(svelte@5.57.0)(vite@8.1.3(@types/node@25.9.5))(vitest@4.1.10(@types/node@25.9.5)(jsdom@26.1.0)(vite@8.1.3(@types/node@25.9.5)))
       '@types/node':
         specifier: 'catalog:'
         version: 25.9.5
@@ -65,10 +65,10 @@ importers:
         version: 26.1.0
       svelte:
         specifier: 'catalog:'
-        version: 5.56.5
+        version: 5.57.0
       svelte-check:
         specifier: 'catalog:'
-        version: 4.7.2(picomatch@4.0.5)(svelte@5.56.5)(typescript@6.0.3)
+        version: 4.7.2(picomatch@4.0.5)(svelte@5.57.0)(typescript@6.0.3)
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -83,17 +83,17 @@ importers:
     dependencies:
       '@lucide/svelte':
         specifier: ^1.25.0
-        version: 1.25.0(svelte@5.56.5)
+        version: 1.25.0(svelte@5.57.0)
       '@openforge-app/plugin-sdk':
-        specifier: link:../../../openforge/packages/plugin-sdk
-        version: link:../../../openforge/packages/plugin-sdk
+        specifier: ^0.3.2
+        version: 0.3.2(svelte@5.57.0)
     devDependencies:
       '@sveltejs/vite-plugin-svelte':
         specifier: 'catalog:'
-        version: 7.2.0(svelte@5.56.5)(vite@8.1.3(@types/node@25.9.5))
+        version: 7.2.0(svelte@5.57.0)(vite@8.1.3(@types/node@25.9.5))
       '@testing-library/svelte':
         specifier: 'catalog:'
-        version: 5.4.2(svelte@5.56.5)(vite@8.1.3(@types/node@25.9.5))(vitest@4.1.10(@types/node@25.9.5)(jsdom@26.1.0)(vite@8.1.3(@types/node@25.9.5)))
+        version: 5.4.2(svelte@5.57.0)(vite@8.1.3(@types/node@25.9.5))(vitest@4.1.10(@types/node@25.9.5)(jsdom@26.1.0)(vite@8.1.3(@types/node@25.9.5)))
       '@types/node':
         specifier: 'catalog:'
         version: 25.9.5
@@ -102,10 +102,10 @@ importers:
         version: 26.1.0
       svelte:
         specifier: 'catalog:'
-        version: 5.56.5
+        version: 5.57.0
       svelte-check:
         specifier: 'catalog:'
-        version: 4.7.2(picomatch@4.0.5)(svelte@5.56.5)(typescript@6.0.3)
+        version: 4.7.2(picomatch@4.0.5)(svelte@5.57.0)(typescript@6.0.3)
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -120,17 +120,17 @@ importers:
     dependencies:
       '@lucide/svelte':
         specifier: ^1.25.0
-        version: 1.25.0(svelte@5.56.5)
+        version: 1.25.0(svelte@5.57.0)
       '@openforge-app/plugin-sdk':
-        specifier: link:../../../openforge/packages/plugin-sdk
-        version: link:../../../openforge/packages/plugin-sdk
+        specifier: ^0.3.2
+        version: 0.3.2(svelte@5.57.0)
     devDependencies:
       '@sveltejs/vite-plugin-svelte':
         specifier: 'catalog:'
-        version: 7.2.0(svelte@5.56.5)(vite@8.1.3(@types/node@25.9.5))
+        version: 7.2.0(svelte@5.57.0)(vite@8.1.3(@types/node@25.9.5))
       '@testing-library/svelte':
         specifier: 'catalog:'
-        version: 5.4.2(svelte@5.56.5)(vite@8.1.3(@types/node@25.9.5))(vitest@4.1.10(@types/node@25.9.5)(jsdom@26.1.0)(vite@8.1.3(@types/node@25.9.5)))
+        version: 5.4.2(svelte@5.57.0)(vite@8.1.3(@types/node@25.9.5))(vitest@4.1.10(@types/node@25.9.5)(jsdom@26.1.0)(vite@8.1.3(@types/node@25.9.5)))
       '@types/node':
         specifier: 'catalog:'
         version: 25.9.5
@@ -139,7 +139,7 @@ importers:
         version: 26.1.0
       svelte:
         specifier: 'catalog:'
-        version: 5.56.5
+        version: 5.57.0
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -157,17 +157,17 @@ importers:
         version: 0.111.0
       '@lucide/svelte':
         specifier: ^1.25.0
-        version: 1.25.0(svelte@5.56.5)
+        version: 1.25.0(svelte@5.57.0)
       '@openforge-app/plugin-sdk':
-        specifier: link:../../../openforge/packages/plugin-sdk
-        version: link:../../../openforge/packages/plugin-sdk
+        specifier: ^0.3.2
+        version: 0.3.2(svelte@5.57.0)
     devDependencies:
       '@sveltejs/vite-plugin-svelte':
         specifier: 'catalog:'
-        version: 7.2.0(svelte@5.56.5)(vite@8.1.3(@types/node@25.9.5))
+        version: 7.2.0(svelte@5.57.0)(vite@8.1.3(@types/node@25.9.5))
       '@testing-library/svelte':
         specifier: 'catalog:'
-        version: 5.4.2(svelte@5.56.5)(vite@8.1.3(@types/node@25.9.5))(vitest@4.1.10(@types/node@25.9.5)(jsdom@26.1.0)(vite@8.1.3(@types/node@25.9.5)))
+        version: 5.4.2(svelte@5.57.0)(vite@8.1.3(@types/node@25.9.5))(vitest@4.1.10(@types/node@25.9.5)(jsdom@26.1.0)(vite@8.1.3(@types/node@25.9.5)))
       '@types/node':
         specifier: 'catalog:'
         version: 25.9.5
@@ -176,10 +176,10 @@ importers:
         version: 26.1.0
       svelte:
         specifier: 'catalog:'
-        version: 5.56.5
+        version: 5.57.0
       svelte-check:
         specifier: 'catalog:'
-        version: 4.7.2(picomatch@4.0.5)(svelte@5.56.5)(typescript@6.0.3)
+        version: 4.7.2(picomatch@4.0.5)(svelte@5.57.0)(typescript@6.0.3)
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -194,17 +194,17 @@ importers:
     dependencies:
       '@lucide/svelte':
         specifier: ^1.25.0
-        version: 1.25.0(svelte@5.56.5)
+        version: 1.25.0(svelte@5.57.0)
       '@openforge-app/plugin-sdk':
-        specifier: link:../../../openforge/packages/plugin-sdk
-        version: link:../../../openforge/packages/plugin-sdk
+        specifier: ^0.3.2
+        version: 0.3.2(svelte@5.57.0)
     devDependencies:
       '@sveltejs/vite-plugin-svelte':
         specifier: 'catalog:'
-        version: 7.2.0(svelte@5.56.5)(vite@8.1.3(@types/node@25.9.5))
+        version: 7.2.0(svelte@5.57.0)(vite@8.1.3(@types/node@25.9.5))
       '@testing-library/svelte':
         specifier: 'catalog:'
-        version: 5.4.2(svelte@5.56.5)(vite@8.1.3(@types/node@25.9.5))(vitest@4.1.10(@types/node@25.9.5)(jsdom@26.1.0)(vite@8.1.3(@types/node@25.9.5)))
+        version: 5.4.2(svelte@5.57.0)(vite@8.1.3(@types/node@25.9.5))(vitest@4.1.10(@types/node@25.9.5)(jsdom@26.1.0)(vite@8.1.3(@types/node@25.9.5)))
       '@types/node':
         specifier: 'catalog:'
         version: 25.9.5
@@ -213,10 +213,10 @@ importers:
         version: 26.1.0
       svelte:
         specifier: 'catalog:'
-        version: 5.56.5
+        version: 5.57.0
       svelte-check:
         specifier: 'catalog:'
-        version: 4.7.2(picomatch@4.0.5)(svelte@5.56.5)(typescript@6.0.3)
+        version: 4.7.2(picomatch@4.0.5)(svelte@5.57.0)(typescript@6.0.3)
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -350,8 +350,8 @@ packages:
       '@emnapi/core': ^1.7.1
       '@emnapi/runtime': ^1.7.1
 
-  '@openforge-app/plugin-sdk@0.3.1':
-    resolution: {integrity: sha512-LtHVslg8Gf3Q56H0tVknZy136Ophiym5S0JGET5rQmRVxo2KZG074u64hCXei2u2xs6182700kLtZ30wGo1l2Q==}
+  '@openforge-app/plugin-sdk@0.3.2':
+    resolution: {integrity: sha512-GAlFeRQZXKVrulkUo4qInjE2QvzrCkY7GZheHSycdjaompHnBFhdmRLUfAAVS7WOF75mkjj9FnY2Nke6nXOT+Q==}
     peerDependencies:
       svelte: ^5.0.0
 
@@ -1288,8 +1288,8 @@ packages:
     peerDependencies:
       svelte: ^5.30.2
 
-  svelte@5.56.5:
-    resolution: {integrity: sha512-P03YJmUy2JoOxYHb4Ka3oFat1hq2ko2it1MOItSjsJ4B6WgZPLc3+RyyU+57OGWhs3Ieq74EJpZtSnNXdAGgDw==}
+  svelte@5.57.0:
+    resolution: {integrity: sha512-NdbDn7fl4be1ViUG0oq/lvG6OZy3oENolV2ONjiqqsfVoeAfzaQAKUcEX3MrQod/Bebv1PgwET9rfXhgn9s4Kg==}
     engines: {node: '>=18'}
 
   symbol-tree@3.2.4:
@@ -1604,9 +1604,9 @@ snapshots:
 
   '@kurkle/color@0.3.4': {}
 
-  '@lucide/svelte@1.25.0(svelte@5.56.5)':
+  '@lucide/svelte@1.25.0(svelte@5.57.0)':
     dependencies:
-      svelte: 5.56.5
+      svelte: 5.57.0
 
   '@mermaid-js/parser@1.2.1':
     dependencies:
@@ -1619,15 +1619,15 @@ snapshots:
       '@tybys/wasm-util': 0.10.3
     optional: true
 
-  '@openforge-app/plugin-sdk@0.3.1(svelte@5.56.5)':
+  '@openforge-app/plugin-sdk@0.3.2(svelte@5.57.0)':
     dependencies:
       '@internationalized/date': 3.12.4
-      bits-ui: 2.19.0(@internationalized/date@3.12.4)(svelte@5.56.5)
+      bits-ui: 2.19.0(@internationalized/date@3.12.4)(svelte@5.57.0)
       dompurify: 3.4.14
       github-slugger: 2.0.0
       marked: 18.0.11
       mermaid: 11.17.2
-      svelte: 5.56.5
+      svelte: 5.57.0
     transitivePeerDependencies:
       - '@sveltejs/kit'
 
@@ -1694,12 +1694,12 @@ snapshots:
 
   '@sveltejs/load-config@0.2.0': {}
 
-  '@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.56.5)(vite@8.1.3(@types/node@25.9.5))':
+  '@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.57.0)(vite@8.1.3(@types/node@25.9.5))':
     dependencies:
       deepmerge: 4.3.1
       magic-string: 0.30.21
       obug: 2.1.3
-      svelte: 5.56.5
+      svelte: 5.57.0
       vite: 8.1.3(@types/node@25.9.5)
       vitefu: 1.1.3(vite@8.1.3(@types/node@25.9.5))
 
@@ -1718,15 +1718,15 @@ snapshots:
       picocolors: 1.1.1
       pretty-format: 27.5.1
 
-  '@testing-library/svelte-core@1.1.3(svelte@5.56.5)':
+  '@testing-library/svelte-core@1.1.3(svelte@5.57.0)':
     dependencies:
-      svelte: 5.56.5
+      svelte: 5.57.0
 
-  '@testing-library/svelte@5.4.2(svelte@5.56.5)(vite@8.1.3(@types/node@25.9.5))(vitest@4.1.10(@types/node@25.9.5)(jsdom@26.1.0)(vite@8.1.3(@types/node@25.9.5)))':
+  '@testing-library/svelte@5.4.2(svelte@5.57.0)(vite@8.1.3(@types/node@25.9.5))(vitest@4.1.10(@types/node@25.9.5)(jsdom@26.1.0)(vite@8.1.3(@types/node@25.9.5)))':
     dependencies:
       '@testing-library/dom': 10.4.1
-      '@testing-library/svelte-core': 1.1.3(svelte@5.56.5)
-      svelte: 5.56.5
+      '@testing-library/svelte-core': 1.1.3(svelte@5.57.0)
+      svelte: 5.57.0
     optionalDependencies:
       vite: 8.1.3(@types/node@25.9.5)
       vitest: 4.1.10(@types/node@25.9.5)(jsdom@26.1.0)(vite@8.1.3(@types/node@25.9.5))
@@ -1870,7 +1870,8 @@ snapshots:
     dependencies:
       undici-types: 7.24.6
 
-  '@types/trusted-types@2.0.7': {}
+  '@types/trusted-types@2.0.7':
+    optional: true
 
   '@upsetjs/venn.js@2.0.0':
     optionalDependencies:
@@ -1936,15 +1937,15 @@ snapshots:
 
   axobject-query@4.1.0: {}
 
-  bits-ui@2.19.0(@internationalized/date@3.12.4)(svelte@5.56.5):
+  bits-ui@2.19.0(@internationalized/date@3.12.4)(svelte@5.57.0):
     dependencies:
       '@floating-ui/core': 1.8.0
       '@floating-ui/dom': 1.8.0
       '@internationalized/date': 3.12.4
       esm-env: 1.2.2
-      runed: 0.35.1(svelte@5.56.5)
-      svelte: 5.56.5
-      svelte-toolbelt: 0.10.6(svelte@5.56.5)
+      runed: 0.35.1(svelte@5.57.0)
+      svelte: 5.57.0
+      svelte-toolbelt: 0.10.6(svelte@5.57.0)
       tabbable: 6.5.0
     transitivePeerDependencies:
       - '@sveltejs/kit'
@@ -2481,12 +2482,12 @@ snapshots:
 
   rrweb-cssom@0.8.0: {}
 
-  runed@0.35.1(svelte@5.56.5):
+  runed@0.35.1(svelte@5.57.0):
     dependencies:
       dequal: 2.0.3
       esm-env: 1.2.2
       lz-string: 1.5.0
-      svelte: 5.56.5
+      svelte: 5.57.0
 
   rw@1.3.3: {}
 
@@ -2521,7 +2522,7 @@ snapshots:
 
   stylis@4.4.0: {}
 
-  svelte-check@4.7.2(picomatch@4.0.5)(svelte@5.56.5)(typescript@6.0.3):
+  svelte-check@4.7.2(picomatch@4.0.5)(svelte@5.57.0)(typescript@6.0.3):
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
       '@sveltejs/load-config': 0.2.0
@@ -2529,27 +2530,26 @@ snapshots:
       fdir: 6.5.0(picomatch@4.0.5)
       picocolors: 1.1.1
       sade: 1.8.1
-      svelte: 5.56.5
+      svelte: 5.57.0
       typescript: 6.0.3
     transitivePeerDependencies:
       - picomatch
 
-  svelte-toolbelt@0.10.6(svelte@5.56.5):
+  svelte-toolbelt@0.10.6(svelte@5.57.0):
     dependencies:
       clsx: 2.1.1
-      runed: 0.35.1(svelte@5.56.5)
+      runed: 0.35.1(svelte@5.57.0)
       style-to-object: 1.0.14
-      svelte: 5.56.5
+      svelte: 5.57.0
     transitivePeerDependencies:
       - '@sveltejs/kit'
 
-  svelte@5.56.5:
+  svelte@5.57.0:
     dependencies:
       '@jridgewell/remapping': 2.3.5
       '@jridgewell/sourcemap-codec': 1.5.5
       '@sveltejs/acorn-typescript': 1.0.11(acorn@8.17.0)
       '@types/estree': 1.0.9
-      '@types/trusted-types': 2.0.7
       acorn: 8.17.0
       aria-query: 5.3.1
       axobject-query: 4.1.0

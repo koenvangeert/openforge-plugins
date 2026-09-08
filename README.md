@@ -17,54 +17,34 @@ this repo are in [`docs/adr/`](./docs/adr).
 
 ## Prerequisites
 
-This repo does **not** vendor or publish the SDK. It links it from a sibling
-OpenForge checkout. You need the layout:
+This repo does **not** vendor or publish the SDK. Every plugin depends on
+`@openforge-app/plugin-sdk` by version from the registry, currently `^0.3.2`, so a
+sibling OpenForge checkout is no longer needed to build. A checkout at
+`../openforge` is still worth having for the authoring guide and the SDK types
+this repo's docs link to:
 
 ```
 workspace/tmp/
-├── openforge/            <- the OpenForge product repo (provides the SDK)
+├── openforge/            <- the OpenForge product repo (docs and SDK source)
 └── openforge-plugins/    <- this repo
 ```
-
-`@openforge-app/plugin-sdk` is published to npm, and this repo's own
-devDependency tracks `^0.3.1` as the reference contract. The four plugins under
-`plugins/` still link the SDK from the sibling checkout, which is why the layout
-above is still required to build them; new plugins depend on the published
-version instead.
 
 Requirements:
 
 - Node `>=20`
 - pnpm `11.5.0` (pinned via `packageManager`)
-- A built OpenForge SDK, for the plugins that link it. The SDK's `exports` point
-  at `dist/`, so a linked package must be built before those plugins can resolve
-  `@openforge-app/plugin-sdk` or its types. Plugins on the published version need
-  nothing extra.
 
 ## Getting started
 
 ```bash
-# Builds the SDK in ../openforge, then installs this workspace.
-pnpm run setup
-```
-
-`setup` is `build:sdk` + `pnpm install`. If the SDK build step fails because the
-sibling repo pins a different pnpm version, build it manually instead:
-
-```bash
-cd ../openforge && pnpm --filter @openforge-app/plugin-sdk build && cd -
 pnpm install
 ```
-
-Re-run `pnpm run build:sdk` whenever the SDK changes in the OpenForge checkout;
-a per-plugin `link:` is a live symlink, so a rebuild is picked up without
-reinstalling. Plugins depending on the published SDK ignore all of this.
 
 ## Repo layout
 
 ```
 openforge-plugins/
-├── package.json          # private root; workspace scripts (build/test/setup)
+├── package.json          # private root; workspace scripts (build/test/typecheck)
 ├── pnpm-workspace.yaml    # plugins/* members + shared toolchain catalog
 ├── tsconfig.base.json     # shared TS config; each plugin extends it
 ├── CONTEXT.md             # glossary (ubiquitous language for this repo)
@@ -101,7 +81,7 @@ collides with core (`com.openforge.*`). Declare only the capabilities you use in
     "test": "vitest run"
   },
   "dependencies": {
-    "@openforge-app/plugin-sdk": "^0.3.1"
+    "@openforge-app/plugin-sdk": "^0.3.2"
   },
   "peerDependencies": {
     "svelte": "^5.0.0"
@@ -131,10 +111,10 @@ collides with core (`com.openforge.*`). Declare only the capabilities you use in
 
 Notes:
 
-- Depend on the published SDK by version. Use
-  `link:../../../openforge/packages/plugin-sdk` instead only while co-developing
-  the SDK and the plugin together, and remember the plugin then cannot build
-  without the sibling checkout.
+- Depend on the published SDK by version, the same version as every other plugin
+  here. A `link:../../../openforge/packages/plugin-sdk` is for co-developing the
+  SDK and a plugin together, and costs the plugin the ability to build without
+  the sibling checkout.
 - Drop `frontend` or `backend` (and the matching vite build) if the plugin only
   needs one runtime. A frontend-only plugin still gets host capabilities like
   `tasks`, `storage`, and `notifications`.
@@ -249,7 +229,7 @@ describe('activation', () => {
 ### 7. Wire it in
 
 ```bash
-pnpm install            # picks up the new workspace package + SDK link
+pnpm install            # picks up the new workspace package and its SDK
 pnpm --filter @kvg/openforge-<name> build
 pnpm --filter @kvg/openforge-<name> test
 ```

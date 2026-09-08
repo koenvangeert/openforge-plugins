@@ -26,25 +26,25 @@ _Avoid_: using core's `com.openforge.*` namespace; conflating id with package na
 
 **OpenForge Checkout**:
 The sibling clone of the OpenForge product repo (expected at `../openforge`) that
-provides the **SDK** this repo builds against. A required local dependency, not a
-runtime dependency of the shipped plugins.
+holds the authoring guide and the **SDK** source. A documentation reference, not
+something a build here needs: plugins resolve the SDK from the registry.
 _Avoid_: "the OpenForge install", "the app" — the running desktop app is a
 different thing from the source checkout.
 
 **SDK**:
 `@openforge-app/plugin-sdk` and its subpaths (`/frontend`, `/backend`, `/testing`,
-`/vite`). The only OpenForge code a plugin may import. Published to npm, and
-reachable two ways in this repo: by version from the registry, or through an
-**SDK Link** into the **OpenForge Checkout**. A plugin uses one or the other,
-never both.
+`/vite`). The only OpenForge code a plugin may import. Published to npm, and every
+plugin here depends on it by version from the registry; an **SDK Link** into the
+**OpenForge Checkout** is the alternative. A plugin uses one or the other, never
+both.
 _Avoid_: OpenForge app internals, renderer stores, Electron/preload, Rust internals.
 
 **SDK Link**:
 The per-plugin `link:` dependency pointing at the SDK inside the **OpenForge
 Checkout**. A live symlink: a rebuilt SDK is picked up without reinstalling, which
-is what makes it worth keeping while co-developing the SDK and a plugin together.
-Its cost is that the plugin cannot be built without the Checkout present and
-built. Every plugin authored before the SDK was published to npm still uses one.
+is what makes it worth reaching for while co-developing the SDK and a plugin
+together. Its cost is that the plugin cannot be built without the Checkout present
+and built, so no plugin here uses one by default.
 _Avoid_: vendored SDK copy; describing a registry dependency as unavailable (the
 SDK is published); mixing a Link and a registry version in one plugin.
 

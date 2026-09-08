@@ -3,7 +3,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import type { JsonValue } from '@openforge-app/plugin-sdk'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
-import type { Task } from '@openforge-app/plugin-sdk/domain'
+import type { Task, TaskDetail } from '@openforge-app/plugin-sdk/domain'
 import { clearCollapsedSections } from '@openforge-app/plugin-sdk/collapsibleSectionState'
 import { createOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -32,6 +32,28 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     created_at: 0,
     updated_at: 0,
     ...overrides,
+  }
+}
+
+function makeTaskDetail(taskId: string): TaskDetail {
+  return {
+    id: taskId,
+    status: 'doing',
+    projectId: 'P-1',
+    title: taskId,
+    dependsOn: [],
+    createdAt: 0,
+    updatedAt: 0,
+    promptPreview: '',
+    labels: [],
+    sourceTicketUrl: null,
+    prompt: '',
+    agent: null,
+    permissionMode: null,
+    worktreeSource: null,
+    worktreeBranch: null,
+    titleSource: null,
+    titleGeneratedAt: null,
   }
 }
 
@@ -94,6 +116,7 @@ function renderSection(api: FrontendOpenForgeAPI, taskId = TASK_ID) {
       api,
       context: api.context.getSnapshot(),
       taskId,
+      task: makeTaskDetail(taskId),
       projectId: 'P-1',
       taskActionPending: false,
     },

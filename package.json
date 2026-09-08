@@ -8,13 +8,11 @@
     "node": ">=20"
   },
   "scripts": {
-    "build:sdk": "pnpm -C ../openforge --filter @openforge-app/plugin-sdk build",
-    "setup": "pnpm run build:sdk && pnpm install",
     "build": "pnpm -r run build",
     "test": "pnpm -r run test",
     "typecheck": "pnpm -r run typecheck"
   },
   "devDependencies": {
-    "@openforge-app/plugin-sdk": "^0.3.1"
+    "@openforge-app/plugin-sdk": "^0.3.2"
   }
 }

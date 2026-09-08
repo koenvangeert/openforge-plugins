@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { fireEvent, render, screen } from '@testing-library/svelte'
-import type { Task } from '@openforge-app/plugin-sdk/domain'
+import type { Task, TaskDetail } from '@openforge-app/plugin-sdk/domain'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import { clearCollapsedSections } from '@openforge-app/plugin-sdk/collapsibleSectionState'
 import { createOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
@@ -33,6 +33,28 @@ function makeTask(): Task {
   }
 }
 
+function makeTaskDetail(): TaskDetail {
+  return {
+    id: TASK_ID,
+    status: 'doing',
+    projectId: PROJECT_ID,
+    title: TASK_ID,
+    dependsOn: [],
+    createdAt: 0,
+    updatedAt: 0,
+    promptPreview: '',
+    labels: [],
+    sourceTicketUrl: null,
+    prompt: '',
+    agent: null,
+    permissionMode: null,
+    worktreeSource: null,
+    worktreeBranch: null,
+    titleSource: null,
+    titleGeneratedAt: null,
+  }
+}
+
 async function makeHarness(notes: string) {
   const registry = createOpenForgeRegistryFake({
     pluginId: 'com.openforge.handoff-notes-workflow',
@@ -60,6 +82,7 @@ function renderSection(api: FrontendOpenForgeAPI) {
       api,
       context: api.context.getSnapshot(),
       taskId: TASK_ID,
+      task: makeTaskDetail(),
       projectId: PROJECT_ID,
       taskActionPending: false,
     },
