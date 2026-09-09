@@ -154,7 +154,7 @@ importers:
     dependencies:
       '@anthropic-ai/sdk':
         specifier: ^0.111.0
-        version: 0.111.0
+        version: 0.111.0(zod@4.5.4)
       '@lucide/svelte':
         specifier: ^1.25.0
         version: 1.25.0(svelte@5.57.0)
@@ -227,6 +227,49 @@ importers:
         specifier: 'catalog:'
         version: 4.1.10(@types/node@25.9.5)(jsdom@26.1.0)(vite@8.1.3(@types/node@25.9.5))
 
+  plugins/pr-lens:
+    dependencies:
+      '@coldtea/pr-lens-renderer':
+        specifier: 0.2.2
+        version: 0.2.2
+      '@coldtea/pr-lens-schema':
+        specifier: 0.2.1
+        version: 0.2.1
+      '@lucide/svelte':
+        specifier: ^1.25.0
+        version: 1.25.0(svelte@5.57.0)
+      '@openforge-app/plugin-sdk':
+        specifier: ^0.3.2
+        version: 0.3.2(svelte@5.57.0)
+    devDependencies:
+      '@sveltejs/vite-plugin-svelte':
+        specifier: 'catalog:'
+        version: 7.2.0(svelte@5.57.0)(vite@8.1.3(@types/node@25.9.5))
+      '@testing-library/svelte':
+        specifier: 'catalog:'
+        version: 5.4.2(svelte@5.57.0)(vite@8.1.3(@types/node@25.9.5))(vitest@4.1.10(@types/node@25.9.5)(jsdom@26.1.0)(vite@8.1.3(@types/node@25.9.5)))
+      '@types/node':
+        specifier: 'catalog:'
+        version: 25.9.5
+      jsdom:
+        specifier: ^26.0.0
+        version: 26.1.0
+      svelte:
+        specifier: 'catalog:'
+        version: 5.57.0
+      svelte-check:
+        specifier: 'catalog:'
+        version: 4.7.2(picomatch@4.0.5)(svelte@5.57.0)(typescript@6.0.3)
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+      vite:
+        specifier: 'catalog:'
+        version: 8.1.3(@types/node@25.9.5)
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@types/node@25.9.5)(jsdom@26.1.0)(vite@8.1.3(@types/node@25.9.5))
+
 packages:
 
   '@antfu/install-pkg@1.1.0':
@@ -261,6 +304,14 @@ packages:
 
   '@chevrotain/types@11.1.2':
     resolution: {integrity: sha512-U+HFai5+zmJCkK86QsaJtoITlboZHBqrVketcO2ROv865xfCMSFpELQoz1GkX5GzME8pTa+3kbKrZHQtI0gdbw==}
+
+  '@coldtea/pr-lens-renderer@0.2.2':
+    resolution: {integrity: sha512-O9Ij0p+qgaJrVz+M2GSeph3U9DE8Xh1L1Y7xZIPCZCsQcqrOoY0Ugxw+0jAixTlIgOlcPbiGxMFliWb0pWzDLg==}
+    engines: {node: '>=20.11'}
+
+  '@coldtea/pr-lens-schema@0.2.1':
+    resolution: {integrity: sha512-cngzb5lMkR6rg46uuthjHuZCDXIYSPYo0Y+dDNhhWAynu1auttu2tN6iZVTXMUAfzyBgZ2mCqYaVDe2i9hC+bw==}
+    engines: {node: '>=20.11'}
 
   '@csstools/color-helpers@5.1.0':
     resolution: {integrity: sha512-S11EXWJyy0Mz5SYvRmY8nJYTFFd1LCNV+7cXyAgQtOOuzb4EsgfqDufL+9esx72/eLhsRdGZwaldu/h+E4t4BA==}
@@ -1490,6 +1541,9 @@ packages:
   zimmerframe@1.1.4:
     resolution: {integrity: sha512-B58NGBEoc8Y9MWWCQGl/gq9xBCe4IiKM0a2x7GZdQKOW5Exr8S1W24J6OgM1njK8xCRGvAJIL/MxXHf6SkmQKQ==}
 
+  zod@4.5.4:
+    resolution: {integrity: sha512-sC95tT5iHHH9gtpj6A81kh+NEaRAUFN+qlUPDUbRfOMvNf5QCBqsb3WgvnpVtK5Y+4UfA6KqufotuTvMGiTlsA==}
+
 snapshots:
 
   '@antfu/install-pkg@1.1.0':
@@ -1497,10 +1551,12 @@ snapshots:
       package-manager-detector: 1.8.0
       tinyexec: 1.2.4
 
-  '@anthropic-ai/sdk@0.111.0':
+  '@anthropic-ai/sdk@0.111.0(zod@4.5.4)':
     dependencies:
       json-schema-to-ts: 3.1.1
       standardwebhooks: 1.0.0
+    optionalDependencies:
+      zod: 4.5.4
 
   '@asamuzakjp/css-color@3.2.0':
     dependencies:
@@ -1523,6 +1579,14 @@ snapshots:
   '@braintree/sanitize-url@7.1.2': {}
 
   '@chevrotain/types@11.1.2': {}
+
+  '@coldtea/pr-lens-renderer@0.2.2':
+    dependencies:
+      '@coldtea/pr-lens-schema': 0.2.1
+
+  '@coldtea/pr-lens-schema@0.2.1':
+    dependencies:
+      zod: 4.5.4
 
   '@csstools/color-helpers@5.1.0': {}
 
@@ -2677,3 +2741,5 @@ snapshots:
   xmlchars@2.2.0: {}
 
   zimmerframe@1.1.4: {}
+
+  zod@4.5.4: {}

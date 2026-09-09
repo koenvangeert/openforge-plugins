@@ -343,3 +343,54 @@ rate: guessing a price would make a wrong number indistinguishable from a right
 one.
 _Avoid_: pricing an unknown model at zero, at a sibling model's rate, or at a
 default; omitting it from the Dashboard.
+
+## PR Lens plugin
+
+Domain language owned by the PR Lens plugin (`dev.kvg.pr-lens`). A **Plugin-owned
+Domain**: OpenForge's **Task** stays the unit of work; the terms below name the
+architecture picture attached to it. "PR Lens" is the upstream MIT project whose
+document format and renderer the plugin embeds; the plugin talks to no PR Lens
+service and needs no pull request.
+
+**Graph Document**:
+The single PR Lens graph document stored for one OpenForge **Task**, written by
+that Task's own Agent and validated against `@coldtea/pr-lens-schema` before it
+is stored. The document is the artifact; the picture is derived from it on every
+paint, so an improved renderer redraws every document already stored. Each Task
+holds at most one, and storing a new one replaces it.
+_Avoid_: storing the SVG; "the diagram" as a synonym for the document; a history
+of documents; sharing one document across Tasks that touch the same pull request.
+
+**Diagram Request**:
+The user action that asks a Task's Agent for a **Graph Document**: the plugin
+sends the Project's **Diagram Prompt** into that Task's Agent Session through
+`tasks.sendFollowUp`. Delivered and queued receipts are reported differently,
+because a queued prompt waits behind whatever the Agent is doing. Every diagram
+comes from an explicit request; nothing generates one automatically.
+_Avoid_: calling an LLM from the plugin; generating on task completion; treating
+a queued receipt as a finished diagram.
+
+**Diagram Prompt**:
+The Project-owned text a **Diagram Request** sends. Its default is
+self-contained, so a diagram needs nothing installed beyond OpenForge and the
+plugin; a Project that has the upstream PR Lens agent skill on the machine can
+shorten its own to invoke that instead. A blank save restores the default, and
+one Project's edit never reaches another's.
+_Avoid_: a global prompt; a per-Task prompt; sending an empty prompt.
+
+**Diagram Provenance**:
+What a stored **Graph Document** can be dated by: the repository and head commit
+the document itself declares, plus the Agent Session that produced it, the time
+the plugin stored it, and the working-tree cleanliness the Agent reported.
+Cleanliness the Agent did not report is shown as unknown, never as clean.
+_Avoid_: reading the commit from the workspace (the plugin's `shell` access is
+PTY-only); presenting unreported cleanliness as clean; a pull-request field the
+plugin never asks for.
+
+**Stale Diagram**:
+A stored **Graph Document** whose producing Agent Session is no longer the Task's
+current one, meaning work has happened since it was drawn. Staleness is a marker
+on a diagram that stays fully readable and regenerable, never a reason to hide or
+delete it.
+_Avoid_: deleting a stale diagram; hiding the tab; comparing commits to decide
+staleness (a diagram covering uncommitted work has no commit to compare).
