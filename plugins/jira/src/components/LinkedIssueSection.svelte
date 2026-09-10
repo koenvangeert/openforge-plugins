@@ -9,12 +9,24 @@
   import { REFRESH_EVENT } from '../lib/protocol'
   import {
     clearLink,
+    type IssueSnapshot,
     loadIssue,
     readIssueSnapshot,
     readLinkedKey,
     saveLinkedKey,
     suggestIssueKey,
   } from '../lib/taskLink'
+
+  type TaskScope = { taskId: string; isCurrent: () => boolean }
+
+  /**
+   * A silent load neither shows the busy state nor reports an error: it is
+   * revalidating something the user is already reading, and disturbing that is
+   * the churn this section is meant to avoid.
+   */
+  type LoadPolicy = { loud: boolean; checkSnapshot: boolean }
+
+  type LoadAttempt = { taskId: string; loud: boolean; generation: number; isCurrent: () => boolean }
 
   let { api, context, taskId }: PluginTaskUISectionProps = $props()
 
@@ -24,19 +36,88 @@
   let refreshedAt = $state<string | null>(null)
   let inputKey = $state('')
   let suggestion = $state<string | null>(null)
-  let loading = $state(false)
   let linking = $state(false)
   let unlinking = $state(false)
   let error = $state<string | null>(null)
-  let refreshGeneration = 0
+  let currentLoad = $state.raw<LoadAttempt | null>(null)
   let lifecycleGeneration = 0
+  let refreshGeneration = 0
   let loadedTaskId: string | null = null
   let sectionKey = $derived(pluginSectionKey(context.pluginId, 'linked-issue'))
   let expanded = $derived(!isSectionCollapsed($collapsedSections, sectionKey))
   let observedExpanded: boolean | null = null
+  let loading = $derived(currentLoad?.loud === true)
 
-  function isCurrentTask(expectedTaskId: string, expectedLifecycle: number): boolean {
-    return taskId === expectedTaskId && lifecycleGeneration === expectedLifecycle
+  /** Capture the Task this work was started for, so a late result can ask whether the section still wants it. */
+  function captureTask(): TaskScope {
+    const expectedTaskId = taskId
+    const expectedLifecycle = lifecycleGeneration
+    return {
+      taskId: expectedTaskId,
+      isCurrent: () => taskId === expectedTaskId && lifecycleGeneration === expectedLifecycle,
+    }
+  }
+
+  function beginLoad(key: string, loud: boolean): LoadAttempt {
+    const scope = captureTask()
+    const generation = ++refreshGeneration
+    currentLoad = {
+      taskId: scope.taskId,
+      loud,
+      generation,
+      isCurrent: () => scope.isCurrent() && refreshGeneration === generation && linkedKey === key,
+    }
+    return currentLoad
+  }
+
+  /** Only the newest load owns the busy state, so a superseded one settling must not release it. */
+  function endLoad(attempt: LoadAttempt) {
+    if (currentLoad?.generation === attempt.generation) currentLoad = null
+  }
+
+  /** Retire the in-flight load: nothing it returns may paint, and it stops owning the busy state. */
+  function retireLoad() {
+    ++refreshGeneration
+    currentLoad = null
+  }
+
+  /**
+   * A read that succeeded outranks a stale alert, even a silent one: the section
+   * must not report a failure it has since disproved.
+   */
+  function paint(snapshot: IssueSnapshot) {
+    issue = snapshot.issue
+    refreshedAt = snapshot.refreshedAt
+    error = null
+  }
+
+  async function load(key: string, { loud, checkSnapshot }: LoadPolicy) {
+    const attempt = beginLoad(key, loud)
+    if (loud) error = null
+    try {
+      if (checkSnapshot) {
+        const { snapshot, needsJiraRead } = await readIssueSnapshot(api, attempt.taskId, key)
+        if (!attempt.isCurrent()) return
+        if (!needsJiraRead) {
+          paint(snapshot)
+          return
+        }
+      }
+      const result = await loadIssue(api, attempt.taskId, key)
+      if (!attempt.isCurrent()) return
+      if (result.ok) paint(result)
+      else if (loud) error = result.message
+    } catch (cause) {
+      if (loud && attempt.isCurrent()) error = unexpectedMessage(cause, 'Could not refresh the Jira Issue')
+    } finally {
+      endLoad(attempt)
+    }
+  }
+
+  async function refresh({ force = false }: { force?: boolean } = {}) {
+    const key = linkedKey
+    if (!key) return
+    await load(key, { loud: force || issue === null, checkSnapshot: !force })
   }
 
   function descriptionExcerpt(descriptionHtml: string): string {
@@ -60,47 +141,9 @@
     return detail ? `${action}: ${detail}` : action
   }
 
-  /**
-   * Load the linked Issue. A silent load neither shows the busy state nor
-   * reports an error: it is revalidating something the user is already reading,
-   * and disturbing that is the churn this section is meant to avoid.
-   */
-  async function refresh({ force = false }: { force?: boolean } = {}) {
-    const key = linkedKey
-    if (!key) return
-
-    const silent = !force && issue !== null
-    const expectedTaskId = taskId
-    const expectedLifecycle = lifecycleGeneration
-    const generation = ++refreshGeneration
-    if (!silent) {
-      loading = true
-      error = null
-    }
-    try {
-      const result = await loadIssue(api, expectedTaskId, key, { force })
-      if (!isCurrentTask(expectedTaskId, expectedLifecycle) || generation !== refreshGeneration || linkedKey !== key) return
-      if (result.ok) {
-        issue = result.issue
-        refreshedAt = result.refreshedAt
-        // A read that succeeded outranks a stale alert, even a silent one: the
-        // section must not report a failure it has since disproved.
-        error = null
-      } else if (!silent) {
-        error = result.message
-      }
-    } catch (cause) {
-      if (!silent && isCurrentTask(expectedTaskId, expectedLifecycle) && generation === refreshGeneration && linkedKey === key) {
-        error = unexpectedMessage(cause, 'Could not refresh the Jira Issue')
-      }
-    } finally {
-      if (isCurrentTask(expectedTaskId, expectedLifecycle) && generation === refreshGeneration) loading = false
-    }
-  }
-
-  async function offerSuggestion(expectedTaskId = taskId, expectedLifecycle = lifecycleGeneration) {
-    const hint = await suggestIssueKey(api, expectedTaskId)
-    if (!isCurrentTask(expectedTaskId, expectedLifecycle) || linkedKey) return
+  async function offerSuggestion(scope: TaskScope) {
+    const hint = await suggestIssueKey(api, scope.taskId)
+    if (!scope.isCurrent() || linkedKey) return
     suggestion = hint
     if (hint) inputKey = hint
   }
@@ -114,46 +157,41 @@
 
     linking = true
     error = null
-    const expectedTaskId = taskId
-    const expectedLifecycle = lifecycleGeneration
+    const scope = captureTask()
     try {
-      await saveLinkedKey(api, expectedTaskId, key)
-      if (!isCurrentTask(expectedTaskId, expectedLifecycle)) return
+      await saveLinkedKey(api, scope.taskId, key)
+      if (!scope.isCurrent()) return
       linkedKey = key
       suggestion = null
       issue = null
       refreshedAt = null
       await refresh({ force: true })
     } catch (cause) {
-      if (isCurrentTask(expectedTaskId, expectedLifecycle)) {
-        error = unexpectedMessage(cause, 'Could not link the Jira Issue')
-      }
+      if (scope.isCurrent()) error = unexpectedMessage(cause, 'Could not link the Jira Issue')
     } finally {
-      if (isCurrentTask(expectedTaskId, expectedLifecycle)) linking = false
+      if (scope.isCurrent()) linking = false
     }
   }
 
   async function unlink() {
-    const expectedTaskId = taskId
-    const expectedLifecycle = lifecycleGeneration
-    ++refreshGeneration
-    loading = false
+    const scope = captureTask()
+    // Retire before the await: until `clearLink` lands, `linkedKey` still matches
+    // what the in-flight load was started for.
+    retireLoad()
     unlinking = true
     error = null
     try {
-      await clearLink(api, expectedTaskId)
-      if (!isCurrentTask(expectedTaskId, expectedLifecycle)) return
+      await clearLink(api, scope.taskId)
+      if (!scope.isCurrent()) return
       linkedKey = null
       issue = null
       refreshedAt = null
       inputKey = ''
-      await offerSuggestion(expectedTaskId, expectedLifecycle)
+      await offerSuggestion(scope)
     } catch (cause) {
-      if (isCurrentTask(expectedTaskId, expectedLifecycle)) {
-        error = unexpectedMessage(cause, 'Could not unlink the Jira Issue')
-      }
+      if (scope.isCurrent()) error = unexpectedMessage(cause, 'Could not unlink the Jira Issue')
     } finally {
-      if (isCurrentTask(expectedTaskId, expectedLifecycle)) unlinking = false
+      if (scope.isCurrent()) unlinking = false
     }
   }
 
@@ -166,43 +204,41 @@
     }
   }
 
-  /** Discard in-flight work: a late result must never paint into a dead section. */
+  /** Retire every scope: a late result must never paint into a section that has moved on. */
   function invalidate() {
     ++lifecycleGeneration
-    ++refreshGeneration
+    retireLoad()
   }
 
-  async function initialize(expectedTaskId: string) {
-    const expectedLifecycle = ++lifecycleGeneration
-    ++refreshGeneration
+  async function initialize() {
+    invalidate()
+    const scope = captureTask()
     initialized = false
     linkedKey = null
     issue = null
     refreshedAt = null
     inputKey = ''
     suggestion = null
-    loading = false
     linking = false
     unlinking = false
     error = null
 
     try {
-      const key = await readLinkedKey(api, expectedTaskId)
-      if (!isCurrentTask(expectedTaskId, expectedLifecycle)) return
+      const key = await readLinkedKey(api, scope.taskId)
+      if (!scope.isCurrent()) return
       linkedKey = key
-      if (key) {
-        const cached = await readIssueSnapshot(api, expectedTaskId, key)
-        if (!isCurrentTask(expectedTaskId, expectedLifecycle)) return
-        issue = cached?.issue ?? null
-        refreshedAt = cached?.refreshedAt ?? null
+      if (!key) {
         initialized = true
-        if (expanded) await refresh()
-      } else {
-        initialized = true
-        await offerSuggestion(expectedTaskId, expectedLifecycle)
+        await offerSuggestion(scope)
+        return
       }
+      const { snapshot, needsJiraRead } = await readIssueSnapshot(api, scope.taskId, key)
+      if (!scope.isCurrent()) return
+      if (snapshot) paint(snapshot)
+      initialized = true
+      if (expanded && needsJiraRead) await load(key, { loud: snapshot === null, checkSnapshot: false })
     } catch (cause) {
-      if (isCurrentTask(expectedTaskId, expectedLifecycle)) {
+      if (scope.isCurrent()) {
         initialized = true
         error = unexpectedMessage(cause, 'Could not load the Issue Link')
       }
@@ -228,7 +264,7 @@
     const nextTaskId = taskId
     if (nextTaskId === loadedTaskId) return
     loadedTaskId = nextTaskId
-    void initialize(nextTaskId)
+    void initialize()
   })
 
   /**

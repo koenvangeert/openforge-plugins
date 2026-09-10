@@ -97,7 +97,7 @@ describe('link storage', () => {
     await api.storage.task(TASK_ID).set(TASK_KEY.snapshot, { key: 'PROJ-9' } as never)
     await clearLink(api, TASK_ID)
     expect(await readLinkedKey(api, TASK_ID)).toBeNull()
-    expect(await readIssueSnapshot(api, TASK_ID, 'PROJ-9')).toBeNull()
+    await expect(readIssueSnapshot(api, TASK_ID, 'PROJ-9')).resolves.toEqual({ snapshot: null, needsJiraRead: true })
   })
 
   it('reads the legacy direct-Issue cache until the next refresh migrates it', async () => {
@@ -108,8 +108,8 @@ describe('link storage', () => {
     )
 
     await expect(readIssueSnapshot(api, TASK_ID, 'PROJ-9')).resolves.toMatchObject({
-      issue: { key: 'PROJ-9' },
-      refreshedAt: null,
+      snapshot: { issue: { key: 'PROJ-9' }, refreshedAt: null },
+      needsJiraRead: true,
     })
   })
 })
@@ -154,9 +154,9 @@ describe('loadIssue', () => {
       expect(result.issue.descriptionHtml).not.toContain('<script>')
       expect(result.issue.descriptionHtml).not.toContain('onerror')
     }
-    const cached = await readIssueSnapshot(api, TASK_ID, 'PROJ-1')
-    expect(cached?.issue.descriptionHtml).not.toContain('<script>')
-    expect(cached?.refreshedAt).toEqual(expect.any(String))
+    const { snapshot } = await readIssueSnapshot(api, TASK_ID, 'PROJ-1')
+    expect(snapshot?.issue.descriptionHtml).not.toContain('<script>')
+    expect(snapshot?.refreshedAt).toEqual(expect.any(String))
   })
 
   it('passes a backend not-found error through unchanged', async () => {
@@ -168,10 +168,30 @@ describe('loadIssue', () => {
     const api = makeApi({ invoke: async () => ({ ok: false, error: 'network', message: 'offline' }) })
     expect(await loadIssue(api, TASK_ID, 'PROJ-1')).toEqual({ ok: false, error: 'network', message: 'offline' })
   })
+
+  it('reads Jira even when a fresh snapshot is stored', async () => {
+    const invoke = vi.fn(async () => ({ ok: true, issue: makeIssue({ summary: 'From Jira' }) }))
+    const api = makeApi({ invoke })
+    await api.storage.task(TASK_ID).set(
+      TASK_KEY.snapshot,
+      { issue: makeIssue({ summary: 'From the snapshot' }), refreshedAt: new Date().toISOString() } as unknown as JsonValue,
+    )
+
+    await expect(loadIssue(api, TASK_ID, 'PROJ-1')).resolves.toMatchObject({ ok: true, issue: { summary: 'From Jira' } })
+    expect(invoke).toHaveBeenCalledTimes(1)
+  })
+
+  it('stamps the snapshot it stores, so the next read needs no Jira call', async () => {
+    const api = makeApi({ invoke: async () => ({ ok: true, issue: makeIssue() }) })
+
+    await loadIssue(api, TASK_ID, 'PROJ-1')
+
+    await expect(readIssueSnapshot(api, TASK_ID, 'PROJ-1')).resolves.toMatchObject({ needsJiraRead: false })
+  })
 })
 
-describe('issue snapshot freshness', () => {
-  const NOW = Date.parse('2026-08-24T12:00:00.000Z')
+describe('readIssueSnapshot', () => {
+  const NOW = Date.parse('2024-05-01T12:00:00.000Z')
 
   beforeEach(() => {
     vi.useFakeTimers()
@@ -186,99 +206,57 @@ describe('issue snapshot freshness', () => {
     await api.storage.task(TASK_ID).set(TASK_KEY.snapshot, { issue, refreshedAt } as unknown as JsonValue)
   }
 
-  it('serves a snapshot inside the freshness window without reading Jira', async () => {
-    const invoke = vi.fn(async () => ({ ok: true, issue: makeIssue({ summary: 'From Jira' }) }))
-    const api = makeApi({ invoke })
-    await seedSnapshot(api, makeIssue({ summary: 'From the snapshot' }), new Date(NOW - 60_000).toISOString())
+  it('serves a snapshot inside the freshness window and asks for no Jira read', async () => {
+    const api = makeApi()
+    const refreshedAt = new Date(NOW - 60_000).toISOString()
+    await seedSnapshot(api, makeIssue({ summary: 'From the snapshot' }), refreshedAt)
 
-    const result = await loadIssue(api, TASK_ID, 'PROJ-1')
-
-    expect(result).toMatchObject({ ok: true, issue: { summary: 'From the snapshot' } })
-    expect(invoke).not.toHaveBeenCalled()
+    await expect(readIssueSnapshot(api, TASK_ID, 'PROJ-1')).resolves.toEqual({
+      snapshot: { issue: makeIssue({ summary: 'From the snapshot' }), refreshedAt },
+      needsJiraRead: false,
+    })
   })
 
-  it('reads Jira anyway when the caller forces a refresh', async () => {
-    const invoke = vi.fn(async () => ({ ok: true, issue: makeIssue({ summary: 'From Jira' }) }))
-    const api = makeApi({ invoke })
-    await seedSnapshot(api, makeIssue({ summary: 'From the snapshot' }), new Date(NOW - 60_000).toISOString())
-
-    const result = await loadIssue(api, TASK_ID, 'PROJ-1', { force: true })
-
-    expect(result).toMatchObject({ ok: true, issue: { summary: 'From Jira' } })
-    expect(invoke).toHaveBeenCalledTimes(1)
-  })
-
-  it('ignores a fresh snapshot left behind by a previously linked Issue', async () => {
-    const invoke = vi.fn(async () => ({ ok: true, issue: makeIssue({ key: 'PROJ-1', summary: 'From Jira' }) }))
-    const api = makeApi({ invoke })
+  it('withholds a snapshot left behind by a previously linked Issue', async () => {
+    const api = makeApi()
     await seedSnapshot(api, makeIssue({ key: 'PROJ-9', summary: 'The old link' }), new Date(NOW - 60_000).toISOString())
 
-    const result = await loadIssue(api, TASK_ID, 'PROJ-1')
-
-    expect(result).toMatchObject({ ok: true, issue: { key: 'PROJ-1', summary: 'From Jira' } })
-    expect(invoke).toHaveBeenCalledTimes(1)
+    await expect(readIssueSnapshot(api, TASK_ID, 'PROJ-1')).resolves.toEqual({ snapshot: null, needsJiraRead: true })
   })
 
   it('does not trust a snapshot stamped in the future', async () => {
-    const invoke = vi.fn(async () => ({ ok: true, issue: makeIssue({ summary: 'From Jira' }) }))
-    const api = makeApi({ invoke })
+    const api = makeApi()
     await seedSnapshot(api, makeIssue({ summary: 'Stamped by a skewed clock' }), new Date(NOW + 3_600_000).toISOString())
 
-    const result = await loadIssue(api, TASK_ID, 'PROJ-1')
-
-    expect(result).toMatchObject({ ok: true, issue: { summary: 'From Jira' } })
-    expect(invoke).toHaveBeenCalledTimes(1)
+    await expect(readIssueSnapshot(api, TASK_ID, 'PROJ-1')).resolves.toMatchObject({
+      snapshot: { issue: { summary: 'Stamped by a skewed clock' } },
+      needsJiraRead: true,
+    })
   })
 
-  it('reads Jira again once the snapshot leaves the freshness window', async () => {
-    const invoke = vi.fn(async () => ({ ok: true, issue: makeIssue({ summary: 'From Jira' }) }))
-    const api = makeApi({ invoke })
-    const staleAt = new Date(NOW - ISSUE_SNAPSHOT_FRESH_FOR_MS).toISOString()
-    await seedSnapshot(api, makeIssue({ summary: 'From the snapshot' }), staleAt)
+  it('asks for a Jira read once the snapshot leaves the freshness window', async () => {
+    const api = makeApi()
+    await seedSnapshot(api, makeIssue(), new Date(NOW - ISSUE_SNAPSHOT_FRESH_FOR_MS).toISOString())
 
-    const result = await loadIssue(api, TASK_ID, 'PROJ-1')
-
-    expect(result).toMatchObject({ ok: true, issue: { summary: 'From Jira' } })
-    expect(invoke).toHaveBeenCalledTimes(1)
+    await expect(readIssueSnapshot(api, TASK_ID, 'PROJ-1')).resolves.toMatchObject({ needsJiraRead: true })
   })
 
-  it('reads Jira when the snapshot has no timestamp, as legacy caches do', async () => {
-    const invoke = vi.fn(async () => ({ ok: true, issue: makeIssue({ summary: 'From Jira' }) }))
-    const api = makeApi({ invoke })
-    await seedSnapshot(api, makeIssue({ summary: 'From the snapshot' }), null)
+  it('asks for a Jira read when the snapshot has no timestamp, as legacy caches do', async () => {
+    const api = makeApi()
+    await seedSnapshot(api, makeIssue(), null)
 
-    const result = await loadIssue(api, TASK_ID, 'PROJ-1')
-
-    expect(result).toMatchObject({ ok: true, issue: { summary: 'From Jira' } })
-    expect(invoke).toHaveBeenCalledTimes(1)
-  })
-
-  it('stamps the snapshot on a Jira read so the next load is served from it', async () => {
-    const invoke = vi.fn(async () => ({ ok: true, issue: makeIssue({ summary: 'From Jira' }) }))
-    const api = makeApi({ invoke })
-    await seedSnapshot(api, makeIssue({ summary: 'From the snapshot' }), null)
-
-    await loadIssue(api, TASK_ID, 'PROJ-1')
-    await loadIssue(api, TASK_ID, 'PROJ-1')
-
-    expect(invoke).toHaveBeenCalledTimes(1)
+    await expect(readIssueSnapshot(api, TASK_ID, 'PROJ-1')).resolves.toMatchObject({ needsJiraRead: true })
   })
 
   // Literal ages, so the window is pinned to five minutes and not merely to
   // whatever ISSUE_SNAPSHOT_FRESH_FOR_MS happens to say.
   it('serves a four-minute-old snapshot and re-reads a six-minute-old one', async () => {
-    const fresh = makeApi({ invoke: vi.fn(async () => ({ ok: true, issue: makeIssue() })) })
-    await seedSnapshot(fresh, makeIssue({ summary: 'Four minutes old' }), new Date(NOW - 240_000).toISOString())
-    await expect(loadIssue(fresh, TASK_ID, 'PROJ-1')).resolves.toMatchObject({
-      issue: { summary: 'Four minutes old' },
-    })
+    const fresh = makeApi()
+    await seedSnapshot(fresh, makeIssue(), new Date(NOW - 240_000).toISOString())
+    await expect(readIssueSnapshot(fresh, TASK_ID, 'PROJ-1')).resolves.toMatchObject({ needsJiraRead: false })
 
-    const invoke = vi.fn(async () => ({ ok: true, issue: makeIssue({ summary: 'From Jira' }) }))
-    const stale = makeApi({ invoke })
-    await seedSnapshot(stale, makeIssue({ summary: 'Six minutes old' }), new Date(NOW - 360_000).toISOString())
-    await expect(loadIssue(stale, TASK_ID, 'PROJ-1')).resolves.toMatchObject({
-      issue: { summary: 'From Jira' },
-    })
-    expect(invoke).toHaveBeenCalledTimes(1)
+    const stale = makeApi()
+    await seedSnapshot(stale, makeIssue(), new Date(NOW - 360_000).toISOString())
+    await expect(readIssueSnapshot(stale, TASK_ID, 'PROJ-1')).resolves.toMatchObject({ needsJiraRead: true })
   })
 })

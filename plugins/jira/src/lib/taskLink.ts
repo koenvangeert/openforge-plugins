@@ -21,9 +21,9 @@ export interface IssueSnapshot {
 
 export const ISSUE_SNAPSHOT_FRESH_FOR_MS = 5 * 60 * 1000
 
-export interface LoadIssueOptions {
-  force?: boolean
-}
+export type IssueSnapshotRead =
+  | { snapshot: IssueSnapshot; needsJiraRead: false }
+  | { snapshot: IssueSnapshot | null; needsJiraRead: true }
 
 export type LinkedIssueResult =
   | { ok: true; issue: JiraIssue; refreshedAt: string }
@@ -69,15 +69,16 @@ export async function suggestIssueKey(api: TasksApi, taskId: string): Promise<st
 }
 
 /**
- * The stored Issue Snapshot for this Task, or null when there is none or it was
- * recorded for a different Issue Key. The key rule lives here so the instant
- * paint and the freshness check cannot disagree: a re-link whose Jira read
- * failed leaves the previous Issue behind, and it must never surface under the
- * new key.
+ * The stored Issue Snapshot for this Task and whether Jira still has to be read,
+ * from one storage read: the instant paint and the freshness decision are the
+ * same question asked of the same bytes. A Snapshot recorded for a different
+ * Issue Key is withheld, because a re-link whose Jira read failed leaves the
+ * previous Issue behind and it must never surface under the new key.
  */
-export async function readIssueSnapshot(api: StorageApi, taskId: string, key: string): Promise<IssueSnapshot | null> {
-  const snapshot = await readStoredSnapshot(api, taskId)
-  return snapshot?.issue.key === key ? snapshot : null
+export async function readIssueSnapshot(api: StorageApi, taskId: string, key: string): Promise<IssueSnapshotRead> {
+  const stored = await readStoredSnapshot(api, taskId)
+  const snapshot = stored?.issue.key === key ? stored : null
+  return snapshot && isFresh(snapshot) ? { snapshot, needsJiraRead: false } : { snapshot, needsJiraRead: true }
 }
 
 async function readStoredSnapshot(api: StorageApi, taskId: string): Promise<IssueSnapshot | null> {
@@ -101,29 +102,19 @@ async function readStoredSnapshot(api: StorageApi, taskId: string): Promise<Issu
 }
 
 /** A negative age means a skewed clock, which must not pin the section to old data. */
-async function readFreshSnapshot(
-  api: StorageApi,
-  taskId: string,
-  key: string,
-): Promise<{ issue: JiraIssue; refreshedAt: string } | null> {
-  const snapshot = await readIssueSnapshot(api, taskId, key)
-  if (!snapshot?.refreshedAt) return null
+function isFresh(snapshot: IssueSnapshot): boolean {
+  if (!snapshot.refreshedAt) return false
   const age = Date.now() - Date.parse(snapshot.refreshedAt)
-  if (!Number.isFinite(age) || age < 0 || age >= ISSUE_SNAPSHOT_FRESH_FOR_MS) return null
-  return { issue: snapshot.issue, refreshedAt: snapshot.refreshedAt }
+  return Number.isFinite(age) && age >= 0 && age < ISSUE_SNAPSHOT_FRESH_FOR_MS
 }
 
 /**
- * Serve the linked Issue, from a snapshot inside the freshness window when there
- * is one. The description HTML is sanitized in the renderer because DOMPurify
- * needs a DOM the backend can't provide. A failed read leaves the snapshot alone.
+ * Read the Issue from Jira and record it as this Task's Snapshot. Callers decide
+ * whether the stored Snapshot already answers them. The description HTML is
+ * sanitized in the renderer because DOMPurify needs a DOM the backend can't
+ * provide. A failed read leaves the snapshot alone.
  */
-export async function loadIssue(api: Api, taskId: string, key: string, { force }: LoadIssueOptions = {}): Promise<LinkedIssueResult> {
-  if (!force) {
-    const fresh = await readFreshSnapshot(api, taskId, key)
-    if (fresh) return { ok: true, ...fresh }
-  }
-
+export async function loadIssue(api: Api, taskId: string, key: string): Promise<LinkedIssueResult> {
   const result = await invokeJiraBackend(api.backend, 'getIssue', { key })
   if (!result.ok) return result
   const issue: JiraIssue = { ...result.issue, descriptionHtml: sanitizeHtml(result.issue.descriptionHtml) }

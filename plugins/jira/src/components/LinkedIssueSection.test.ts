@@ -110,6 +110,29 @@ async function settled(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0))
 }
 
+function recordStorageReads(api: FrontendOpenForgeAPI, reads: string[]): FrontendOpenForgeAPI {
+  return {
+    ...api,
+    storage: {
+      ...api.storage,
+      task: (taskId: string) => {
+        const scope = api.storage.task(taskId)
+        return {
+          ...scope,
+          get: async <T extends JsonValue = JsonValue>(key: string): Promise<T | null> => {
+            reads.push(`${taskId}:${key}`)
+            return await scope.get<T>(key)
+          },
+        }
+      },
+    },
+  }
+}
+
+function snapshotReads(reads: string[]): string[] {
+  return reads.filter((read) => read.endsWith(`:${TASK_KEY.snapshot}`))
+}
+
 function renderSection(api: FrontendOpenForgeAPI, taskId = TASK_ID) {
   return render(LinkedIssueSection, {
     props: {
@@ -343,6 +366,76 @@ describe('LinkedIssueSection', () => {
 
     const refreshButton = await screen.findByRole('button', { name: 'Refresh' })
     expect((refreshButton as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('reads the Issue Snapshot once when a fresh one paints the section', async () => {
+    const issue = makeIssue()
+    const { api: base, invoke, registry } = makeHarness()
+    await registry.storage.task(TASK_ID).set(TASK_KEY.link, { key: issue.key })
+    await seedSnapshot(registry, TASK_ID, issue, new Date().toISOString())
+    const reads: string[] = []
+
+    renderSection(recordStorageReads(base, reads))
+
+    expect(await screen.findByText(issue.summary)).toBeTruthy()
+    await settled()
+    expect(snapshotReads(reads)).toEqual([`${TASK_ID}:${TASK_KEY.snapshot}`])
+    expect(invoke).not.toHaveBeenCalled()
+  })
+
+  it('reads the Issue Snapshot once when a stale one sends it to Jira', async () => {
+    const issue = makeIssue()
+    const { api: base, invoke, registry } = makeHarness({ results: [{ ok: true, issue }] })
+    await registry.storage.task(TASK_ID).set(TASK_KEY.link, { key: issue.key })
+    await seedSnapshot(registry, TASK_ID, issue, new Date(Date.now() - 600_000).toISOString())
+    const reads: string[] = []
+
+    renderSection(recordStorageReads(base, reads))
+
+    expect(await screen.findByText(issue.summary)).toBeTruthy()
+    await waitFor(() => expect(invoke).toHaveBeenCalledTimes(1))
+    await settled()
+    expect(snapshotReads(reads)).toEqual([`${TASK_ID}:${TASK_KEY.snapshot}`])
+  })
+
+  it('leaves the next Task unbusy when a loud load outlives the Task switch', async () => {
+    const first = makeIssue()
+    const second = makeIssue({ key: 'PROJ-8', summary: 'The other linked Issue' })
+    let release: (result: IssueResult) => void = () => undefined
+    const { api, registry } = makeHarness({
+      respond: () => new Promise<IssueResult>((resolve) => { release = resolve }),
+    })
+    await registry.storage.task(TASK_ID).set(TASK_KEY.link, { key: first.key })
+    await registry.storage.task('KVG-1496').set(TASK_KEY.link, { key: second.key })
+    await seedSnapshot(registry, 'KVG-1496', second, new Date().toISOString())
+
+    const view = renderSection(api)
+    expect(await screen.findByRole('button', { name: 'Refreshing…' })).toBeTruthy()
+
+    await view.rerender({ api, context: api.context.getSnapshot(), taskId: 'KVG-1496', projectId: 'P-1' })
+    expect(await screen.findByText(second.summary)).toBeTruthy()
+    release({ ok: true, issue: first })
+    await settled()
+
+    expect((screen.getByRole('button', { name: 'Refresh' }) as HTMLButtonElement).disabled).toBe(false)
+    expect(screen.queryByText(first.summary)).toBeNull()
+  })
+
+  it('frees the busy state when an unlink retires a load in flight', async () => {
+    const issue = makeIssue()
+    const { api, registry } = makeHarness({ respond: () => new Promise<IssueResult>(() => undefined) })
+    await registry.storage.task(TASK_ID).set(TASK_KEY.link, { key: issue.key })
+    await seedSnapshot(registry, TASK_ID, issue, new Date().toISOString())
+
+    const view = renderSection(api)
+    await screen.findByText(issue.summary)
+    await fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    expect(screen.getByRole('button', { name: 'Refreshing…' })).toBeTruthy()
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Unlink' }))
+
+    expect(await screen.findByText("This Task isn't linked to a Jira Issue.")).toBeTruthy()
+    expect(view.container.querySelector('[aria-busy]')?.getAttribute('aria-busy')).toBe('false')
   })
 
   it('never paints a Snapshot recorded for a different Issue Key', async () => {
