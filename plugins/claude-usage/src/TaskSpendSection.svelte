@@ -24,10 +24,10 @@
     spend = null
     void fetchTaskSpend(api, nextTaskId)
       .then((result) => {
-        if (taskId === nextTaskId) spend = result
+        if (loadedTaskId === nextTaskId) spend = result
       })
       .catch(() => {
-        if (taskId === nextTaskId) spend = null
+        if (loadedTaskId === nextTaskId) spend = null
       })
   })
 </script>
