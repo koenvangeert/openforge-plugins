@@ -11,10 +11,18 @@ export const DEFAULT_PROMPT_TEMPLATE = `Draw the change on this task as a PR Len
 
 2. Write a PR Lens graph document describing it.
 
-   Required: \`schemaVersion\`, \`kind: "graph"\`, \`title\`, \`lenses\` (any of
-   "architecture", "data-flow"), \`lanes\`, \`nodes\`, and \`provenance\` with
-   \`repo.owner\`, \`repo.name\`, \`base.sha\` and \`head.sha\`. Every
-   \`edge.from\` and \`edge.to\` must name a node you declared.
+   Required: \`schemaVersion\`, \`kind: "graph"\`, \`title\`, \`lenses\`,
+   \`lanes\`, \`nodes\`, and \`provenance\` with \`repo.owner\`,
+   \`repo.name\`, \`base.sha\` and \`head.sha\`. Every \`edge.from\` and
+   \`edge.to\` must name a node you declared.
+
+   Every lens you declare is a promise that this document carries what that
+   lens draws. Declare "architecture" for the structure. Declare "data-flow"
+   only when the change has an ordered sequence worth its own diagram, and then
+   also write \`flows\`: each flow needs an \`id\`, a \`title\`, at least two
+   \`participants\`, each one a \`node\` naming a node you declared, and
+   \`messages\` in the order they happen, each with an \`id\`, \`from\`,
+   \`to\`, \`label\` and \`delta\`.
 
    The diagram is clickable, so fill the optional prose too. On every node give
    a \`subtitle\` (its file or module), a one-sentence \`summary\` of what
@@ -24,8 +32,11 @@ export const DEFAULT_PROMPT_TEMPLATE = `Draw the change on this task as a PR Len
 
    If the change is large enough that the whole graph is hard to take in,
    declare \`views\`: a tree of named drill-downs, each with an \`id\`,
-   \`title\`, \`lens\` and a \`scope\` selecting the lanes or nodes it covers.
-   The reader can then open one part at a time.
+   \`title\`, \`lens\` and a \`scope\`, which is either \`{"kind": "all"}\` or
+   \`{"kind": "selection"}\` listing the \`lanes\`, \`nodes\`, \`edges\` or
+   \`flows\` it covers. The reader can then open one part at a time. A
+   "data-flow" view narrowed to a \`selection\` has to list the \`flows\` it
+   draws.
 
 3. Store it:
 

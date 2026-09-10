@@ -83,6 +83,12 @@ conventions or point it at a locally installed PR Lens agent skill.
 The plugin SHALL ship a default prompt that is self-contained, requiring nothing
 to be installed on the machine beyond OpenForge and the plugin itself.
 
+The default prompt SHALL tie every lens it names to the content that lens needs,
+so the Agent declares `data-flow` only when it also writes the flows that lens
+draws. A document that declares a lens it gives no content for is valid to the
+schema and unrenderable in the tab, which reaches the user as a render failure
+instead of a diagram.
+
 Saving a blank template SHALL restore the default rather than sending an empty
 prompt. A Project that has never edited its template SHALL use the default.
 
@@ -92,6 +98,12 @@ Editing one Project's template SHALL NOT change any other Project's template.
 
 - **WHEN** a user requests a diagram in a Project whose template was never edited
 - **THEN** the default prompt is submitted to the Agent
+
+#### Scenario: Change has no ordered pipeline to show
+
+- **WHEN** the default prompt is used for a change whose diff has no ordered pipeline
+- **THEN** the document the Agent returns declares only the lenses it carries content for
+- **AND** the tab draws that document rather than reporting a lens with nothing to draw
 
 #### Scenario: Project has an edited template
 

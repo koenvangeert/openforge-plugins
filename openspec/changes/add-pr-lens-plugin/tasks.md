@@ -65,3 +65,9 @@
 - [x] 9.4 Enable the plugin for the Project from `openforge project list` and run `openforge plugin reload --plugin-id dev.kvg.pr-lens --project-id <project-id>`; verify the response is `"reloaded": true`.
 - [ ] 9.5 Confirm the round trip in the running app on a Task with a finished Agent Session: request a diagram, let the Agent return a document, and verify the tab paints it with its provenance line.
 - [ ] 9.6 Confirm a backlog Task that has never run shows the tab with no request control; verify by opening such a Task and reading its PR Lens tab.
+
+## 10. Lens declaration in the default prompt
+
+- [x] 10.1 Tighten `DEFAULT_PROMPT_TEMPLATE` in `plugins/pr-lens/src/prLensTemplate.ts` so it describes `flows` and ties the `data-flow` lens to writing them; cover it in `prLensTemplate.test.ts` and verify the default names `flows` alongside its lens instruction.
+- [x] 10.2 Run `npm test && npm run typecheck && npm run build` in `plugins/pr-lens`, then `openforge plugin reload --plugin-id dev.kvg.pr-lens --project-id <project-id>`; verify the response is `"reloaded": true`.
+- [ ] 10.3 Name the required `delta` on `nodes` and `edges` in `DEFAULT_PROMPT_TEMPLATE`, which the prompt omits today and the schema rejects a document without; cover it by extending the flow parse test to the whole document the template describes.

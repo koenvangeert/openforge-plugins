@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createMockOpenForgeApi } from '@openforge-app/plugin-sdk/testing'
+import { formatIssues, safeParseGraphDoc } from '@coldtea/pr-lens-schema'
+import { validGraphDocInput } from './__fixtures__/graphDoc'
 import { SAVE_DIAGRAM_COMMAND_ID } from './prLensCommands'
 import { DEFAULT_PROMPT_TEMPLATE, loadPromptTemplate, savePromptTemplate } from './prLensTemplate'
 
@@ -11,6 +13,22 @@ describe('default prompt template', () => {
   it('names the provenance fields the schema requires', () => {
     expect(DEFAULT_PROMPT_TEMPLATE).toContain('base.sha')
     expect(DEFAULT_PROMPT_TEMPLATE).toContain('head.sha')
+  })
+
+  it('makes the data-flow lens conditional on there being an ordered sequence to draw', () => {
+    expect(DEFAULT_PROMPT_TEMPLATE).toMatch(/declare "data-flow"\s+only when/i)
+  })
+
+  it('describes a flow the schema accepts', () => {
+    const document = { ...validGraphDocInput(), lenses: ['architecture', 'data-flow'], flows: [flowAsTheTemplateDescribesIt()] }
+
+    const parsed = safeParseGraphDoc(document)
+
+    expect(parsed.ok ? [] : formatIssues(parsed.error.issues)).toEqual([])
+  })
+
+  it('narrows a data-flow drill-down to the flows it draws', () => {
+    expect(DEFAULT_PROMPT_TEMPLATE).toMatch(/"data-flow" view[^.]*`flows`/)
   })
 
   it('does not send the Agent looking for a pull request', () => {
@@ -60,3 +78,12 @@ describe('project prompt template', () => {
     expect(DEFAULT_PROMPT_TEMPLATE).toContain('--task-id')
   })
 })
+
+function flowAsTheTemplateDescribesIt(): Record<string, unknown> {
+  return {
+    id: 'save',
+    title: 'Saving a diagram',
+    participants: [{ node: 'tab' }, { node: 'store' }],
+    messages: [{ id: 'm1', from: 'tab', to: 'store', label: 'save', delta: 'added' }],
+  }
+}
