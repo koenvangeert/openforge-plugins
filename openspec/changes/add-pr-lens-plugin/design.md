@@ -104,9 +104,10 @@ Alternative rejected: **a start-prompt contribution with a cadence rule**, as
 diagram is wanted, and spends tokens on Tasks nobody will look at a picture of.
 Diagrams are worth asking for, not worth producing by default.
 
-### D3. Tab visibility is keyed on session existence, not on session status
+### D3. The request control is keyed on session existence, not on session status
 
-Show the tab when the Task has at least one row in `tasks.listSessions({ taskId })`.
+Offer the request control when the Task has at least one row in
+`tasks.listSessions({ taskId })`.
 
 Mirroring the host's own predicate (`status` in `completed`, `running`,
 `paused`) would hide the tab in exactly the cases where a click would fail. It
@@ -116,7 +117,7 @@ literals in the plugin means a new host status silently removes the feature with
 no error anywhere, which is the worst failure shape available.
 
 The trade this buys: on a Task whose latest session is in some other status, the
-tab is present and the request fails with `NO_SESSION`. That is a visible,
+control is present and the request fails with `NO_SESSION`. That is a visible,
 explicable error rather than a missing tab, and the spec already requires the
 failure and its reason to be reported.
 
@@ -213,22 +214,26 @@ plugin compiles identically. `@coldtea/pr-lens-schema` and
 pins its schema to an exact `0.2.1`, so the two must move together and this
 plugin pins both.
 
-### D10. Tab visibility is driven by context changes, not by the registration
+### D10. The tab is registered once and states its own unavailability
 
 `taskUI.registerTab` has no per-Task predicate. A registration is global to the
 plugin's frontend activation and applies to every Task, so "hidden when the Task
 has no Agent Session" cannot be expressed as a property of the registration.
 
-The plugin therefore subscribes to `context.onDidChange`, and on each change
-reads `listSessions` for the snapshot's `taskId` and either registers the
-tab or disposes the existing registration. Only one Task's detail is on screen
-at a time, so a single live registration is enough. `tasks.onDidChange` covers
-the remaining case in the spec, a Task whose first session starts while it is
-already open.
+Driving register/dispose from `context.onDidChange` was tried and does not work:
+the host publishes a plugin context change only when the active Project changes,
+never when the selected Task changes. Tab visibility then freezes on whichever
+Task was current at the last sync, and the first task-invalidation event that
+arrives while a session-less Task is selected disposes the tab for every Task
+until the app is restarted.
 
-Alternative rejected: **register once and render an unavailable state inside the
-tab**. Simpler, but it puts a permanently visible tab on every backlog Task to
-say the feature does not apply, which is the outcome D3 exists to avoid.
+The plugin therefore registers the tab once and gates the request control inside
+the pane, which does receive the Task's id as a prop on every render. The cost
+is a PR Lens tab on Tasks that never ran, where it says so.
+
+Reversing this needs a host change: a context change published on Task selection
+(or a per-Task predicate on the registration) would make a hidden tab
+expressible again.
 
 ## Risks / Trade-offs
 
@@ -255,10 +260,10 @@ say the feature does not apply, which is the outcome D3 exists to avoid.
   read-time migration on plugin-owned data rather than a regeneration campaign.
   D8's re-validation turns an incompatible stored document into a visible error.
 
-- **Register/dispose churn on Task switching** (D10). Disposing a tab that is
-  currently active forces the host to fall back to another tab. → Only Tasks
-  with no Agent Session lose the tab, and those Tasks never had a diagram to be
-  looking at.
+- **A tab on every Task** (D10). Tasks that never ran carry a PR Lens tab that
+  can only explain itself. → Accepted: the alternative depends on a Task-selection
+  signal the host does not publish, and its failure mode is the tab vanishing
+  from the Tasks that do have a diagram.
 
 - **A valid document can still be a bad diagram.** Validation catches shape, not
   usefulness. → Out of the plugin's reach; the template is where diagram quality

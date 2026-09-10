@@ -11,8 +11,8 @@ redraws every document already stored.
 
 ## The round trip
 
-1. Open the **PR Lens** tab on a Task and press **Generate diagram**. The tab
-   only exists on Tasks that have an Agent Session, so there is always somewhere
+1. Open the **PR Lens** tab on a Task and press **Generate diagram**. The button
+   only appears on Tasks that have an Agent Session, so there is always somewhere
    for the prompt to go.
 2. The plugin sends the project's prompt into that Task's Agent Session with
    `tasks.sendFollowUp`, and reports whether it was delivered or queued behind

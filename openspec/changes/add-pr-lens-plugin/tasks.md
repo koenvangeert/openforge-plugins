@@ -30,8 +30,8 @@
 ## 5. Frontend: tab registration and visibility
 
 - [x] 5.1 Register the PR Lens task tab with `requiresWorkspace: false`; verify an activation test asserts the registration and its id.
-- [x] 5.2 Drive registration and disposal from `context.onDidChange` plus `tasks.listSessions`, per D10; verify tests cover a Task with no session leaving the tab unregistered, a Task with a session registering it, and switching between the two.
-- [x] 5.3 Register the tab when a Task's first Agent Session starts while that Task is open, via `tasks.onDidChange`; verify a test drives a session-creation event and asserts the tab appears without a context change.
+- [x] 5.2 Register the tab once for every Task, per D10; verify an activation test asserts the tab is registered for a Task that never ran.
+- [x] 5.3 Gate the request control on `tasks.listSessions` inside the pane, per D3; verify a component test covers a Task with no session offering no control and still drawing a stored diagram.
 - [x] 5.4 Dispose every subscription and registration on plugin deactivation; verify a registry-fake test asserts the snapshot is empty after deactivation.
 
 ## 6. Diagram rendering
@@ -64,4 +64,4 @@
 - [x] 9.3 Run `openforge plugin install --path plugins/pr-lens`, required because the manifest is new; verify the install reports success.
 - [x] 9.4 Enable the plugin for the Project from `openforge project list` and run `openforge plugin reload --plugin-id dev.kvg.pr-lens --project-id <project-id>`; verify the response is `"reloaded": true`.
 - [ ] 9.5 Confirm the round trip in the running app on a Task with a finished Agent Session: request a diagram, let the Agent return a document, and verify the tab paints it with its provenance line.
-- [ ] 9.6 Confirm the tab is absent on a backlog Task that has never run; verify by opening such a Task and checking its tab bar.
+- [ ] 9.6 Confirm a backlog Task that has never run shows the tab with no request control; verify by opening such a Task and reading its PR Lens tab.

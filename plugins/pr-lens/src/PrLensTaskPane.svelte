@@ -234,9 +234,11 @@
 <section class="pr-lens-pane">
   <header>
     <div class="toolbar">
-      <Button variant="primary" size="sm" onclick={request} disabled={requesting}>
-        {requesting ? 'Requesting…' : diagram ? 'Regenerate diagram' : 'Generate diagram'}
-      </Button>
+      {#if currentSessionId}
+        <Button variant="primary" size="sm" onclick={request} disabled={requesting}>
+          {requesting ? 'Requesting…' : diagram ? 'Regenerate diagram' : 'Generate diagram'}
+        </Button>
+      {/if}
 
       {#if lenses.length > 1}
         <label class="picker">
@@ -313,6 +315,10 @@
 
   {#if loading}
     <p class="message">Loading the PR Lens diagram…</p>
+  {:else if !diagram && !currentSessionId}
+    <p class="message">
+      No diagram yet. This task has no agent session to ask for one, so start the task first.
+    </p>
   {:else if !diagram}
     <p class="message">
       No diagram yet. Generate one and the agent will describe what this task changed.

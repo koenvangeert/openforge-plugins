@@ -9,30 +9,34 @@ with the Task, and shows when it no longer describes the Task's current state.
 
 ### Requirement: Diagram tab availability
 
-The plugin SHALL contribute a PR Lens tab to a Task only while that Task has a
-recorded Agent Session. A Task with no Agent Session SHALL show no PR Lens tab,
-so the diagram controls are never reachable without a path to an Agent.
+The plugin SHALL contribute a PR Lens tab to every Task of a Project it is
+enabled for. Tab registration SHALL NOT depend on the open Task's Agent Session
+state, because the host publishes no Task-selection change to a plugin, so a
+plugin that registers and unregisters its tab per Task settles on whichever
+Task it last saw and hides the tab from Tasks that should show it.
+
+The diagram request control SHALL instead be gated inside the tab: a Task with
+no recorded Agent Session SHALL offer no request control, and SHALL say that the
+Task has no Agent Session to ask for one.
 
 The tab SHALL remain available when the Task's workspace cannot be resolved,
 because a stored diagram is readable without a workspace.
 
-Tab availability SHALL follow the Task's session state while the Task is open,
-without requiring the user to reopen the Task or reload the application.
-
 #### Scenario: Task has never run
 
 - **WHEN** a user opens a Task that has no Agent Session
-- **THEN** no PR Lens tab appears in that Task's tab bar
+- **THEN** the PR Lens tab appears with no request control
+- **AND** the tab says the Task has no Agent Session to ask for a diagram
 
 #### Scenario: Task has an Agent Session
 
 - **WHEN** a user opens a Task that has at least one Agent Session
-- **THEN** the PR Lens tab appears in that Task's tab bar
+- **THEN** the PR Lens tab offers the request control
 
-#### Scenario: Session appears while the Task is open
+#### Scenario: Diagram outlives the Session that made it
 
-- **WHEN** a Task with no PR Lens tab is open and its first Agent Session starts
-- **THEN** the PR Lens tab appears without the user reopening the Task
+- **WHEN** a Task's stored diagram remains after its Agent Sessions are gone
+- **THEN** the tab still draws the stored diagram
 
 #### Scenario: Workspace cannot be resolved
 

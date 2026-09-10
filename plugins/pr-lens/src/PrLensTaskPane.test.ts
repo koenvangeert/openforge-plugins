@@ -4,6 +4,7 @@ import { fireEvent, render, screen } from '@testing-library/svelte'
 import type { GraphDoc } from '@coldtea/pr-lens-schema'
 import type { TaskDetail } from '@openforge-app/plugin-sdk/domain'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
+import type { AgentSession } from '@openforge-app/plugin-sdk'
 import { TaskFollowUpError } from '@openforge-app/plugin-sdk'
 import { createOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -58,12 +59,13 @@ function taskDetail(): TaskDetail {
 async function mount(options: {
   diagram?: StoredDiagram | null
   sendFollowUp?: FrontendOpenForgeAPI['tasks']['sendFollowUp']
+  sessions?: AgentSession[]
 } = {}) {
   const registry = createOpenForgeRegistryFake({
     pluginId: 'dev.kvg.pr-lens',
     projectId: PROJECT_ID,
     taskId: TASK_ID,
-    agentSessions: [agentSession(SESSION_ID, TASK_ID, 1)],
+    agentSessions: options.sessions ?? [agentSession(SESSION_ID, TASK_ID, 1)],
   })
   if (options.diagram) {
     await registry.storage.task(TASK_ID).set(DIAGRAM_STORAGE_KEY, options.diagram as never)
@@ -131,6 +133,21 @@ describe('PrLensTaskPane', () => {
     expect(screen.getByText(/No diagram yet/)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Generate diagram' })).toBeTruthy()
     expect(diagramSvg(view.container)).toBeNull()
+  })
+
+  it('offers no request control when the task has no agent session', async () => {
+    await mount({ sessions: [] })
+    await settle()
+
+    expect(screen.getByText(/no agent session/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /diagram/ })).toBeNull()
+  })
+
+  it('draws a diagram stored before the task lost its session', async () => {
+    const { view } = await mount({ diagram: storedDiagram(), sessions: [] })
+    await settle()
+
+    expect(diagramSvg(view.container)).toBeTruthy()
   })
 
   it('draws the stored document', async () => {

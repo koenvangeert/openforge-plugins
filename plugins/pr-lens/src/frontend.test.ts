@@ -75,10 +75,10 @@ describe('PR Lens frontend plugin', () => {
     ])
   })
 
-  it('contributes no tab to a task that never ran', async () => {
+  it('keeps the tab on a task that never ran, where the pane explains itself', async () => {
     const registry = await activate([])
 
-    expect(registry.snapshot.taskPaneTabs).toEqual([])
+    expect(registry.snapshot.taskPaneTabs).toHaveLength(1)
   })
 
   it('leaves nothing registered after deactivation', async () => {
