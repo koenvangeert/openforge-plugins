@@ -44,6 +44,7 @@ Plugin ids come from each plugin's `package.json#openforge.id`:
 | `plugins/issues`                 | `com.openforge.issues`                 |
 | `plugins/jira`                   | `dev.kvg.jira`                         |
 | `plugins/pr-lens`                | `dev.kvg.pr-lens`                      |
+| `plugins/task-map`               | `dev.kvg.task-map`                     |
 
 Use the installed `openforge` launcher for plugin management; do not call app
 internals or the launcher's underlying scripts directly.

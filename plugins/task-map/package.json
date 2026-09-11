@@ -1,0 +1,58 @@
+{
+  "name": "@kvg/openforge-task-map",
+  "version": "0.1.0",
+  "description": "Shows a Project's active OpenForge Tasks as a spatial map of cards.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "openforge",
+    "openforge-plugin",
+    "task-map"
+  ],
+  "scripts": {
+    "build": "vite build",
+    "typecheck": "svelte-check --tsconfig ./tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@lucide/svelte": "^1.25.0",
+    "@openforge-app/plugin-sdk": "^0.3.2"
+  },
+  "peerDependencies": {
+    "svelte": "^5.0.0"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "catalog:",
+    "@testing-library/svelte": "catalog:",
+    "@types/node": "catalog:",
+    "jsdom": "^26.0.0",
+    "svelte": "catalog:",
+    "svelte-check": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "package.json"
+  ],
+  "openforge": {
+    "id": "dev.kvg.task-map",
+    "apiVersion": 1,
+    "displayName": "Task Map",
+    "description": "Shows a Project's active Tasks as a spatial map of cards.",
+    "icon": "boxes",
+    "frontend": "./dist/frontend.js",
+    "frontendStyles": [
+      "./dist/plugin-task-map.css"
+    ],
+    "requires": [
+      "context",
+      "navigation",
+      "storage",
+      "tasks",
+      "views"
+    ]
+  }
+}
