@@ -150,7 +150,15 @@ primary Region SHALL move its card into the new Region.
 
 The map SHALL draw an arrow for each `dependsOn` entry whose target is a card on
 the map. An arrow SHALL be directional, so a viewer can tell which Task waits on
-which.
+which: it SHALL leave the Task depended on and SHALL point at the Task that
+waits.
+
+A pair of Tasks SHALL carry one arrow per direction. A `dependsOn` list that
+repeats the same target SHALL draw one arrow, and a Task listing itself SHALL
+draw none, because neither can be told apart from the single arrow on screen.
+
+An arrow SHALL stay visible where it passes a card, because an arrow hidden
+under a card reads as two unconnected stubs.
 
 An arrow SHALL be drawn whether its two cards sit in the same Region or in
 different Regions.
@@ -170,6 +178,12 @@ drawn.
 
 - **WHEN** Task A lists Task B in `dependsOn` and both are active
 - **THEN** an arrow is drawn between the two cards showing that A waits on B
+- **AND** the arrow points at A
+
+#### Scenario: Repeated or self dependency
+
+- **WHEN** Task A lists Task B twice in `dependsOn`, and also lists itself
+- **THEN** one arrow is drawn, from B to A
 
 #### Scenario: Dependency crosses a Region
 

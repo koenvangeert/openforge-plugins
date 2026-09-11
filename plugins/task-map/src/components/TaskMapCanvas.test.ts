@@ -4,16 +4,20 @@ import { describe, expect, it, vi } from 'vitest'
 import TaskMapCanvas from './TaskMapCanvas.svelte'
 import { useMapViewport } from './useMapViewport.svelte'
 import { placeCards } from '../lib/cards'
+import { selectArrows, type DependencyArrow } from '../lib/arrows'
 import { buildTaskDetail } from '../__fixtures__/tasks'
 
-const cards = placeCards([
+const tasks = [
   buildTaskDetail({ id: 'T-1', title: 'Rotate the tokens' }),
-  buildTaskDetail({ id: 'T-2', title: 'Split the reader' }),
-])
+  buildTaskDetail({ id: 'T-2', title: 'Split the reader', dependsOn: ['T-1'] }),
+]
+const cards = placeCards(tasks)
+const arrows = selectArrows(tasks)
 
-function renderCanvas(onOpenTask = vi.fn()) {
+function renderCanvas({ drawn = arrows }: { drawn?: DependencyArrow[] } = {}) {
+  const onOpenTask = vi.fn()
   const viewport = useMapViewport()
-  render(TaskMapCanvas, { props: { cards, viewport, onOpenTask } })
+  render(TaskMapCanvas, { props: { cards, arrows: drawn, viewport, onOpenTask } })
   return {
     viewport,
     onOpenTask,
@@ -33,6 +37,35 @@ describe('TaskMapCanvas', () => {
     renderCanvas()
 
     expect(screen.getAllByRole('button')).toHaveLength(2)
+  })
+
+  it('draws one arrow per dependency, from blocker to waiter', () => {
+    renderCanvas()
+
+    expect(screen.getAllByTestId('task-map-arrow').map((arrow) => arrow.dataset.arrow)).toEqual([
+      'T-1->T-2',
+    ])
+  })
+
+  it('ends every arrow in an arrowhead', () => {
+    renderCanvas()
+
+    for (const arrow of screen.getAllByTestId('task-map-arrow')) {
+      expect(arrow.getAttribute('marker-end')).toBe('url(#task-map-arrowhead)')
+      expect(arrow.getAttribute('d')).toBeTruthy()
+    }
+  })
+
+  it('draws no arrow for a dependency on a Task that is not on the map', () => {
+    renderCanvas({ drawn: [{ dependencyTaskId: 'T-gone', dependentTaskId: 'T-2' }] })
+
+    expect(screen.queryAllByTestId('task-map-arrow')).toHaveLength(0)
+  })
+
+  it('draws no arrow when no dependency is selected', () => {
+    renderCanvas({ drawn: [] })
+
+    expect(screen.queryAllByTestId('task-map-arrow')).toHaveLength(0)
   })
 
   it('starts unzoomed and unpanned', () => {

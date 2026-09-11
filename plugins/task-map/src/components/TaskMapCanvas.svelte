@@ -1,15 +1,18 @@
 <script lang="ts">
+  import type { DependencyArrow } from '../lib/arrows'
   import { mapExtent, type MapCard } from '../lib/cards'
   import type { MapViewport } from './useMapViewport.svelte'
   import TaskCard from './TaskCard.svelte'
+  import TaskMapArrows from './TaskMapArrows.svelte'
 
   interface Props {
     cards: MapCard[]
+    arrows: DependencyArrow[]
     viewport: MapViewport
     onOpenTask: (taskId: string) => void
   }
 
-  let { cards, viewport, onOpenTask }: Props = $props()
+  let { cards, arrows, viewport, onOpenTask }: Props = $props()
 
   let surface = $state<HTMLElement | null>(null)
   let panOrigin: { x: number; y: number } | null = $state(null)
@@ -68,6 +71,7 @@
     data-testid="task-map-layer"
     style="width: {extent.width}px; height: {extent.height}px; transform: {viewport.transform}"
   >
+    <TaskMapArrows {arrows} {cards} />
     {#each cards as card (card.taskId)}
       <TaskCard {card} onOpen={onOpenTask} />
     {/each}

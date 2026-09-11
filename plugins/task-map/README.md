@@ -16,6 +16,11 @@ derives everything it draws from Task reads and changes no Task.
   is never a blank card.
 - A status chip separating `backlog` from `doing`.
 - Cards laid out in a grid, `doing` first, then by Task id.
+- One arrow per dependency between two cards on the map, pointing from the
+  blocker to the Task that waits on it. A repeated `dependsOn` entry and a Task
+  listing itself draw nothing extra. A dependency on a Completed Task or on a
+  Task that no longer exists draws no arrow, and the waiting card still renders.
+  A cyclic chain draws every card and every arrow.
 
 Clicking a card calls `navigation.navigate({ viewId: 'board', taskId })`, which
 leaves the map and selects that Task on the host board. The map presents no Task
@@ -35,10 +40,10 @@ them on a Task that already exists:
 
 ## Not built yet
 
-Planned in `openspec/changes/add-task-map-plugin/`: label Regions, derived
-`dependsOn` arrows, dragged card positions in project-scoped plugin storage, and
-live refresh from `tasks.onDidChange`. Until that lands, a Task created or
-completed while the View is open appears after the Project is reselected.
+Planned in `openspec/changes/add-task-map-plugin/`: label Regions, dragged card
+positions in project-scoped plugin storage, and live refresh from
+`tasks.onDidChange`. Until that lands, a Task created or completed while the
+View is open appears after the Project is reselected.
 
 ## Build
 

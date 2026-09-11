@@ -25,7 +25,7 @@ const STATUS_ORDER: Record<OpenTaskStatus, number> = { doing: 0, backlog: 1 }
 
 type OpenTask = TaskDetail & { status: OpenTaskStatus }
 
-function isOpen(task: TaskDetail): task is OpenTask {
+export function isOpen(task: TaskDetail): task is OpenTask {
   return task.status !== 'done'
 }
 

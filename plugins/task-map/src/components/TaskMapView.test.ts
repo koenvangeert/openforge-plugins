@@ -13,6 +13,17 @@ function viewContext(projectId: string | null): OpenForgeContextSnapshot {
   return { pluginId: PLUGIN_ID, projectId }
 }
 
+function cardIds(): (string | undefined)[] {
+  return screen.getAllByRole('button').flatMap((control) => control.dataset.taskId ?? [])
+}
+
+function arrowKeys(): (string | undefined)[] {
+  return screen
+    .getAllByTestId('task-map-arrow')
+    .flatMap((arrow) => arrow.dataset.arrow ?? [])
+    .sort()
+}
+
 function renderView(tasks: Task[], projectId: string | null = FIXTURE_PROJECT_ID) {
   const api = createMockFrontendOpenForgeApi({
     pluginId: PLUGIN_ID,
@@ -158,5 +169,77 @@ describe('TaskMapView Project switching', () => {
 
     expect(await screen.findByRole('button', { name: /Split the reader/ })).toBeTruthy()
     expect(screen.queryByRole('button', { name: /Rotate the tokens/ })).toBeNull()
+  })
+})
+
+describe('TaskMapView dependency arrows', () => {
+  it('draws an arrow from the blocker to the waiter', async () => {
+    renderView([
+      buildSeededTask({ id: 'T-1', title: 'Rotate the tokens' }),
+      buildSeededTask({ id: 'T-2', title: 'Split the reader', dependsOn: ['T-1'] }),
+    ])
+    await screen.findByRole('button', { name: /Rotate the tokens/ })
+
+    expect(arrowKeys()).toEqual(['T-1->T-2'])
+  })
+
+  it('draws no arrow for a dependency on a Completed Task, and keeps the waiting card', async () => {
+    renderView([
+      buildSeededTask({ id: 'T-1', title: 'Archive the runs', status: 'done' }),
+      buildSeededTask({ id: 'T-2', title: 'Split the reader', dependsOn: ['T-1'] }),
+    ])
+
+    expect(await screen.findByRole('button', { name: /Split the reader/ })).toBeTruthy()
+    expect(screen.queryAllByTestId('task-map-arrow')).toHaveLength(0)
+  })
+
+  it('draws no arrow for a dependency on a Task that no longer exists', async () => {
+    renderView([
+      buildSeededTask({ id: 'T-2', title: 'Split the reader', dependsOn: ['T-gone'] }),
+    ])
+
+    expect(await screen.findByRole('button', { name: /Split the reader/ })).toBeTruthy()
+    expect(screen.queryAllByTestId('task-map-arrow')).toHaveLength(0)
+  })
+
+  it('draws every card and every arrow of a two-Task cycle', async () => {
+    renderView([
+      buildSeededTask({ id: 'T-1', title: 'Rotate the tokens', dependsOn: ['T-2'] }),
+      buildSeededTask({ id: 'T-2', title: 'Split the reader', dependsOn: ['T-1'] }),
+    ])
+    await screen.findByRole('button', { name: /Rotate the tokens/ })
+
+    expect(cardIds()).toEqual(['T-1', 'T-2'])
+    expect(arrowKeys()).toEqual(['T-1->T-2', 'T-2->T-1'])
+  })
+
+  it('draws every card and every arrow of a three-Task cycle', async () => {
+    renderView([
+      buildSeededTask({ id: 'T-1', title: 'Rotate the tokens', dependsOn: ['T-3'] }),
+      buildSeededTask({ id: 'T-2', title: 'Split the reader', dependsOn: ['T-1'] }),
+      buildSeededTask({ id: 'T-3', title: 'Archive the runs', dependsOn: ['T-2'] }),
+    ])
+    await screen.findByRole('button', { name: /Rotate the tokens/ })
+
+    expect(cardIds()).toEqual(['T-1', 'T-2', 'T-3'])
+    expect(arrowKeys()).toEqual(['T-1->T-2', 'T-2->T-3', 'T-3->T-1'])
+  })
+
+  it('offers no control to add, change or remove a dependency', async () => {
+    renderView([
+      buildSeededTask({ id: 'T-1', title: 'Rotate the tokens' }),
+      buildSeededTask({ id: 'T-2', title: 'Split the reader', dependsOn: ['T-1'] }),
+    ])
+    await screen.findByRole('button', { name: /Rotate the tokens/ })
+
+    expect(arrowKeys()).toEqual(['T-1->T-2'])
+    const canvasControls = screen
+      .getByTestId('task-map-surface')
+      .querySelectorAll('button, a, input, select, [role="button"]')
+    expect([...canvasControls].map((control) => control.getAttribute('data-task-id'))).toEqual([
+      'T-1',
+      'T-2',
+    ])
+    expect(screen.getByTestId('task-map-arrows').getAttribute('aria-hidden')).toBe('true')
   })
 })

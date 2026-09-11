@@ -1,5 +1,11 @@
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
+import { selectArrows, type DependencyArrow } from '../lib/arrows'
 import { placeCards, type MapCard } from '../lib/cards'
+
+interface TaskMapModel {
+  cards: MapCard[]
+  arrows: DependencyArrow[]
+}
 
 function errorMessage(error: unknown): string {
   return String(error instanceof Error ? error.message : error)
@@ -8,7 +14,7 @@ function errorMessage(error: unknown): string {
 export function useTaskMap(api: FrontendOpenForgeAPI) {
   let activeProjectId = $state<string | null | undefined>(undefined)
   let projectActivation = 0
-  let cards = $state<MapCard[] | null>(null)
+  let model = $state<TaskMapModel | null>(null)
   let isLoading = $state(false)
   let error = $state<string | null>(null)
 
@@ -23,7 +29,7 @@ export function useTaskMap(api: FrontendOpenForgeAPI) {
     const projectId = activeProjectId
     const activation = projectActivation
     if (!projectId) {
-      cards = null
+      model = null
       return
     }
 
@@ -32,10 +38,10 @@ export function useTaskMap(api: FrontendOpenForgeAPI) {
     try {
       const active = await api.tasks.active(projectId)
       if (!isCurrentActivation(projectId, activation)) return
-      cards = placeCards(active.tasks)
+      model = { cards: placeCards(active.tasks), arrows: selectArrows(active.tasks) }
     } catch (cause) {
       if (!isCurrentActivation(projectId, activation)) return
-      cards = null
+      model = null
       error = errorMessage(cause)
     } finally {
       if (isCurrentActivation(projectId, activation)) isLoading = false
@@ -47,7 +53,7 @@ export function useTaskMap(api: FrontendOpenForgeAPI) {
 
     activeProjectId = projectId
     projectActivation += 1
-    cards = null
+    model = null
     error = null
     isLoading = false
     void load()
@@ -55,7 +61,10 @@ export function useTaskMap(api: FrontendOpenForgeAPI) {
 
   return {
     get cards(): MapCard[] {
-      return cards ?? []
+      return model?.cards ?? []
+    },
+    get arrows(): DependencyArrow[] {
+      return model?.arrows ?? []
     },
     get isLoading(): boolean {
       return isLoading
@@ -67,7 +76,7 @@ export function useTaskMap(api: FrontendOpenForgeAPI) {
       return Boolean(activeProjectId)
     },
     get isEmpty(): boolean {
-      return cards !== null && cards.length === 0
+      return model !== null && model.cards.length === 0
     },
     activateProject,
     reload: load,

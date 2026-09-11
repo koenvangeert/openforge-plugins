@@ -156,6 +156,21 @@ A project-activation counter guards against a stale read landing after a Project
 switch, reusing the `isCurrentActivation` pattern from
 `useIssuesBoard.svelte.ts`.
 
+### Arrows are orthogonal elbows in the gap between card rows
+
+An arrow leaves the card edge facing its waiter, turns in the gap next to that
+edge, and ends on the waiting card's edge. Two cards sharing a row are joined
+under the row rather than straight across it, so an arrow between distant cards
+does not run over the cards between them.
+
+The arrow layer also paints above the cards. Cards are opaque, so an arrow
+underneath them survives only in the gaps, which reads as unconnected stubs
+rather than one arrow.
+
+_Alternative:_ straight card-centre to card-centre lines. Rejected: on a row of
+four cards, three arrows out of one card lie on the same line, so no viewer can
+tell which card any line reaches.
+
 ## Risks / Trade-offs
 
 - **Lost position on concurrent writes** → debounce per gesture plus one
@@ -180,6 +195,4 @@ switch, reusing the `isCurrentActivation` pattern from
 
 ## Open Questions
 
-- Arrow routing: straight lines or orthogonal elbows. Cosmetic, and changes no
-  requirement, so it can be settled while building.
 - Whether an empty Region collapses to its heading or keeps a minimum height.
