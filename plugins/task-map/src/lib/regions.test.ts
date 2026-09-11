@@ -272,6 +272,36 @@ describe('assembleRegions band geometry', () => {
     })
   })
 
+  it('layers a band without the dependencies that sit in another band', () => {
+    const regions = assembleRegions(
+      [
+        buildTaskDetail({ id: 'T-1', labels: ['api'] }),
+        buildTaskDetail({ id: 'T-2', labels: ['auth'], dependsOn: ['T-1'] }),
+      ],
+      ['auth', 'api'],
+    )
+
+    const auth = regionNamed(regions, 'auth')
+
+    expect(auth.cards.map((card) => card.y)).toEqual([auth.y + REGION_HEADING_HEIGHT])
+  })
+
+  it('grows a band to hold every dependency row it lays out', () => {
+    const chain = [
+      buildTaskDetail({ id: 'T-1', labels: ['auth'] }),
+      buildTaskDetail({ id: 'T-2', labels: ['auth'], dependsOn: ['T-1'] }),
+      buildTaskDetail({ id: 'T-3', labels: ['auth'], dependsOn: ['T-2'] }),
+    ]
+
+    const [chained] = assembleRegions(chain, ['auth'])
+    const [unchained] = assembleRegions(labelledTasks(3, 'auth'), ['auth'])
+
+    for (const card of chained.cards) {
+      expect(card.y + CARD_HEIGHT).toBeLessThanOrEqual(chained.y + chained.height)
+    }
+    expect(chained.height - unchained.height).toBe((CARD_HEIGHT + CARD_GAP) * 2)
+  })
+
   it('orders a band doing before backlog, then by Task id', () => {
     const [auth] = assembleRegions(
       [

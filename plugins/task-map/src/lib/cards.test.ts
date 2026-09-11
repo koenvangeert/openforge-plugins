@@ -9,6 +9,7 @@ import {
   cardTitle,
   isOpen,
   layoutCards,
+  type MapCard,
   type OpenTask,
 } from './cards'
 
@@ -76,6 +77,137 @@ describe('layoutCards', () => {
     layoutCards(tasks, 0)
 
     expect(tasks.map((task) => task.id)).toEqual(['T-2', 'T-1'])
+  })
+})
+
+const ORIGIN = 500
+
+describe('layoutCards layering', () => {
+  function rowOf(cards: MapCard[], taskId: string): number {
+    const card = cards.find((candidate) => candidate.taskId === taskId)
+    if (!card) throw new Error(`no card for ${taskId}`)
+    return Math.round((card.y - ORIGIN) / (CARD_HEIGHT + CARD_GAP))
+  }
+
+  it('puts a Task on a later row than the Task it depends on', () => {
+    const cards = layoutCards(
+      [
+        openTask({ id: 'T-1' }),
+        openTask({ id: 'T-2', dependsOn: ['T-1'] }),
+        openTask({ id: 'T-3', dependsOn: ['T-2'] }),
+      ],
+      ORIGIN,
+    )
+
+    expect(rowOf(cards, 'T-1')).toBe(0)
+    expect(rowOf(cards, 'T-2')).toBe(1)
+    expect(rowOf(cards, 'T-3')).toBe(2)
+  })
+
+  it('layers a diamond so the joining Task sits below both branches', () => {
+    const cards = layoutCards(
+      [
+        openTask({ id: 'T-1' }),
+        openTask({ id: 'T-2', dependsOn: ['T-1'] }),
+        openTask({ id: 'T-3', dependsOn: ['T-1'] }),
+        openTask({ id: 'T-4', dependsOn: ['T-2', 'T-3'] }),
+      ],
+      ORIGIN,
+    )
+
+    expect(rowOf(cards, 'T-1')).toBe(0)
+    expect(rowOf(cards, 'T-2')).toBe(1)
+    expect(rowOf(cards, 'T-3')).toBe(1)
+    expect(rowOf(cards, 'T-4')).toBe(2)
+  })
+
+  it('puts both Tasks of a two-Task cycle on the first row', () => {
+    const cards = layoutCards(
+      [openTask({ id: 'T-1', dependsOn: ['T-2'] }), openTask({ id: 'T-2', dependsOn: ['T-1'] })],
+      ORIGIN,
+    )
+
+    expect(rowOf(cards, 'T-1')).toBe(0)
+    expect(rowOf(cards, 'T-2')).toBe(0)
+  })
+
+  it('puts every Task of a three-Task cycle on the first row', () => {
+    const cards = layoutCards(
+      [
+        openTask({ id: 'T-1', dependsOn: ['T-3'] }),
+        openTask({ id: 'T-2', dependsOn: ['T-1'] }),
+        openTask({ id: 'T-3', dependsOn: ['T-2'] }),
+      ],
+      ORIGIN,
+    )
+
+    expect(cards.map((card) => rowOf(cards, card.taskId))).toEqual([0, 0, 0])
+  })
+
+  it('keeps layering a Task that waits on a cycle', () => {
+    const cards = layoutCards(
+      [
+        openTask({ id: 'T-1', dependsOn: ['T-2'] }),
+        openTask({ id: 'T-2', dependsOn: ['T-1'] }),
+        openTask({ id: 'T-3', dependsOn: ['T-1'] }),
+      ],
+      ORIGIN,
+    )
+
+    expect(rowOf(cards, 'T-3')).toBe(1)
+  })
+
+  it('ignores a Task that depends on itself', () => {
+    const cards = layoutCards(
+      [openTask({ id: 'T-1' }), openTask({ id: 'T-2', dependsOn: ['T-2', 'T-1'] })],
+      ORIGIN,
+    )
+
+    expect(rowOf(cards, 'T-2')).toBe(1)
+  })
+
+  it('ignores a dependency on a Task that is not in the list', () => {
+    const cards = layoutCards([openTask({ id: 'T-1', dependsOn: ['T-99'] })], ORIGIN)
+
+    expect(rowOf(cards, 'T-1')).toBe(0)
+  })
+
+  it('wraps a full row and starts the next dependency row below the wrap', () => {
+    const blockers = Array.from({ length: CARDS_PER_ROW + 1 }, (_, index) =>
+      openTask({ id: `T-${index}` }),
+    )
+    const cards = layoutCards([...blockers, openTask({ id: 'T-last', dependsOn: ['T-0'] })], ORIGIN)
+
+    expect(rowOf(cards, `T-${CARDS_PER_ROW}`)).toBe(1)
+    expect(rowOf(cards, 'T-last')).toBe(2)
+    expect(cards.find((card) => card.taskId === 'T-last')?.x).toBe(CANVAS_PADDING)
+  })
+
+  it('lays out the same rows however the Tasks arrive', () => {
+    const tasks = [
+      openTask({ id: 'T-1' }),
+      openTask({ id: 'T-2', dependsOn: ['T-1'] }),
+      openTask({ id: 'T-3', status: 'doing', dependsOn: ['T-1'] }),
+      openTask({ id: 'T-4', dependsOn: ['T-2', 'T-3'] }),
+    ]
+
+    expect(layoutCards([...tasks].reverse(), ORIGIN)).toEqual(layoutCards(tasks, ORIGIN))
+  })
+
+  it('keeps a cycle member below the blocker it waits on outside the cycle', () => {
+    const cards = layoutCards(
+      [
+        openTask({ id: 'T-1' }),
+        openTask({ id: 'T-2', dependsOn: ['T-1', 'T-3'] }),
+        openTask({ id: 'T-3', dependsOn: ['T-2'] }),
+        openTask({ id: 'T-4', dependsOn: ['T-2'] }),
+      ],
+      ORIGIN,
+    )
+
+    expect(rowOf(cards, 'T-1')).toBe(0)
+    expect(rowOf(cards, 'T-2')).toBe(1)
+    expect(rowOf(cards, 'T-4')).toBe(2)
   })
 })
 

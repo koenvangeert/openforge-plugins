@@ -4,7 +4,6 @@ import {
   CARD_GAP,
   CARD_HEIGHT,
   CARD_WIDTH,
-  CARDS_PER_ROW,
   isOpen,
   layoutCards,
   type MapCard,
@@ -50,9 +49,12 @@ export function regionCards(regions: readonly MapRegion[]): MapCard[] {
   return regions.flatMap((region) => region.cards)
 }
 
-function regionHeight(cardCount: number): number {
-  const rows = Math.max(Math.ceil(cardCount / CARDS_PER_ROW), 1)
-  return REGION_HEADING_HEIGHT + rows * CARD_HEIGHT + (rows - 1) * CARD_GAP
+function regionHeight(cards: readonly MapCard[], originY: number): number {
+  const bottom = cards.reduce(
+    (lowest, card) => Math.max(lowest, card.y + CARD_HEIGHT),
+    originY + REGION_HEADING_HEIGHT + CARD_HEIGHT,
+  )
+  return bottom - originY
 }
 
 export function assembleRegions(
@@ -68,8 +70,9 @@ export function assembleRegions(
   let y = CANVAS_PADDING
   for (const label of [...curated, null]) {
     const members = placed.filter((entry) => entry.primary === label).map((entry) => entry.task)
-    const height = regionHeight(members.length)
-    regions.push({ label, y, height, cards: layoutCards(members, y + REGION_HEADING_HEIGHT) })
+    const cards = layoutCards(members, y + REGION_HEADING_HEIGHT)
+    const height = regionHeight(cards, y)
+    regions.push({ label, y, height, cards })
     y += height + CARD_GAP
   }
   return regions

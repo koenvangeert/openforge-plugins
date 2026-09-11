@@ -35,12 +35,92 @@ export function cardTitle(task: TaskDetail): string {
   return task.title.trim() || task.id
 }
 
-export function layoutCards(tasks: readonly OpenTask[], originY: number): MapCard[] {
-  return [...tasks].sort(byStatusThenId).map((task, index) => ({
+export function dependenciesWithin(
+  task: TaskDetail,
+  taskIds: ReadonlySet<string>,
+): readonly string[] {
+  return task.dependsOn.filter((taskId) => taskId !== task.id && taskIds.has(taskId))
+}
+
+function bandDependencies(tasks: readonly OpenTask[]): Map<string, readonly string[]> {
+  const inBand = new Set(tasks.map((task) => task.id))
+  return new Map(tasks.map((task) => [task.id, dependenciesWithin(task, inBand)]))
+}
+
+function reaches(
+  from: string,
+  target: string,
+  blockersOf: Map<string, readonly string[]>,
+): boolean {
+  const seen = new Set<string>()
+  function walk(taskId: string): boolean {
+    if (seen.has(taskId)) return false
+    seen.add(taskId)
+    return (blockersOf.get(taskId) ?? []).some(
+      (blockerId) => blockerId === target || walk(blockerId),
+    )
+  }
+  return walk(from)
+}
+
+function dependencyRows(tasks: readonly OpenTask[]): Map<string, number> {
+  const blockersOf = bandDependencies(tasks)
+
+  // Dropping the back edges leaves an acyclic graph, so the longest-path walk
+  // terminates and a cycle with no outside blocker lands on the first row.
+  const forwardOf = new Map<string, readonly string[]>()
+  for (const [taskId, blockers] of blockersOf) {
+    forwardOf.set(
+      taskId,
+      blockers.filter((blockerId) => !reaches(blockerId, taskId, blockersOf)),
+    )
+  }
+
+  const rows = new Map<string, number>()
+  function rowOf(taskId: string): number {
+    const known = rows.get(taskId)
+    if (known !== undefined) return known
+    const row = (forwardOf.get(taskId) ?? []).reduce(
+      (deepest, blockerId) => Math.max(deepest, rowOf(blockerId) + 1),
+      0,
+    )
+    rows.set(taskId, row)
+    return row
+  }
+
+  for (const task of tasks) rowOf(task.id)
+  return rows
+}
+
+function groupByRow(tasks: readonly OpenTask[], rows: Map<string, number>): OpenTask[][] {
+  const layers = new Map<number, OpenTask[]>()
+  for (const task of tasks) {
+    const row = rows.get(task.id) ?? 0
+    const layer = layers.get(row)
+    if (layer) layer.push(task)
+    else layers.set(row, [task])
+  }
+  return [...layers.entries()].sort(([left], [right]) => left - right).map(([, layer]) => layer)
+}
+
+function gridCards(tasks: readonly OpenTask[], originY: number): MapCard[] {
+  return tasks.map((task, index) => ({
     taskId: task.id,
     title: cardTitle(task),
     status: task.status,
     x: CANVAS_PADDING + (index % CARDS_PER_ROW) * (CARD_WIDTH + CARD_GAP),
     y: originY + Math.floor(index / CARDS_PER_ROW) * (CARD_HEIGHT + CARD_GAP),
   }))
+}
+
+export function layoutCards(tasks: readonly OpenTask[], originY: number): MapCard[] {
+  const ordered = [...tasks].sort(byStatusThenId)
+
+  const cards: MapCard[] = []
+  let top = originY
+  for (const layer of groupByRow(ordered, dependencyRows(ordered))) {
+    cards.push(...gridCards(layer, top))
+    top += Math.ceil(layer.length / CARDS_PER_ROW) * (CARD_HEIGHT + CARD_GAP)
+  }
+  return cards
 }
