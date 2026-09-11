@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { attribute, attributionKey, buildAttributionMap } from './attribution'
+import { attributeProject, attributeTask, buildAttributionMap } from './attribution'
 
 const map = buildAttributionMap({
   projects: [
@@ -19,32 +19,32 @@ const map = buildAttributionMap({
       projectId: 'P-1',
       workspacePath: '/Users/dev/code/frontend/worktrees/KVG-99',
     },
+    { id: 'T-3', title: 'Runs in place', projectId: 'P-2', workspacePath: '/Users/dev/code/backend' },
+  ],
+  sessions: [
+    { sessionId: 'session-a', taskId: 'T-1' },
+    { sessionId: 'session-b', taskId: 'T-3' },
+    { sessionId: 'session-c', taskId: 'T-gone' },
   ],
 })
 
-describe('attribute', () => {
-  it('attributes a worktree directory to its task and that task’s project', () => {
-    expect(attribute(map, '/Users/dev/.openforge/worktrees/frontend/KVG-1850')).toEqual({
-      kind: 'task',
-      taskId: 'T-1',
-      taskTitle: 'Fix the flashing panel',
+describe('attributeProject', () => {
+  it('attributes a worktree outside every checkout to its task’s project', () => {
+    expect(attributeProject(map, '/Users/dev/.openforge/worktrees/frontend/KVG-1850')).toEqual({
+      kind: 'project',
       projectId: 'P-1',
       projectName: 'frontend',
     })
   })
 
   it('attributes a directory deeper inside a worktree, since agents record nested paths', () => {
-    expect(attribute(map, '/Users/dev/.openforge/worktrees/frontend/KVG-1850/packages/ui')).toMatchObject({
-      taskId: 'T-1',
-    })
+    expect(
+      attributeProject(map, '/Users/dev/.openforge/worktrees/frontend/KVG-1850/packages/ui'),
+    ).toMatchObject({ projectId: 'P-1' })
   })
 
-  it('prefers the task over the project when the worktree sits inside the checkout', () => {
-    expect(attribute(map, '/Users/dev/code/frontend/worktrees/KVG-99/src')).toMatchObject({ taskId: 'T-2' })
-  })
-
-  it('attributes a project checkout with no task', () => {
-    expect(attribute(map, '/Users/dev/code/backend')).toEqual({
+  it('attributes a project checkout', () => {
+    expect(attributeProject(map, '/Users/dev/code/backend')).toEqual({
       kind: 'project',
       projectId: 'P-2',
       projectName: 'backend',
@@ -52,18 +52,37 @@ describe('attribute', () => {
   })
 
   it('reports a directory outside every project as unattributed rather than guessing', () => {
-    expect(attribute(map, '/Users/dev/scratch')).toEqual({ kind: 'unattributed' })
+    expect(attributeProject(map, '/Users/dev/scratch')).toEqual({ kind: 'unattributed' })
   })
 
   it('does not let a shared path prefix attribute a sibling directory', () => {
-    expect(attribute(map, '/Users/dev/code/frontend-experiments')).toEqual({ kind: 'unattributed' })
+    expect(attributeProject(map, '/Users/dev/code/frontend-experiments')).toEqual({ kind: 'unattributed' })
   })
 })
 
-describe('attributionKey', () => {
-  it('keeps task and project scopes in distinct namespaces', () => {
-    expect(attributionKey({ kind: 'task', taskId: 'P-1', taskTitle: 't', projectId: 'P-1', projectName: 'p' })).not.toBe(
-      attributionKey({ kind: 'project', projectId: 'P-1', projectName: 'p' }),
-    )
+describe('attributeTask', () => {
+  it('names the task that recorded the session', () => {
+    expect(attributeTask(map, 'session-a')).toEqual({
+      taskId: 'T-1',
+      taskTitle: 'Fix the flashing panel',
+      projectId: 'P-1',
+      projectName: 'frontend',
+    })
+  })
+
+  it('names the in-place task whose directory is its project’s own', () => {
+    expect(attributeTask(map, 'session-b')).toMatchObject({ taskId: 'T-3' })
+  })
+
+  it('claims nothing for a session the host does not know', () => {
+    expect(attributeTask(map, 'session-unknown')).toBeNull()
+  })
+
+  it('claims nothing for a transcript that names no session', () => {
+    expect(attributeTask(map, null)).toBeNull()
+  })
+
+  it('claims nothing for a session whose task is gone', () => {
+    expect(attributeTask(map, 'session-c')).toBeNull()
   })
 })

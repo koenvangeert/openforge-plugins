@@ -10,7 +10,11 @@
   let spend = $state<TaskSpendData | null>(null)
   let loadedTaskId: string | null = null
 
-  const amount = $derived(spend?.found ? formatMoney(spend.total) : spend ? '$0.00' : '…')
+  /**
+   * A Task with no Claude Code session recorded against it reads as a dash, not
+   * as a zero: no OpenForge Task ran for free.
+   */
+  const amount = $derived(spend === null ? '…' : spend.found ? formatMoney(spend.total) : '—')
 
   /**
    * The host hands over a fresh context object on unrelated store ticks, so

@@ -4,6 +4,8 @@ import type { TranscriptFileSystem } from './scanner'
 
 const ROOT = '/home/dev/.claude/projects'
 const NOW = Date.parse('2026-08-27T12:00:00.000Z')
+const SESSION = '7451b58c-0b56-4fc9-b2bc-c8f339de0390'
+const TRANSCRIPT = `${SESSION}.jsonl`
 
 function usageLine(id: string, output: number, cwd: string): string {
   return JSON.stringify({
@@ -35,6 +37,13 @@ function fakeExternal(files: Record<string, string>): TranscriptFileSystem {
   }
 }
 
+function sessionPage(
+  items: Array<{ providerSessionId: string | null; taskId: string }>,
+  nextCursor: string | null = null,
+) {
+  return { items: items.map(({ providerSessionId, taskId }) => ({ providerSessionId, task: { id: taskId } })), nextCursor }
+}
+
 function harness(overrides: Partial<SpendServiceDependencies> = {}) {
   const written: Array<{ path: string; content: string }> = []
   const dependencies: SpendServiceDependencies = {
@@ -46,7 +55,7 @@ function harness(overrides: Partial<SpendServiceDependencies> = {}) {
         written.push(request)
       }),
     },
-    external: fakeExternal({ 'a.jsonl': usageLine('msg_1', 1_000_000, '/worktrees/KVG-1') }),
+    external: fakeExternal({ [TRANSCRIPT]: usageLine('msg_1', 1_000_000, '/worktrees/KVG-1') }),
     projects: { list: vi.fn(async () => [{ id: 'P-1', name: 'frontend', path: '/code/frontend' }]) },
     tasks: {
       list: vi.fn(async () => [
@@ -54,6 +63,7 @@ function harness(overrides: Partial<SpendServiceDependencies> = {}) {
       ]),
       getWorkspace: vi.fn(async () => ({ workspace_path: '/worktrees/KVG-1', project_id: 'P-1' })),
     },
+    agentSessions: { list: vi.fn(async () => sessionPage([{ providerSessionId: SESSION, taskId: 'T-1' }])) },
     root: ROOT,
     now: () => NOW,
     ...overrides,
@@ -138,6 +148,54 @@ describe('createSpendService', () => {
     expect(onError).toHaveBeenCalled()
   })
 
+  it('queries claude-code agent sessions over one interval that spans the index', async () => {
+    const { service, dependencies } = harness()
+    await service.refresh()
+
+    await service.getDashboard()
+
+    expect(dependencies.agentSessions.list).toHaveBeenCalledWith({
+      provider: 'claude-code',
+      overlaps: {
+        startInclusive: Date.parse('2026-08-27T09:00:00.000Z') / 1000,
+        endExclusive: Math.floor(NOW / 1000) + 1,
+      },
+      pageSize: 250,
+      cursor: undefined,
+    })
+  })
+
+  it('follows the cursor until the host runs out of pages, holding the interval still', async () => {
+    const list = vi
+      .fn()
+      .mockResolvedValueOnce(sessionPage([{ providerSessionId: 'other-session', taskId: 'T-1' }], 'page-2'))
+      .mockResolvedValueOnce(sessionPage([{ providerSessionId: SESSION, taskId: 'T-1' }]))
+    const { service } = harness({ agentSessions: { list } })
+    await service.refresh()
+
+    const dashboard = await service.getDashboard()
+
+    expect(list).toHaveBeenCalledTimes(2)
+    expect(list.mock.calls[1]![0]).toMatchObject({ cursor: 'page-2' })
+    expect(list.mock.calls[0]![0].overlaps).toEqual(list.mock.calls[1]![0].overlaps)
+    expect(dashboard.byTask).toHaveLength(1)
+  })
+
+  it('skips an agent session the host recorded without a claude session id', async () => {
+    const onError = vi.fn()
+    const { service } = harness({
+      agentSessions: { list: vi.fn(async () => sessionPage([{ providerSessionId: null, taskId: 'T-1' }])) },
+      onError,
+    })
+    await service.refresh()
+
+    const dashboard = await service.getDashboard()
+
+    expect(dashboard.byTask).toEqual([])
+    expect(dashboard.totals.allTime.total).toBe(25)
+    expect(onError).not.toHaveBeenCalled()
+  })
+
   it('reuses one attribution lookup across dashboard reads inside the cache window', async () => {
     const { service, dependencies } = harness()
     await service.refresh()
@@ -146,6 +204,7 @@ describe('createSpendService', () => {
     await service.getDashboard()
 
     expect(dependencies.projects.list).toHaveBeenCalledTimes(1)
+    expect(dependencies.agentSessions.list).toHaveBeenCalledTimes(1)
   })
 
   it('reports rather than throws when the index cannot be written', async () => {

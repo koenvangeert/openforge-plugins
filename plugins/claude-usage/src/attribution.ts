@@ -1,20 +1,29 @@
 export interface AttributionSource {
   projects: Array<{ id: string; name: string; path: string }>
   tasks: Array<{ id: string; title: string; projectId: string; workspacePath: string }>
+  sessions: Array<{ sessionId: string; taskId: string }>
 }
 
-export type Attribution =
-  | { kind: 'task'; taskId: string; taskTitle: string; projectId: string; projectName: string }
+export interface TaskAttribution {
+  taskId: string
+  taskTitle: string
+  projectId: string
+  projectName: string
+}
+
+export type ProjectAttribution =
   | { kind: 'project'; projectId: string; projectName: string }
   | { kind: 'unattributed' }
 
-interface AttributionEntry {
+interface DirectoryEntry {
   path: string
-  attribution: Attribution
+  projectId: string
+  projectName: string
 }
 
 export interface AttributionMap {
-  entries: readonly AttributionEntry[]
+  directories: readonly DirectoryEntry[]
+  tasksBySession: ReadonlyMap<string, TaskAttribution>
 }
 
 function normalizePath(path: string): string {
@@ -22,49 +31,58 @@ function normalizePath(path: string): string {
 }
 
 /**
- * Longest path first, so a Task worktree nested inside a Project checkout wins
- * over the Project it belongs to.
+ * Task workspaces join the directory list because most of them are worktrees
+ * that live outside every Project checkout, and dropping them would strand
+ * their spend as unattributed. Longest path first, so a worktree nested inside
+ * a checkout resolves through its own Task.
  */
 export function buildAttributionMap(source: AttributionSource): AttributionMap {
   const projectNames = new Map(source.projects.map((project) => [project.id, project.name]))
-  const entries: AttributionEntry[] = []
-  for (const project of source.projects) {
-    entries.push({
-      path: normalizePath(project.path),
-      attribution: { kind: 'project', projectId: project.id, projectName: project.name },
-    })
-  }
+  const nameOf = (projectId: string) => projectNames.get(projectId) ?? projectId
+  const directories: DirectoryEntry[] = source.projects.map((project) => ({
+    path: normalizePath(project.path),
+    projectId: project.id,
+    projectName: project.name,
+  }))
+  const tasksById = new Map<string, TaskAttribution>()
   for (const task of source.tasks) {
-    entries.push({
+    directories.push({
       path: normalizePath(task.workspacePath),
-      attribution: {
-        kind: 'task',
-        taskId: task.id,
-        taskTitle: task.title,
-        projectId: task.projectId,
-        projectName: projectNames.get(task.projectId) ?? task.projectId,
-      },
+      projectId: task.projectId,
+      projectName: nameOf(task.projectId),
+    })
+    tasksById.set(task.id, {
+      taskId: task.id,
+      taskTitle: task.title,
+      projectId: task.projectId,
+      projectName: nameOf(task.projectId),
     })
   }
-  entries.sort((left, right) => right.path.length - left.path.length)
-  return { entries }
+  directories.sort((left, right) => right.path.length - left.path.length)
+
+  const tasksBySession = new Map<string, TaskAttribution>()
+  for (const session of source.sessions) {
+    const task = tasksById.get(session.taskId)
+    if (task) tasksBySession.set(session.sessionId, task)
+  }
+  return { directories, tasksBySession }
 }
 
-export function attribute(map: AttributionMap, cwd: string): Attribution {
+export function attributeProject(map: AttributionMap, cwd: string): ProjectAttribution {
   const target = normalizePath(cwd)
-  for (const entry of map.entries) {
-    if (target === entry.path || target.startsWith(`${entry.path}/`)) return entry.attribution
+  for (const entry of map.directories) {
+    if (target === entry.path || target.startsWith(`${entry.path}/`)) {
+      return { kind: 'project', projectId: entry.projectId, projectName: entry.projectName }
+    }
   }
   return { kind: 'unattributed' }
 }
 
-export function attributionKey(attribution: Attribution): string {
-  switch (attribution.kind) {
-    case 'task':
-      return `task:${attribution.taskId}`
-    case 'project':
-      return `project:${attribution.projectId}`
-    case 'unattributed':
-      return 'unattributed'
-  }
+/**
+ * A Task that runs in its Project checkout shares that directory with the
+ * Project and with every other in-place Task, so only the session identity can
+ * name the Task that spent the money.
+ */
+export function attributeTask(map: AttributionMap, sessionId: string | null): TaskAttribution | null {
+  return sessionId === null ? null : (map.tasksBySession.get(sessionId) ?? null)
 }

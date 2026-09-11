@@ -301,24 +301,38 @@ entry showing cross-project totals misstates its own scope); a settings section;
 a per-Project spend tab; requiring enablement in each Project.
 
 **Spend Attribution**:
-The assignment of each **Billed Response** to an OpenForge **Task** or
-**Project**, derived from the working directory Claude Code recorded for it. A
-directory inside an OpenForge worktree attributes to that worktree's Task, and
-therefore to the Task's Project; a directory inside a Project checkout
-attributes to that Project with no Task; anything else is reported as
-unattributed rather than hidden or spread across Projects. Matching is by
-directory prefix, since an agent may record a path deeper inside the tree.
+The assignment of each **Billed Response** to an OpenForge **Task** and to a
+**Project**, on two independent axes. One Billed Response may land on both, on
+the Project alone, or on neither.
+
+The Task axis runs on session identity: the Claude Code session id the host
+recorded for an Agent Session, which is also the name of the transcript the
+session wrote. A directory cannot name a Task, because a Task that runs in its
+Project checkout shares that directory with the Project and with every other
+in-place Task. An Agent Session the host recorded without a session id
+contributes nothing to any Task; the host only began recording one in August
+2026, so Tasks older than that carry no Task-level spend.
+
+The Project axis runs on the recorded working directory, matched by prefix
+against Project checkouts and Task workspace paths, longest match first, since
+an agent may record a path deeper inside the tree and most Task worktrees live
+outside every checkout. A Project total therefore covers every Billed Response
+recorded in its tree, Task-driven or not. A directory matching neither is
+reported as unattributed rather than hidden or spread across Projects.
 _Avoid_: silently dropping unattributed spend; splitting one Billed Response
-across Tasks; treating the worktree's directory name as a Project id.
+across Tasks; attributing a Task by directory; treating a Task's figure as the
+part of its Project's figure that is missing elsewhere; treating the worktree's
+directory name as a Project id.
 
 **Spend Index**:
 The plugin's persisted rollup of token counts per recorded working directory, UTC
 hour, and model, maintained by a background service so the **Spend Dashboard**
 opens without rereading transcripts. Rows are grouped per transcript, so
 re-reading an appended file replaces that file's rows and disturbs no others.
-Rows key on the raw directory rather than a resolved scope, leaving **Spend
-Attribution** to happen on read: a **Task** created today then picks up the spend
-its worktree already accumulated. Rows hold tokens only, never dollars: **Spend** is
+Rows key on the raw directory rather than a resolved scope, and carry the
+transcript they came from, leaving **Spend Attribution** to happen on read: a
+**Project** registered today then picks up the spend its checkout already
+accumulated. Rows hold tokens only, never dollars: **Spend** is
 computed from the **Price Table** on every render, so correcting a price
 re-prices all recorded history at once and a row can never carry a stale dollar
 figure. Rows are bucketed by UTC hour rather than by day so the Dashboard can

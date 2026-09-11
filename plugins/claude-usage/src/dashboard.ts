@@ -1,4 +1,4 @@
-import { attribute, attributionKey, type Attribution, type AttributionMap } from './attribution'
+import { attributeProject, attributeTask, type AttributionMap } from './attribution'
 import {
   addCost,
   addTokens,
@@ -11,7 +11,7 @@ import {
   type CostBreakdown,
   type TokenTotals,
 } from './pricing'
-import { iterateRows, type SpendIndex } from './spendIndex'
+import { iterateRows, timestampOfUtcHour, type SpendIndex } from './spendIndex'
 
 export interface SpendFigure {
   total: number
@@ -88,20 +88,7 @@ export function startOfLocalDay(timestamp: number): number {
   return date.getTime()
 }
 
-function utcHourToTimestamp(utcHour: string): number {
-  return Date.parse(`${utcHour}:00:00.000Z`)
-}
-
-function scopeLabel(attribution: Attribution): { label: string; projectName: string | null } {
-  switch (attribution.kind) {
-    case 'task':
-      return { label: attribution.taskTitle, projectName: attribution.projectName }
-    case 'project':
-      return { label: attribution.projectName, projectName: null }
-    case 'unattributed':
-      return { label: 'Outside OpenForge', projectName: null }
-  }
-}
+const UNATTRIBUTED = { key: 'unattributed', label: 'Outside OpenForge' }
 
 export function buildDashboard(
   index: SpendIndex,
@@ -128,7 +115,7 @@ export function buildDashboard(
   const thirtyDayStart = todayStart - (DAILY_SERIES_DAYS - 1) * DAY_MS
 
   for (const row of iterateRows(index)) {
-    const timestamp = utcHourToTimestamp(row.utcHour)
+    const timestamp = timestampOfUtcHour(row.utcHour)
     if (Number.isNaN(timestamp)) continue
     const day = localDayOf(timestamp)
     if (!earliestDay || day < earliestDay) earliestDay = day
@@ -164,29 +151,30 @@ export function buildDashboard(
       daily.set(day, bucket)
     }
 
-    const attribution = attribute(attributionMap, row.cwd)
     const spend = cost ? totalCost(cost) : 0
-    if (attribution.kind === 'unattributed') {
-      addToFigure(unattributed, cost, row.tokens)
-    }
-    const { label, projectName } = scopeLabel(attribution)
-    if (attribution.kind === 'task') {
-      const key = attributionKey(attribution)
-      const entry = tasks.get(key) ?? { key, label, projectName, total: 0 }
+
+    const project = attributeProject(attributionMap, row.cwd)
+    if (project.kind === 'unattributed') addToFigure(unattributed, cost, row.tokens)
+    const projectScope =
+      project.kind === 'unattributed'
+        ? UNATTRIBUTED
+        : { key: `project:${project.projectId}`, label: project.projectName }
+    const projectEntry = projects.get(projectScope.key) ?? { ...projectScope, projectName: null, total: 0 }
+    projectEntry.total += spend
+    projects.set(projectScope.key, projectEntry)
+
+    const task = attributeTask(attributionMap, row.sessionId)
+    if (task) {
+      const key = `task:${task.taskId}`
+      const entry = tasks.get(key) ?? {
+        key,
+        label: task.taskTitle,
+        projectName: task.projectName,
+        total: 0,
+      }
       entry.total += spend
       tasks.set(key, entry)
     }
-    const projectKey =
-      attribution.kind === 'unattributed' ? 'unattributed' : `project:${attribution.projectId}`
-    const projectDisplay = attribution.kind === 'task' ? attribution.projectName : label
-    const projectEntry = projects.get(projectKey) ?? {
-      key: projectKey,
-      label: projectDisplay,
-      projectName: null,
-      total: 0,
-    }
-    projectEntry.total += spend
-    projects.set(projectKey, projectEntry)
   }
 
   const dailySeries: DailySpend[] = []
@@ -231,9 +219,8 @@ export function buildTaskSpend(
   let found = false
 
   for (const row of iterateRows(index)) {
-    if (Number.isNaN(utcHourToTimestamp(row.utcHour))) continue
-    const attribution = attribute(attributionMap, row.cwd)
-    if (attribution.kind !== 'task' || attribution.taskId !== taskId) continue
+    if (Number.isNaN(timestampOfUtcHour(row.utcHour))) continue
+    if (attributeTask(attributionMap, row.sessionId)?.taskId !== taskId) continue
     found = true
     const cost = costOf(row.model, row.tokens)
     if (cost) total += totalCost(cost)

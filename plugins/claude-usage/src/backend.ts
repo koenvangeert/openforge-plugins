@@ -12,6 +12,7 @@ export default defineBackendPlugin({
       external: openforge.fs.external,
       projects: openforge.projects,
       tasks: openforge.tasks,
+      agentSessions: openforge.agentSessions,
       root: resolveTranscriptRoot(),
       now: () => Date.now(),
       onError: (message, error) => console.warn(`[claude-usage] ${message}`, error),

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  earliestRecordedSecond,
   emptySpendIndex,
   indexTranscript,
   iterateRows,
@@ -7,6 +8,7 @@ import {
   needsRescan,
   parseSpendIndex,
   serializeSpendIndex,
+  sessionIdOfTranscript,
   utcHourOf,
 } from './spendIndex'
 import type { BilledResponse } from './transcript'
@@ -27,6 +29,41 @@ const STAT = { sizeBytes: 100, modifiedAt: 1 }
 describe('utcHourOf', () => {
   it('buckets by UTC hour so stored rows do not depend on the aggregating timezone', () => {
     expect(utcHourOf(Date.parse('2026-08-27T09:59:59.999Z'))).toBe('2026-08-27T09')
+  })
+})
+
+const SESSION = '7451b58c-0b56-4fc9-b2bc-c8f339de0395'
+
+describe('sessionIdOfTranscript', () => {
+  it('reads the session id Claude Code named the transcript after', () => {
+    expect(sessionIdOfTranscript(`-Users-dev-code/${SESSION}.jsonl`)).toBe(SESSION)
+  })
+
+  it('reads a transcript sitting at the root of the projects directory', () => {
+    expect(sessionIdOfTranscript(`${SESSION}.jsonl`)).toBe(SESSION)
+  })
+
+  it('names no session for a filename that is not one', () => {
+    expect(sessionIdOfTranscript('-Users-dev-code/notes.jsonl')).toBeNull()
+    expect(sessionIdOfTranscript(`${SESSION}-backup.jsonl`)).toBeNull()
+  })
+})
+
+describe('earliestRecordedSecond', () => {
+  it('reports the oldest hour any transcript holds, as the lower bound of a session query', () => {
+    const index = emptySpendIndex()
+    mergeTranscript(index, 'a.jsonl', indexTranscript([response()], STAT))
+    mergeTranscript(
+      index,
+      'b.jsonl',
+      indexTranscript([response({ timestamp: Date.parse('2026-01-02T03:04:05.000Z') })], STAT),
+    )
+
+    expect(earliestRecordedSecond(index)).toBe(Date.parse('2026-01-02T03:00:00.000Z') / 1000)
+  })
+
+  it('reports nothing for an index with no rows', () => {
+    expect(earliestRecordedSecond(emptySpendIndex())).toBeNull()
   })
 })
 
@@ -96,6 +133,16 @@ describe('needsRescan', () => {
   })
 })
 
+describe('iterateRows', () => {
+  it('carries the session that recorded each row', () => {
+    const index = emptySpendIndex()
+    mergeTranscript(index, `${SESSION}.jsonl`, indexTranscript([response()], STAT))
+    mergeTranscript(index, 'notes.jsonl', indexTranscript([response({ cwd: '/b' })], STAT))
+
+    expect([...iterateRows(index)].map((row) => row.sessionId)).toEqual([SESSION, null])
+  })
+})
+
 describe('spend index serialization', () => {
   it('round-trips rows, sizes, and mtimes', () => {
     const index = emptySpendIndex()
@@ -105,6 +152,20 @@ describe('spend index serialization', () => {
 
     expect([...iterateRows(restored)]).toEqual([...iterateRows(index)])
     expect(restored.transcripts.get('a.jsonl')).toMatchObject(STAT)
+  })
+
+  it('reads an index persisted before rows carried a session identity', () => {
+    const persisted = `{"version":1,"transcripts":{"${SESSION}.jsonl":{"size":100,"mtime":1,"rows":{"/Users/dev/project\\n2026-08-27T09\\nclaude-opus-5":[1,2,3,4,5]}}}}`
+
+    expect([...iterateRows(parseSpendIndex(persisted))]).toEqual([
+      {
+        cwd: '/Users/dev/project',
+        utcHour: '2026-08-27T09',
+        model: 'claude-opus-5',
+        tokens: { input: 1, output: 2, cacheWrite5m: 3, cacheWrite1h: 4, cacheRead: 5 },
+        sessionId: SESSION,
+      },
+    ])
   })
 
   it('yields an empty index for unreadable or foreign payloads', () => {

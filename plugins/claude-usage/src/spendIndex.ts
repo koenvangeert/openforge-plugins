@@ -19,6 +19,8 @@ export interface SpendIndexRow {
   utcHour: string
   model: string
   tokens: TokenTotals
+  /** The Claude Code session that recorded the row, or null for a transcript that names no session. */
+  sessionId: string | null
 }
 
 const SEPARATOR = '\n'
@@ -30,6 +32,30 @@ export function emptySpendIndex(): SpendIndex {
 
 export function utcHourOf(timestamp: number): string {
   return new Date(timestamp).toISOString().slice(0, 13)
+}
+
+export function timestampOfUtcHour(utcHour: string): number {
+  return Date.parse(`${utcHour}:00:00.000Z`)
+}
+
+export function earliestRecordedSecond(index: SpendIndex): number | null {
+  let earliest: number | null = null
+  for (const transcript of index.transcripts.values()) {
+    for (const key of transcript.rows.keys()) {
+      const timestamp = timestampOfUtcHour(parseRowKey(key)?.utcHour ?? '')
+      if (Number.isNaN(timestamp)) continue
+      if (earliest === null || timestamp < earliest) earliest = timestamp
+    }
+  }
+  return earliest === null ? null : Math.floor(earliest / 1000)
+}
+
+/** Claude Code names a transcript after the session that wrote it, so the filename is the session id. */
+export function sessionIdOfTranscript(path: string): string | null {
+  const filename = path.slice(path.lastIndexOf('/') + 1)
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jsonl$/i.test(filename)
+    ? filename.slice(0, -'.jsonl'.length)
+    : null
 }
 
 export function rowKey(cwd: string, utcHour: string, model: string): string {
@@ -75,10 +101,11 @@ export function needsRescan(
 }
 
 export function* iterateRows(index: SpendIndex): Generator<SpendIndexRow> {
-  for (const transcript of index.transcripts.values()) {
+  for (const [path, transcript] of index.transcripts) {
+    const sessionId = sessionIdOfTranscript(path)
     for (const [key, tokens] of transcript.rows) {
       const parsed = parseRowKey(key)
-      if (parsed) yield { ...parsed, tokens }
+      if (parsed) yield { ...parsed, tokens, sessionId }
     }
   }
 }

@@ -6,9 +6,13 @@ import type { BilledResponse } from './transcript'
 
 const NOW = Date.parse('2026-08-27T12:00:00.000Z')
 
+const TASK_SESSIONS = ['7451b58c-0b56-4fc9-b2bc-c8f339de0390', '7451b58c-0b56-4fc9-b2bc-c8f339de0391']
+const UNKNOWN_SESSION = '7451b58c-0b56-4fc9-b2bc-c8f339de03ff'
+
 const map = buildAttributionMap({
   projects: [{ id: 'P-1', name: 'frontend', path: '/code/frontend' }],
   tasks: [{ id: 'T-1', title: 'Fix the panel', projectId: 'P-1', workspacePath: '/worktrees/KVG-1' }],
+  sessions: TASK_SESSIONS.map((sessionId) => ({ sessionId, taskId: 'T-1' })),
 })
 
 function response(overrides: Partial<BilledResponse> = {}): BilledResponse {
@@ -22,12 +26,16 @@ function response(overrides: Partial<BilledResponse> = {}): BilledResponse {
   }
 }
 
-function indexOf(...responses: BilledResponse[]) {
+function transcriptsOf(...entries: Array<{ sessionId: string; response: BilledResponse }>) {
   const index = emptySpendIndex()
-  responses.forEach((entry, position) => {
-    mergeTranscript(index, `t${position}.jsonl`, indexTranscript([entry], { sizeBytes: 1, modifiedAt: 1 }))
-  })
+  for (const { sessionId, response } of entries) {
+    mergeTranscript(index, `${sessionId}.jsonl`, indexTranscript([response], { sizeBytes: 1, modifiedAt: 1 }))
+  }
   return index
+}
+
+function indexOf(...responses: BilledResponse[]) {
+  return transcriptsOf(...responses.map((response, position) => ({ sessionId: TASK_SESSIONS[position]!, response })))
 }
 
 describe('buildDashboard', () => {
@@ -49,13 +57,47 @@ describe('buildDashboard', () => {
     expect(dashboard.totals.allTime.total).toBe(25)
   })
 
-  it('rolls task spend up into its project', () => {
-    const dashboard = buildDashboard(indexOf(response(), response({ cwd: '/code/frontend' })), map, NOW)
+  it('counts a project’s task work and its non-task work in the project total', () => {
+    const index = transcriptsOf(
+      { sessionId: TASK_SESSIONS[0]!, response: response() },
+      { sessionId: UNKNOWN_SESSION, response: response({ cwd: '/code/frontend' }) },
+    )
+
+    const dashboard = buildDashboard(index, map, NOW)
 
     expect(dashboard.byProject).toEqual([{ key: 'project:P-1', label: 'frontend', projectName: null, total: 50 }])
     expect(dashboard.byTask).toEqual([
       { key: 'task:T-1', label: 'Fix the panel', projectName: 'frontend', total: 25 },
     ])
+  })
+
+  it('counts a response on both axes without doubling any total', () => {
+    const dashboard = buildDashboard(indexOf(response()), map, NOW)
+
+    expect(dashboard.byTask[0]!.total).toBe(25)
+    expect(dashboard.byProject[0]!.total).toBe(25)
+    expect(dashboard.totals.allTime.total).toBe(25)
+    expect(dashboard.dailySeries.at(-1)!.total).toBe(25)
+  })
+
+  it('leaves every figure but the task axis alone when no session maps to a task', () => {
+    const index = indexOf(response(), response({ cwd: '/code/frontend' }))
+    const withoutSessions = buildAttributionMap({
+      projects: [{ id: 'P-1', name: 'frontend', path: '/code/frontend' }],
+      tasks: [{ id: 'T-1', title: 'Fix the panel', projectId: 'P-1', workspacePath: '/worktrees/KVG-1' }],
+      sessions: [],
+    })
+
+    const blind = buildDashboard(index, withoutSessions, NOW)
+    const sighted = buildDashboard(index, map, NOW)
+
+    expect(blind.byTask).toEqual([])
+    expect(sighted.byTask).not.toEqual([])
+    expect(blind.totals).toEqual(sighted.totals)
+    expect(blind.dailySeries).toEqual(sighted.dailySeries)
+    expect(blind.byProject).toEqual(sighted.byProject)
+    expect(blind.byModel).toEqual(sighted.byModel)
+    expect(blind.unattributed).toEqual(sighted.unattributed)
   })
 
   it('reports spend outside every project instead of hiding it', () => {
@@ -119,13 +161,16 @@ describe('buildDashboard', () => {
 })
 
 describe('buildTaskSpend', () => {
-  it('prices only the responses billed inside the task worktree', () => {
-    const index = indexOf(response(), response({ messageId: 'msg_2', cwd: '/code/frontend' }))
+  it('prices only the responses the task’s own sessions recorded', () => {
+    const index = transcriptsOf(
+      { sessionId: TASK_SESSIONS[0]!, response: response() },
+      { sessionId: UNKNOWN_SESSION, response: response({ messageId: 'msg_2', cwd: '/worktrees/KVG-1' }) },
+    )
 
     expect(buildTaskSpend(index, map, 'T-1')).toEqual({ taskId: 'T-1', found: true, total: 25 })
   })
 
-  it('sums every response in the worktree, not just the most recent', () => {
+  it('sums every session the task ran, not just the most recent', () => {
     const index = indexOf(response(), response({ messageId: 'msg_2' }))
 
     expect(buildTaskSpend(index, map, 'T-1').total).toBe(50)

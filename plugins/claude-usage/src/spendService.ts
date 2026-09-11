@@ -1,10 +1,18 @@
 import { buildAttributionMap, type AttributionMap } from './attribution'
 import { buildDashboard, buildTaskSpend, type SpendDashboardData, type TaskSpendData } from './dashboard'
-import { emptySpendIndex, parseSpendIndex, serializeSpendIndex, type SpendIndex } from './spendIndex'
+import {
+  earliestRecordedSecond,
+  emptySpendIndex,
+  parseSpendIndex,
+  serializeSpendIndex,
+  type SpendIndex,
+} from './spendIndex'
 import { scanTranscripts, type ScanResult, type TranscriptFileSystem } from './scanner'
 
 export const SPEND_INDEX_PATH = 'spend-index.json'
 const ATTRIBUTION_TTL_MS = 30_000
+const CLAUDE_CODE_PROVIDER = 'claude-code'
+const SESSION_PAGE_SIZE = 250
 
 export interface SpendServiceDependencies {
   userData: {
@@ -18,6 +26,17 @@ export interface SpendServiceDependencies {
       Array<{ id: string; title: string | null; initial_prompt: string; project_id: string | null }>
     >
     getWorkspace(taskId: string): Promise<{ workspace_path: string; project_id: string } | null>
+  }
+  agentSessions: {
+    list(request: {
+      provider: string
+      overlaps: { startInclusive: number; endExclusive: number }
+      pageSize: number
+      cursor?: string
+    }): Promise<{
+      items: Array<{ providerSessionId: string | null; task: { id: string } }>
+      nextCursor: string | null
+    }>
   }
   root: string
   now(): number
@@ -69,9 +88,34 @@ export function createSpendService(dependencies: SpendServiceDependencies): Spen
     }
   }
 
-  async function loadAttributionMap(): Promise<AttributionMap> {
+  /**
+   * One interval for the whole pagination run: the host invalidates a cursor
+   * when any bound moves.
+   */
+  async function loadSessions(index: SpendIndex): Promise<Array<{ sessionId: string; taskId: string }>> {
+    const endExclusive = Math.floor(dependencies.now() / 1000) + 1
+    const overlaps = { startInclusive: earliestRecordedSecond(index) ?? endExclusive - 1, endExclusive }
+    const sessions: Array<{ sessionId: string; taskId: string }> = []
+    let cursor: string | undefined
+    do {
+      const page = await dependencies.agentSessions.list({
+        provider: CLAUDE_CODE_PROVIDER,
+        overlaps,
+        pageSize: SESSION_PAGE_SIZE,
+        cursor,
+      })
+      for (const item of page.items) {
+        if (item.providerSessionId) sessions.push({ sessionId: item.providerSessionId, taskId: item.task.id })
+      }
+      cursor = page.nextCursor ?? undefined
+    } while (cursor)
+    return sessions
+  }
+
+  async function loadAttributionMap(index: SpendIndex): Promise<AttributionMap> {
     const projects = await dependencies.projects.list()
     const tasks = await dependencies.tasks.list()
+    const sessions = await loadSessions(index)
     const resolved = await Promise.all(
       tasks.map(async (task) => {
         try {
@@ -91,18 +135,19 @@ export function createSpendService(dependencies: SpendServiceDependencies): Spen
     return buildAttributionMap({
       projects,
       tasks: resolved.filter((task): task is NonNullable<typeof task> => task !== null),
+      sessions,
     })
   }
 
-  async function currentAttributionMap(): Promise<AttributionMap> {
+  async function currentAttributionMap(index: SpendIndex): Promise<AttributionMap> {
     const now = dependencies.now()
     if (attributionMap && now - attributionLoadedAt < ATTRIBUTION_TTL_MS) return attributionMap
     try {
-      attributionMap = await loadAttributionMap()
+      attributionMap = await loadAttributionMap(index)
       attributionLoadedAt = now
     } catch (error) {
       dependencies.onError?.('failed to resolve spend attribution', error)
-      attributionMap ??= buildAttributionMap({ projects: [], tasks: [] })
+      attributionMap ??= buildAttributionMap({ projects: [], tasks: [], sessions: [] })
     }
     return attributionMap
   }
@@ -121,11 +166,11 @@ export function createSpendService(dependencies: SpendServiceDependencies): Spen
     },
     async getDashboard() {
       const current = await load()
-      return buildDashboard(current, await currentAttributionMap(), dependencies.now())
+      return buildDashboard(current, await currentAttributionMap(current), dependencies.now())
     },
     async getTaskSpend(taskId) {
       const current = await load()
-      return buildTaskSpend(current, await currentAttributionMap(), taskId)
+      return buildTaskSpend(current, await currentAttributionMap(current), taskId)
     },
   }
 }
