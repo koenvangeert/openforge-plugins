@@ -257,6 +257,11 @@ A drag that leaves the Region SHALL return the card inside that Region rather
 than placing it under another Region's heading, because a plugin cannot write
 Task Labels and so a cross-Region drop could never change the Task.
 
+A Region SHALL have no lower edge: a card dragged below the rows the Region
+holds SHALL grow that Region under the pointer, and the Regions below it SHALL
+move down by what it grew. Without this the Regions the map laid out would cap
+how far down a user can place a card.
+
 A card whose primary Region changes SHALL be re-placed by the map inside its new
 Region, and its position in the Region it left SHALL NOT be reused.
 
@@ -270,6 +275,13 @@ Region, and its position in the Region it left SHALL NOT be reused.
 - **WHEN** a user drags a card past the boundary of its own Region and releases
 - **THEN** the card comes to rest inside its own Region
 - **AND** the Task's labels are unchanged
+
+#### Scenario: Drag goes below the Region
+
+- **WHEN** a user drags a card below the rows its Region holds
+- **THEN** the Region grows to hold the card while the drag is still under the
+  pointer
+- **AND** every Region below it moves down by what it grew
 
 #### Scenario: Region changes after a drag
 

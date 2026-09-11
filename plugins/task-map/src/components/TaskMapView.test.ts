@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import { describe, expect, it } from 'vitest'
 import { tick } from 'svelte'
 import type { ActiveTasks, Task, TaskDetail } from '@openforge-app/plugin-sdk/domain'
-import type { TaskChangeEvent } from '@openforge-app/plugin-sdk'
+import type { JsonValue, TaskChangeEvent } from '@openforge-app/plugin-sdk'
 import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk/frontend'
 import { createMockFrontendOpenForgeApi } from '@openforge-app/plugin-sdk/testing'
+import { createHostStorage } from '../__fixtures__/storage'
 import TaskMapView from './TaskMapView.svelte'
 import {
   buildLabelAssignment,
@@ -14,7 +15,9 @@ import {
   FIXTURE_PROJECT_ID,
   type LabelAssignment,
 } from '../__fixtures__/tasks'
-import { OTHER_REGION_TITLE } from '../lib/regions'
+import { pointerEvent } from '../__fixtures__/pointer'
+import { CANVAS_PADDING } from '../lib/cards'
+import { OTHER_REGION_TITLE, REGION_HEADING_HEIGHT } from '../lib/regions'
 
 const PLUGIN_ID = 'dev.kvg.task-map'
 
@@ -37,11 +40,20 @@ function bandTitles(): string[] {
   return screen.getAllByRole('heading', { level: 2 }).map((band) => band.textContent?.trim() ?? '')
 }
 
-function bandOfCard(taskId: string): string {
+function cardOf(taskId: string): HTMLElement {
   const card = screen
     .getByTestId('task-map-layer')
     .querySelector<HTMLElement>(`[data-task-id="${taskId}"]`)
   if (!card) throw new Error(`no card for Task ${taskId}`)
+  return card
+}
+
+function flushWrites(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0))
+}
+
+function bandOfCard(taskId: string): string {
+  const card = cardOf(taskId)
 
   const cardTop = Number.parseFloat(card.style.top)
   const band = screen.getAllByTestId('task-map-region').find((element) => {
@@ -419,9 +431,7 @@ describe('TaskMapView live Task changes', () => {
     const live = renderLiveView([buildSeededTask({ id: 'T-1', title: 'Rotate the tokens' })])
     await screen.findByRole('button', { name: /Rotate the tokens/ })
     await live.view.rerender({ api: live.api, context: viewContext('P-2') })
-    await waitFor(() => {
-      expect(screen.queryByRole('button', { name: /Rotate the tokens/ })).toBeNull()
-    })
+    await screen.findByText('No active Tasks')
     live.reads.length = 0
 
     live.change()
@@ -573,7 +583,7 @@ describe('TaskMapView reads that outlive what asked for them', () => {
       view,
       reads,
       settle: (tasks: TaskDetail[]) => next().resolve({ tasks, related: [] }),
-      flush: () => new Promise<void>((resolve) => setTimeout(resolve, 0)),
+      flush: flushWrites,
       fail: (cause: Error) => next().reject(cause),
       change: (event: Partial<TaskChangeEvent> = {}) =>
         base.__testing.registry.emitTaskChange({
@@ -582,6 +592,274 @@ describe('TaskMapView reads that outlive what asked for them', () => {
           reason: 'updated',
           ...event,
         }),
+    }
+  }
+})
+
+describe('TaskMapView card drag', () => {
+  function cardPoint(taskId: string): { x: number; y: number } {
+    const card = cardOf(taskId)
+    return { x: Number.parseFloat(card.style.left), y: Number.parseFloat(card.style.top) }
+  }
+
+  function bandTop(title: string): number {
+    const band = screen
+      .getAllByTestId('task-map-region')
+      .find((element) => element.querySelector('h2')?.textContent?.trim() === title)
+    if (!band) throw new Error(`no band titled ${title}`)
+    return Number.parseFloat(band.style.top)
+  }
+
+  async function dragCard(taskId: string, dx: number, dy: number, steps = 1): Promise<void> {
+    const card = cardOf(taskId)
+    await fireEvent(card, pointerEvent('pointerdown', 0, 0))
+    for (let step = 1; step <= steps; step += 1) {
+      await fireEvent(card, pointerEvent('pointermove', (dx * step) / steps, (dy * step) / steps))
+    }
+    await fireEvent(card, pointerEvent('pointerup', dx, dy))
+  }
+
+  it('rests a card where it is dropped inside its own band', async () => {
+    const map = await openMap([buildSeededTask({ id: 'T-1', title: 'Rotate the tokens' })])
+    const before = cardPoint('T-1')
+
+    await dragCard('T-1', 60, 40)
+
+    expect(cardPoint('T-1')).toEqual({ x: before.x + 60, y: before.y + 40 })
+    expect(map.api.__testing.calls.navigationRequests).toEqual([])
+  })
+
+  it('returns a card dragged past its own band and leaves the Task alone', async () => {
+    const map = await openMap(
+      [
+        buildSeededTask({ id: 'T-1', title: 'Rotate the tokens' }),
+        buildSeededTask({ id: 'T-2', title: 'Split the reader' }),
+      ],
+      { labels: [buildLabelAssignment('T-1', 'api'), buildLabelAssignment('T-2', 'auth')] },
+    )
+    expect(bandOfCard('T-2')).toBe('auth')
+
+    await dragCard('T-2', 0, -1000)
+
+    expect(bandOfCard('T-2')).toBe('auth')
+    expect(cardPoint('T-2').y).toBe(bandTop('auth') + REGION_HEADING_HEIGHT)
+    expect(taskWrites(map.api)).toEqual([])
+  })
+
+  it('writes one position for one drag gesture', async () => {
+    const map = await openMap([buildSeededTask({ id: 'T-1', title: 'Rotate the tokens' })])
+
+    await dragCard('T-1', 80, 60, 12)
+    await flushWrites()
+
+    expect(map.positionWrites).toEqual([{ 'T-1': { region: null, x: 80, y: 60 } }])
+  })
+
+  it('restores a dragged position when the View is reopened', async () => {
+    const map = await openMap([buildSeededTask({ id: 'T-1', title: 'Rotate the tokens' })])
+    await dragCard('T-1', 60, 40)
+    const dropped = cardPoint('T-1')
+
+    await map.reopen()
+
+    expect(cardPoint('T-1')).toEqual(dropped)
+  })
+
+  it('restores a dragged position after the app restarts', async () => {
+    const map = await openMap([buildSeededTask({ id: 'T-1', title: 'Rotate the tokens' })])
+    await dragCard('T-1', 60, 40)
+    const dropped = cardPoint('T-1')
+
+    await map.restart()
+
+    expect(cardPoint('T-1')).toEqual(dropped)
+  })
+
+  it('restores every position of three cards dragged one after another', async () => {
+    const map = await openMap([
+      buildSeededTask({ id: 'T-1', title: 'Rotate the tokens' }),
+      buildSeededTask({ id: 'T-2', title: 'Split the reader' }),
+      buildSeededTask({ id: 'T-3', title: 'Archive the runs' }),
+    ])
+
+    await dragCard('T-1', 40, 30)
+    await dragCard('T-2', 50, 60)
+    await dragCard('T-3', 60, 90)
+    const dropped = ['T-1', 'T-2', 'T-3'].map(cardPoint)
+
+    await map.reopen()
+
+    expect(['T-1', 'T-2', 'T-3'].map(cardPoint)).toEqual(dropped)
+  })
+
+  it('draws a card at its stored position rather than where layering would put it', async () => {
+    const map = await openMap([
+      buildSeededTask({ id: 'T-1', title: 'Rotate the tokens' }),
+      buildSeededTask({ id: 'T-2', title: 'Split the reader', dependsOn: ['T-1'] }),
+    ])
+    const layered = cardPoint('T-2')
+
+    await map.store('cardPositions', { 'T-2': { region: null, x: 0, y: 0 } })
+    await map.reopen()
+
+    expect(cardPoint('T-2').y).toBeLessThan(layered.y)
+    expect(cardPoint('T-2').y).toBe(bandTop(OTHER_REGION_TITLE) + REGION_HEADING_HEIGHT)
+  })
+
+  it('lays a Task out again once its band changes, ignoring where it sat before', async () => {
+    const task = buildSeededTask({ id: 'T-1', title: 'Rotate the tokens' })
+    const assignment = buildLabelAssignment('T-1', 'auth')
+    const map = await openMap([task, buildSeededTask({ id: 'T-2', title: 'Split the reader' })], {
+      labels: [assignment, buildLabelAssignment('T-2', 'api')],
+    })
+    await dragCard('T-1', 120, 0)
+    expect(cardPoint('T-1').x).toBe(CANVAS_PADDING + 120)
+
+    assignment.labels.splice(0, 1, ...buildLabelAssignment('T-1', 'api').labels)
+    map.change()
+
+    await waitFor(() => expect(bandOfCard('T-1')).toBe('api'))
+    expect(cardPoint('T-1').x).toBe(CANVAS_PADDING)
+  })
+
+  it('leaves every card alone for a position stored for a Task off the map', async () => {
+    const map = await openMap([buildSeededTask({ id: 'T-1', title: 'Rotate the tokens' })])
+    const layered = cardPoint('T-1')
+
+    await map.store('cardPositions', { 'T-gone': { region: null, x: 300, y: 300 } })
+    await map.reopen()
+
+    expect(cardPoint('T-1')).toEqual(layered)
+  })
+
+  it('reads a position written for one Project for that Project alone', async () => {
+    const map = await openMap([
+      buildSeededTask({ id: 'T-1', title: 'Rotate the tokens' }),
+      buildSeededTask({ id: 'T-9', title: 'Rotate the tokens', projectId: 'P-2' }),
+    ])
+    await dragCard('T-1', 60, 40)
+    const dropped = cardPoint('T-1')
+
+    await map.openProject('P-2')
+
+    expect(cardPoint('T-9')).toEqual({ x: dropped.x - 60, y: dropped.y - 40 })
+  })
+
+  it('opens a Task clicked without dragging it', async () => {
+    const map = await openMap([buildSeededTask({ id: 'T-1', title: 'Rotate the tokens' })])
+
+    await fireEvent.click(cardOf('T-1'), { detail: 1 })
+
+    expect(map.api.__testing.calls.navigationRequests).toEqual([{ viewId: 'board', taskId: 'T-1' }])
+  })
+
+  it('opens no Task on the click that ends a drag', async () => {
+    const map = await openMap([buildSeededTask({ id: 'T-1', title: 'Rotate the tokens' })])
+
+    await dragCard('T-1', 60, 40)
+    await fireEvent.click(cardOf('T-1'), { detail: 1 })
+
+    expect(map.api.__testing.calls.navigationRequests).toEqual([])
+  })
+
+  it('opens a Task activated from the keyboard after a card was dragged', async () => {
+    const map = await openMap([
+      buildSeededTask({ id: 'T-1', title: 'Rotate the tokens' }),
+      buildSeededTask({ id: 'T-2', title: 'Split the reader' }),
+    ])
+
+    await dragCard('T-1', 60, 40)
+    await fireEvent.click(cardOf('T-2'))
+
+    expect(map.api.__testing.calls.navigationRequests).toEqual([{ viewId: 'board', taskId: 'T-2' }])
+  })
+
+  it('does not reuse the position of the band a Task left and came back to', async () => {
+    const task = buildSeededTask({ id: 'T-1', title: 'Rotate the tokens' })
+    const assignment = buildLabelAssignment('T-1', 'auth')
+    const map = await openMap([task, buildSeededTask({ id: 'T-2', title: 'Split the reader' })], {
+      labels: [assignment, buildLabelAssignment('T-2', 'api')],
+    })
+    await dragCard('T-1', 120, 0)
+
+    const relabel = (...names: string[]) => {
+      assignment.labels.splice(0, assignment.labels.length, ...buildLabelAssignment('T-1', ...names).labels)
+      map.change()
+    }
+    relabel('api')
+    await waitFor(() => expect(bandOfCard('T-1')).toBe('api'))
+    relabel('auth')
+    await waitFor(() => expect(bandOfCard('T-1')).toBe('auth'))
+
+    expect(cardPoint('T-1').x).toBe(CANVAS_PADDING)
+  })
+
+  it('keeps a dropped position that a re-read already in flight could not see', async () => {
+    const map = await openMap([buildSeededTask({ id: 'T-1', title: 'Rotate the tokens' })])
+
+    map.change()
+    await dragCard('T-1', 60, 40)
+    const dropped = cardPoint('T-1')
+    await flushWrites()
+
+    expect(cardPoint('T-1')).toEqual(dropped)
+    await map.reopen()
+    expect(cardPoint('T-1')).toEqual(dropped)
+  })
+
+  function taskWrites(api: ReturnType<typeof createMockFrontendOpenForgeApi>) {
+    const { taskStatusUpdates, taskCreations, taskFollowUps, taskImplementationStarts } =
+      api.__testing.calls
+    return [...taskStatusUpdates, ...taskCreations, ...taskFollowUps, ...taskImplementationStarts]
+  }
+
+  interface OpenMapOptions {
+    labels?: LabelAssignment[]
+    projectId?: string
+  }
+
+  async function openMap(tasks: Task[], { labels = [], projectId = FIXTURE_PROJECT_ID }: OpenMapOptions = {}) {
+    const positionWrites: JsonValue[] = []
+    const storage = createHostStorage((key, value) => {
+      if (key === 'cardPositions') positionWrites.push(value)
+    })
+    const build = () =>
+      createMockFrontendOpenForgeApi({
+        pluginId: PLUGIN_ID,
+        projectId: FIXTURE_PROJECT_ID,
+        tasks,
+        taskLabelAssignments: labels,
+        storage,
+      })
+
+    let api = build()
+    const show = async (shown: string) => {
+      render(TaskMapView, { props: { api, context: viewContext(shown) } })
+      await screen.findByTestId('task-map-layer')
+    }
+    await show(projectId)
+
+    return {
+      get api() {
+        return api
+      },
+      positionWrites,
+      store: (key: string, value: JsonValue) => storage.project(projectId).set(key, value),
+      change: () =>
+        api.__testing.registry.emitTaskChange({ projectId, taskId: null, reason: 'updated' }),
+      reopen: async () => {
+        cleanup()
+        await show(projectId)
+      },
+      restart: async () => {
+        cleanup()
+        api = build()
+        await show(projectId)
+      },
+      openProject: async (other: string) => {
+        cleanup()
+        await show(other)
+      },
     }
   }
 })

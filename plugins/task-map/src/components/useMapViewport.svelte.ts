@@ -24,6 +24,9 @@ export function useMapViewport() {
   }
 
   return {
+    get scale(): number {
+      return viewport.scale
+    },
     get transform(): string {
       return canvasTransform(viewport)
     },

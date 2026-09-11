@@ -3,10 +3,11 @@
 
   interface Props {
     card: MapCard
+    dragging?: boolean
     onOpen: (taskId: string) => void
   }
 
-  let { card, onOpen }: Props = $props()
+  let { card, dragging = false, onOpen }: Props = $props()
 
   const statusLabel = $derived(card.status === 'doing' ? 'Doing' : 'Backlog')
 </script>
@@ -16,6 +17,7 @@
   class="task-map-card"
   data-task-id={card.taskId}
   data-status={card.status}
+  data-dragging={dragging ? 'true' : 'false'}
   style="left: {card.x}px; top: {card.y}px; width: {CARD_WIDTH}px; height: {CARD_HEIGHT}px"
   onclick={() => onOpen(card.taskId)}
 >
@@ -32,7 +34,9 @@
     gap: var(--of-space2);
     padding: var(--of-space3);
     text-align: left;
-    cursor: pointer;
+    cursor: grab;
+    user-select: none;
+    touch-action: none;
     background: var(--of-surface-raised);
     color: var(--of-text);
     border: var(--of-border-width) solid var(--of-border);
@@ -43,6 +47,11 @@
   }
 
   .task-map-card:hover {
+    box-shadow: var(--of-shadow-raised);
+  }
+
+  .task-map-card[data-dragging='true'] {
+    cursor: grabbing;
     box-shadow: var(--of-shadow-raised);
   }
 

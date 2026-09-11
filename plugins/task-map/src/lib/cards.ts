@@ -12,6 +12,11 @@ export interface MapCard {
   y: number
 }
 
+/** Where a card the user dragged sits, as an offset from its band's own origin. */
+export type CardPosition = { region: string | null; x: number; y: number }
+
+export type CardPositions = Record<string, CardPosition>
+
 export const CARD_WIDTH = 220
 export const CARD_HEIGHT = 92
 export const CARD_GAP = 24

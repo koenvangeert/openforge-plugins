@@ -1,10 +1,14 @@
 <script lang="ts">
   import type { DependencyArrow } from '../lib/arrows'
+  import type { CardPosition, MapCard } from '../lib/cards'
   import {
+    dragCardTo,
     mapExtent,
     REGION_HEADING_HEIGHT,
     regionCards,
     regionTitle,
+    withDraggedCard,
+    type CanvasPoint,
     type MapRegion,
   } from '../lib/regions'
   import type { MapViewport } from './useMapViewport.svelte'
@@ -16,15 +20,30 @@
     arrows: DependencyArrow[]
     viewport: MapViewport
     onOpenTask: (taskId: string) => void
+    onDropCard: (taskId: string, position: CardPosition) => void
   }
 
-  let { regions, arrows, viewport, onOpenTask }: Props = $props()
+  interface CardDrag {
+    taskId: string
+    pointer: CanvasPoint
+    origin: CanvasPoint
+    position: CardPosition | null
+  }
+
+  const DRAG_THRESHOLD = 4
+
+  let { regions, arrows, viewport, onOpenTask, onDropCard }: Props = $props()
 
   let surface = $state<HTMLElement | null>(null)
-  let panOrigin: { x: number; y: number } | null = $state(null)
+  let panOrigin: CanvasPoint | null = $state(null)
+  let drag = $state<CardDrag | null>(null)
+  let dragged = false
 
-  const extent = $derived(mapExtent(regions))
-  const cards = $derived(regionCards(regions))
+  const placed = $derived(
+    drag?.position ? withDraggedCard(regions, drag.taskId, drag.position) : regions,
+  )
+  const cards = $derived(regionCards(placed))
+  const extent = $derived(mapExtent(placed))
 
   $effect(() => {
     viewport.attach(surface)
@@ -40,23 +59,63 @@
     })
   }
 
-  function isCardPress(event: PointerEvent): boolean {
-    return event.target instanceof Element && event.target.closest('[data-task-id]') !== null
+  function pressedCard(event: PointerEvent): MapCard | null {
+    const pressed = event.target instanceof Element ? event.target.closest('[data-task-id]') : null
+    const taskId = pressed instanceof HTMLElement ? pressed.dataset.taskId : undefined
+    return cards.find((card) => card.taskId === taskId) ?? null
   }
 
   function handlePointerDown(event: PointerEvent): void {
-    if (isCardPress(event)) return
+    const card = pressedCard(event)
+    if (card) {
+      // Without capture a drag towards the canvas edge ends the moment the
+      // pointer crosses it, stranding the rest of the gesture.
+      surface?.setPointerCapture?.(event.pointerId)
+      drag = {
+        taskId: card.taskId,
+        pointer: { x: event.clientX, y: event.clientY },
+        origin: { x: card.x, y: card.y },
+        position: null,
+      }
+      return
+    }
     panOrigin = { x: event.clientX, y: event.clientY }
   }
 
+  function dragCard(event: PointerEvent, gesture: CardDrag): void {
+    const travelled =
+      Math.abs(event.clientX - gesture.pointer.x) + Math.abs(event.clientY - gesture.pointer.y)
+    if (!gesture.position && travelled < DRAG_THRESHOLD) return
+
+    const position = dragCardTo(regions, gesture.taskId, {
+      x: gesture.origin.x + (event.clientX - gesture.pointer.x) / viewport.scale,
+      y: gesture.origin.y + (event.clientY - gesture.pointer.y) / viewport.scale,
+    })
+    if (!position) return
+
+    drag = { ...gesture, position }
+  }
+
   function handlePointerMove(event: PointerEvent): void {
+    if (drag) {
+      dragCard(event, drag)
+      return
+    }
     if (!panOrigin) return
     viewport.pan(event.clientX - panOrigin.x, event.clientY - panOrigin.y)
     panOrigin = { x: event.clientX, y: event.clientY }
   }
 
-  function endPan(): void {
+  function endGesture(): void {
+    dragged = Boolean(drag?.position)
+    if (drag?.position) onDropCard(drag.taskId, drag.position)
+    drag = null
     panOrigin = null
+  }
+
+  function handleClickCapture(event: MouseEvent): void {
+    const fromPointer = event.detail > 0
+    if (dragged && fromPointer) event.stopPropagation()
   }
 </script>
 
@@ -67,18 +126,19 @@
   data-panning={panOrigin ? 'true' : 'false'}
   role="presentation"
   onwheel={handleWheel}
+  onclickcapture={handleClickCapture}
   onpointerdown={handlePointerDown}
   onpointermove={handlePointerMove}
-  onpointerup={endPan}
-  onpointerleave={endPan}
-  onpointercancel={endPan}
+  onpointerup={endGesture}
+  onpointerleave={endGesture}
+  onpointercancel={endGesture}
 >
   <div
     class="task-map-layer"
     data-testid="task-map-layer"
     style="width: {extent.width}px; height: {extent.height}px; transform: {viewport.transform}"
   >
-    {#each regions as region (region.label)}
+    {#each placed as region (region.label)}
       <div
         class="task-map-region"
         data-testid="task-map-region"
@@ -92,7 +152,7 @@
     {/each}
     <TaskMapArrows {arrows} {cards} {extent} />
     {#each cards as card (card.taskId)}
-      <TaskCard {card} onOpen={onOpenTask} />
+      <TaskCard {card} dragging={card.taskId === drag?.taskId} onOpen={onOpenTask} />
     {/each}
   </div>
 </div>

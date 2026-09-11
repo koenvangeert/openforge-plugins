@@ -59,4 +59,10 @@ describe('TaskCard', () => {
 
     expect(screen.getAllByRole('button')).toHaveLength(1)
   })
+
+  it('marks the card the user is dragging', () => {
+    render(TaskCard, { props: { card: card(), dragging: true, onOpen: vi.fn() } })
+
+    expect(screen.getByRole('button', { name: /Rotate the tokens/ }).dataset.dragging).toBe('true')
+  })
 })

@@ -66,7 +66,13 @@
         emptyTitle="No active Tasks"
         emptyDescription="Every Task in this Project is Completed."
       >
-        <TaskMapCanvas regions={map.regions} arrows={map.arrows} {viewport} onOpenTask={openTask} />
+        <TaskMapCanvas
+          regions={map.regions}
+          arrows={map.arrows}
+          {viewport}
+          onOpenTask={openTask}
+          onDropCard={map.dropCard}
+        />
       </PluginViewState>
     {/if}
   {/snippet}

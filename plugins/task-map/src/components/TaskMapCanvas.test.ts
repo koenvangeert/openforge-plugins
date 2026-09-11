@@ -6,6 +6,7 @@ import { useMapViewport } from './useMapViewport.svelte'
 import { assembleRegions, OTHER_REGION_TITLE, type MapRegion } from '../lib/regions'
 import { selectArrows, type DependencyArrow } from '../lib/arrows'
 import { buildTaskDetail } from '../__fixtures__/tasks'
+import { pointerEvent } from '../__fixtures__/pointer'
 
 const tasks = [
   buildTaskDetail({ id: 'T-1', title: 'Rotate the tokens' }),
@@ -20,11 +21,13 @@ interface RenderOptions {
 
 function renderCanvas({ drawn = arrows, regions = assembleRegions(tasks, []) }: RenderOptions = {}) {
   const onOpenTask = vi.fn()
+  const onDropCard = vi.fn()
   const viewport = useMapViewport()
-  render(TaskMapCanvas, { props: { regions, arrows: drawn, viewport, onOpenTask } })
+  render(TaskMapCanvas, { props: { regions, arrows: drawn, viewport, onOpenTask, onDropCard } })
   return {
     viewport,
     onOpenTask,
+    onDropCard,
     surface: screen.getByTestId('task-map-surface'),
     layer: screen.getByTestId('task-map-layer'),
   }
@@ -32,12 +35,6 @@ function renderCanvas({ drawn = arrows, regions = assembleRegions(tasks, []) }: 
 
 function bandTitles(): string[] {
   return screen.getAllByRole('heading', { level: 2 }).map((band) => band.textContent?.trim() ?? '')
-}
-
-// jsdom implements no PointerEvent, so a MouseEvent carries the clientX/clientY the
-// pan handlers read while still dispatching under the pointer event's own name.
-function pointerEvent(type: string, clientX: number, clientY: number): MouseEvent {
-  return new MouseEvent(type, { clientX, clientY, bubbles: true, cancelable: true })
 }
 
 describe('TaskMapCanvas', () => {
@@ -112,14 +109,86 @@ describe('TaskMapCanvas', () => {
     expect(layer.style.transform).toBe('translate(10px, 10px) scale(1)')
   })
 
-  it('does not pan a drag that starts on a card', async () => {
-    const { layer } = renderCanvas()
+  it('drags the card a press started on rather than panning the canvas', async () => {
+    const { layer, onDropCard } = renderCanvas()
 
     const card = screen.getByRole('button', { name: /Rotate the tokens/ })
     await fireEvent(card, pointerEvent('pointerdown', 0, 0))
     await fireEvent(card, pointerEvent('pointermove', 40, 40))
+    await fireEvent(card, pointerEvent('pointerup', 40, 40))
 
     expect(layer.style.transform).toBe('translate(0px, 0px) scale(1)')
+    expect(onDropCard).toHaveBeenCalledExactlyOnceWith('T-1', { region: null, x: 40, y: 40 })
+  })
+
+  it('draws the card under the pointer before the drop is stored', async () => {
+    const { onDropCard } = renderCanvas()
+
+    const card = screen.getByRole('button', { name: /Rotate the tokens/ })
+    const before = Number.parseFloat(card.style.left)
+    await fireEvent(card, pointerEvent('pointerdown', 0, 0))
+    await fireEvent(card, pointerEvent('pointermove', 40, 0))
+
+    expect(Number.parseFloat(card.style.left)).toBe(before + 40)
+    expect(onDropCard).not.toHaveBeenCalled()
+  })
+
+  it('grows the band under the pointer before the drop is stored', async () => {
+    renderCanvas({ regions: assembleRegions([tasks[0]], []), drawn: [] })
+
+    const card = screen.getByRole('button', { name: /Rotate the tokens/ })
+    const band = screen.getAllByTestId('task-map-region')[0]
+    const before = Number.parseFloat(band.style.height)
+    await fireEvent(card, pointerEvent('pointerdown', 0, 0))
+    await fireEvent(card, pointerEvent('pointermove', 0, 120))
+
+    expect(Number.parseFloat(band.style.height)).toBe(before + 120)
+  })
+
+  it('writes the drop once when the pointer leaves the canvas mid-drag', async () => {
+    const { surface, onDropCard } = renderCanvas()
+
+    const card = screen.getByRole('button', { name: /Rotate the tokens/ })
+    await fireEvent(card, pointerEvent('pointerdown', 0, 0))
+    await fireEvent(card, pointerEvent('pointermove', 40, 40))
+    await fireEvent(surface, pointerEvent('pointerleave', 40, 40))
+    await fireEvent(surface, pointerEvent('pointerup', 60, 60))
+
+    expect(onDropCard).toHaveBeenCalledExactlyOnceWith('T-1', { region: null, x: 40, y: 40 })
+  })
+
+  it('writes the drop once when the gesture is cancelled', async () => {
+    const { surface, onDropCard } = renderCanvas()
+
+    const card = screen.getByRole('button', { name: /Rotate the tokens/ })
+    await fireEvent(card, pointerEvent('pointerdown', 0, 0))
+    await fireEvent(card, pointerEvent('pointermove', 40, 40))
+    await fireEvent(surface, pointerEvent('pointercancel', 40, 40))
+
+    expect(onDropCard).toHaveBeenCalledExactlyOnceWith('T-1', { region: null, x: 40, y: 40 })
+  })
+
+  it('drags a card by what the pointer travelled on a zoomed canvas', async () => {
+    const { surface, onDropCard, viewport } = renderCanvas()
+    viewport.zoomIn()
+
+    const card = screen.getByRole('button', { name: /Rotate the tokens/ })
+    await fireEvent(card, pointerEvent('pointerdown', 0, 0))
+    await fireEvent(surface, pointerEvent('pointermove', 50, 25))
+    await fireEvent(surface, pointerEvent('pointerup', 50, 25))
+
+    expect(onDropCard).toHaveBeenCalledExactlyOnceWith('T-1', { region: null, x: 40, y: 20 })
+  })
+
+  it('reports no drop for a press that never moved', async () => {
+    const { onDropCard } = renderCanvas()
+
+    const card = screen.getByRole('button', { name: /Rotate the tokens/ })
+    await fireEvent(card, pointerEvent('pointerdown', 10, 10))
+    await fireEvent(card, pointerEvent('pointermove', 11, 11))
+    await fireEvent(card, pointerEvent('pointerup', 11, 11))
+
+    expect(onDropCard).not.toHaveBeenCalled()
   })
 
   it('keeps the cards inside the transformed layer, so their hit targets follow it', async () => {
