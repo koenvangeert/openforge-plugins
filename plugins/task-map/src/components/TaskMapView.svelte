@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte'
   import { Minus, Plus, Scan } from '@lucide/svelte'
   import type { PluginViewProps } from '@openforge-app/plugin-sdk/frontend'
   import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
@@ -23,6 +24,10 @@
   function openTask(taskId: string): void {
     void api.navigation.navigate({ viewId: 'board', taskId })
   }
+
+  onDestroy(() => {
+    map.dispose()
+  })
 </script>
 
 <PluginPageShell>

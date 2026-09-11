@@ -1,4 +1,4 @@
-import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
+import type { Disposable, FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import { selectArrows, type DependencyArrow } from '../lib/arrows'
 import { assembleRegions, regionCards, seedRegionLabels, type MapRegion } from '../lib/regions'
 
@@ -17,6 +17,9 @@ export function useTaskMap(api: FrontendOpenForgeAPI) {
   let model = $state<TaskMapModel | null>(null)
   let isLoading = $state(false)
   let error = $state<string | null>(null)
+  let taskChanges: Disposable | null = null
+  let readInFlight = false
+  let rereadRequested = false
 
   function isCurrentActivation(
     projectId: string | null | undefined,
@@ -25,7 +28,7 @@ export function useTaskMap(api: FrontendOpenForgeAPI) {
     return activeProjectId === projectId && projectActivation === activation
   }
 
-  async function load(): Promise<void> {
+  async function readActiveTasks(background: boolean): Promise<void> {
     const projectId = activeProjectId
     const activation = projectActivation
     if (!projectId) {
@@ -33,8 +36,6 @@ export function useTaskMap(api: FrontendOpenForgeAPI) {
       return
     }
 
-    isLoading = true
-    error = null
     try {
       const active = await api.tasks.active(projectId)
       if (!isCurrentActivation(projectId, activation)) return
@@ -42,13 +43,49 @@ export function useTaskMap(api: FrontendOpenForgeAPI) {
         regions: assembleRegions(active.tasks, seedRegionLabels(active.tasks)),
         arrows: selectArrows(active.tasks),
       }
+      error = null
     } catch (cause) {
-      if (!isCurrentActivation(projectId, activation)) return
+      // A failed background read leaves the map it could not replace on screen.
+      if (background || !isCurrentActivation(projectId, activation)) return
       model = null
       error = errorMessage(cause)
     } finally {
       if (isCurrentActivation(projectId, activation)) isLoading = false
     }
+  }
+
+  async function runReads(background: boolean): Promise<void> {
+    const activation = projectActivation
+    if (!background) isLoading = true
+    if (readInFlight) {
+      rereadRequested = true
+      return
+    }
+
+    readInFlight = true
+    try {
+      let inBackground = background
+      do {
+        rereadRequested = false
+        await readActiveTasks(inBackground)
+        inBackground = true
+      } while (rereadRequested && projectActivation === activation)
+    } finally {
+      if (projectActivation === activation) readInFlight = false
+    }
+  }
+
+  function refresh(): Promise<void> {
+    return runReads(true)
+  }
+
+  function reload(): Promise<void> {
+    return runReads(false)
+  }
+
+  function watchTaskChanges(projectId: string | null): void {
+    taskChanges?.dispose()
+    taskChanges = projectId ? api.tasks.onDidChange(projectId, () => void refresh()) : null
   }
 
   function activateProject(projectId: string | null): void {
@@ -59,7 +96,16 @@ export function useTaskMap(api: FrontendOpenForgeAPI) {
     model = null
     error = null
     isLoading = false
-    void load()
+    readInFlight = false
+    rereadRequested = false
+    watchTaskChanges(projectId)
+    void reload()
+  }
+
+  function dispose(): void {
+    taskChanges?.dispose()
+    taskChanges = null
+    projectActivation += 1
   }
 
   return {
@@ -82,6 +128,7 @@ export function useTaskMap(api: FrontendOpenForgeAPI) {
       return model !== null && regionCards(model.regions).length === 0
     },
     activateProject,
-    reload: load,
+    dispose,
+    reload,
   }
 }

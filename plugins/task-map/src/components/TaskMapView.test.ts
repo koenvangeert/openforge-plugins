@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from '@testing-library/svelte'
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import { describe, expect, it } from 'vitest'
-import type { ActiveTasks, Task } from '@openforge-app/plugin-sdk/domain'
+import { tick } from 'svelte'
+import type { ActiveTasks, Task, TaskDetail } from '@openforge-app/plugin-sdk/domain'
+import type { TaskChangeEvent } from '@openforge-app/plugin-sdk'
 import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk/frontend'
 import { createMockFrontendOpenForgeApi } from '@openforge-app/plugin-sdk/testing'
 import TaskMapView from './TaskMapView.svelte'
@@ -335,4 +337,251 @@ describe('TaskMapView label bands', () => {
     expect(bandOfCard('T-2')).toBe('api')
     expect(arrowKeys()).toEqual(['T-1->T-2'])
   })
+})
+
+describe('TaskMapView live Task changes', () => {
+  it('draws a Task created while the map is open', async () => {
+    const tasks = [buildSeededTask({ id: 'T-1', title: 'Rotate the tokens' })]
+    const live = renderLiveView(tasks)
+    await screen.findByRole('button', { name: /Rotate the tokens/ })
+
+    tasks.push(buildSeededTask({ id: 'T-2', title: 'Split the reader' }))
+    live.change({ taskId: 'T-2', reason: 'created' })
+
+    expect(await screen.findByRole('button', { name: /Split the reader/ })).toBeTruthy()
+  })
+
+  it('removes a Completed Task and the arrow that pointed at it', async () => {
+    const blocker = buildSeededTask({ id: 'T-1', title: 'Rotate the tokens' })
+    const live = renderLiveView([
+      blocker,
+      buildSeededTask({ id: 'T-2', title: 'Split the reader', dependsOn: ['T-1'] }),
+    ])
+    await screen.findByRole('button', { name: /Rotate the tokens/ })
+    expect(arrowKeys()).toEqual(['T-1->T-2'])
+
+    blocker.status = 'done'
+    live.change({ taskId: 'T-1', reason: 'completed' })
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /Rotate the tokens/ })).toBeNull()
+    })
+    expect(screen.queryAllByTestId('task-map-arrow')).toHaveLength(0)
+  })
+
+  it('moves a retitled and relabelled Task into its new band', async () => {
+    const task = buildSeededTask({ id: 'T-1', title: 'Rotate the tokens' })
+    const assignment = buildLabelAssignment('T-1', 'auth')
+    const live = renderLiveView(
+      [task, buildSeededTask({ id: 'T-2', title: 'Split the reader' })],
+      [assignment, buildLabelAssignment('T-2', 'api')],
+    )
+    await screen.findByRole('button', { name: /Rotate the tokens/ })
+    expect(bandOfCard('T-1')).toBe('auth')
+
+    task.title = 'Rotate the keys'
+    assignment.labels.splice(0, 1, ...buildLabelAssignment('T-1', 'api').labels)
+    live.change({ taskId: 'T-1' })
+
+    expect(await screen.findByRole('button', { name: /Rotate the keys/ })).toBeTruthy()
+    expect(bandOfCard('T-1')).toBe('api')
+  })
+
+  it('answers a burst of change events with one further read of every Task', async () => {
+    const tasks = [buildSeededTask({ id: 'T-1', title: 'Rotate the tokens' })]
+    const live = renderLiveView(tasks)
+    await screen.findByRole('button', { name: /Rotate the tokens/ })
+    live.reads.length = 0
+
+    tasks.push(buildSeededTask({ id: 'T-2', title: 'Split the reader' }))
+    live.change({ taskId: 'T-2', reason: 'created' })
+    tasks.push(buildSeededTask({ id: 'T-3', title: 'Archive the runs' }))
+    live.change({ taskId: 'T-3', reason: 'created' })
+    live.change()
+
+    expect(await screen.findByRole('button', { name: /Archive the runs/ })).toBeTruthy()
+    expect(cardIds()).toEqual(['T-1', 'T-2', 'T-3'])
+    expect(live.reads).toHaveLength(2)
+  })
+
+  it('stops reading once the View is destroyed', async () => {
+    const live = renderLiveView([buildSeededTask({ id: 'T-1', title: 'Rotate the tokens' })])
+    await screen.findByRole('button', { name: /Rotate the tokens/ })
+    live.reads.length = 0
+
+    live.view.unmount()
+    live.change()
+
+    expect(live.reads).toEqual([])
+  })
+
+  it('follows the new Project and ignores the Project it left', async () => {
+    const live = renderLiveView([buildSeededTask({ id: 'T-1', title: 'Rotate the tokens' })])
+    await screen.findByRole('button', { name: /Rotate the tokens/ })
+    await live.view.rerender({ api: live.api, context: viewContext('P-2') })
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /Rotate the tokens/ })).toBeNull()
+    })
+    live.reads.length = 0
+
+    live.change()
+    expect(live.reads).toEqual([])
+
+    live.change({ projectId: 'P-2', taskId: 'T-9', reason: 'created' })
+    expect(live.reads).toEqual([{ projectId: 'P-2' }])
+  })
+
+  function renderLiveView(tasks: Task[], taskLabelAssignments: LabelAssignment[] = []) {
+    const api = createMockFrontendOpenForgeApi({
+      pluginId: PLUGIN_ID,
+      projectId: FIXTURE_PROJECT_ID,
+      tasks,
+      taskLabelAssignments,
+    })
+    const view = render(TaskMapView, {
+      props: { api, context: viewContext(FIXTURE_PROJECT_ID) },
+    })
+
+    return {
+      api,
+      view,
+      reads: api.__testing.calls.taskActiveRequests,
+      change: (event: Partial<TaskChangeEvent> = {}) =>
+        api.__testing.registry.emitTaskChange({
+          projectId: FIXTURE_PROJECT_ID,
+          taskId: null,
+          reason: 'updated',
+          ...event,
+        }),
+    }
+  }
+})
+
+describe('TaskMapView reads that outlive what asked for them', () => {
+  it('keeps the cards on screen while a re-read runs', async () => {
+    const controlled = renderControlledView()
+    controlled.settle([buildTaskDetail({ id: 'T-1', title: 'Rotate the tokens' })])
+    await screen.findByRole('button', { name: /Rotate the tokens/ })
+
+    controlled.change()
+    await tick()
+
+    expect(screen.getByRole('button', { name: /Rotate the tokens/ })).toBeTruthy()
+    expect(screen.queryByRole('status')).toBeNull()
+
+    controlled.settle([
+      buildTaskDetail({ id: 'T-1', title: 'Rotate the tokens' }),
+      buildTaskDetail({ id: 'T-2', title: 'Split the reader' }),
+    ])
+
+    expect(await screen.findByRole('button', { name: /Split the reader/ })).toBeTruthy()
+  })
+
+  it('keeps the map a failed re-read could not replace', async () => {
+    const controlled = renderControlledView()
+    controlled.settle([buildTaskDetail({ id: 'T-1', title: 'Rotate the tokens' })])
+    await screen.findByRole('button', { name: /Rotate the tokens/ })
+
+    controlled.change()
+    controlled.fail(new Error('the host went away'))
+    controlled.change()
+    await waitFor(() => expect(controlled.reads).toHaveLength(3))
+
+    expect(screen.getByRole('button', { name: /Rotate the tokens/ })).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('reports a first read that fails', async () => {
+    const controlled = renderControlledView()
+
+    controlled.fail(new Error('the host went away'))
+
+    expect(await screen.findByText('Unable to load the Task Map')).toBeTruthy()
+    expect(screen.getByText('the host went away')).toBeTruthy()
+  })
+
+  it('runs no queued re-read once the View is destroyed', async () => {
+    const controlled = renderControlledView()
+    controlled.settle([buildTaskDetail({ id: 'T-1', title: 'Rotate the tokens' })])
+    await screen.findByRole('button', { name: /Rotate the tokens/ })
+
+    controlled.change()
+    await tick()
+    controlled.change()
+    controlled.view.unmount()
+    controlled.settle([buildTaskDetail({ id: 'T-1', title: 'Rotate the tokens' })])
+    await controlled.flush()
+
+    expect(controlled.reads).toEqual([FIXTURE_PROJECT_ID, FIXTURE_PROJECT_ID])
+  })
+
+  it('leaves every re-read after a Project switch to the new Project', async () => {
+    const controlled = renderControlledView()
+    controlled.settle([buildTaskDetail({ id: 'T-1', title: 'Rotate the tokens' })])
+    await screen.findByRole('button', { name: /Rotate the tokens/ })
+
+    controlled.change()
+    await tick()
+    await controlled.view.rerender({ api: controlled.api, context: viewContext('P-2') })
+    controlled.change({ projectId: 'P-2' })
+    controlled.settle([buildTaskDetail({ id: 'T-1', title: 'Rotate the tokens' })])
+    await controlled.flush()
+
+    expect(controlled.reads).toEqual([FIXTURE_PROJECT_ID, FIXTURE_PROJECT_ID, 'P-2'])
+
+    controlled.change({ projectId: 'P-2' })
+    expect(controlled.reads).toHaveLength(3)
+
+    controlled.settle([buildTaskDetail({ id: 'T-2', title: 'Split the reader', projectId: 'P-2' })])
+    await controlled.flush()
+    controlled.settle([buildTaskDetail({ id: 'T-2', title: 'Split the reader', projectId: 'P-2' })])
+
+    expect(await screen.findByRole('button', { name: /Split the reader/ })).toBeTruthy()
+    expect(controlled.reads).toEqual([FIXTURE_PROJECT_ID, FIXTURE_PROJECT_ID, 'P-2', 'P-2'])
+  })
+
+  function renderControlledView() {
+    const base = createMockFrontendOpenForgeApi({
+      pluginId: PLUGIN_ID,
+      projectId: FIXTURE_PROJECT_ID,
+    })
+    const reads: string[] = []
+    const waiting: { resolve: (tasks: ActiveTasks) => void; reject: (cause: Error) => void }[] = []
+    const api: FrontendOpenForgeAPI = {
+      ...base,
+      tasks: {
+        ...base.tasks,
+        active: (projectId) =>
+          new Promise<ActiveTasks>((resolve, reject) => {
+            reads.push(projectId)
+            waiting.push({ resolve, reject })
+          }),
+      },
+    }
+    const view = render(TaskMapView, {
+      props: { api, context: viewContext(FIXTURE_PROJECT_ID) },
+    })
+
+    function next(): { resolve: (tasks: ActiveTasks) => void; reject: (cause: Error) => void } {
+      const pending = waiting.shift()
+      if (!pending) throw new Error('no read is waiting')
+      return pending
+    }
+
+    return {
+      api,
+      view,
+      reads,
+      settle: (tasks: TaskDetail[]) => next().resolve({ tasks, related: [] }),
+      flush: () => new Promise<void>((resolve) => setTimeout(resolve, 0)),
+      fail: (cause: Error) => next().reject(cause),
+      change: (event: Partial<TaskChangeEvent> = {}) =>
+        base.__testing.registry.emitTaskChange({
+          projectId: FIXTURE_PROJECT_ID,
+          taskId: null,
+          reason: 'updated',
+          ...event,
+        }),
+    }
+  }
 })
