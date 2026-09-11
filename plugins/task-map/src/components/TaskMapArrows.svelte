@@ -1,16 +1,17 @@
 <script lang="ts">
   import { routeArrows, type DependencyArrow } from '../lib/arrows'
-  import { mapExtent, type MapCard } from '../lib/cards'
+  import type { MapCard } from '../lib/cards'
+  import type { MapExtent } from '../lib/regions'
 
   interface Props {
     arrows: DependencyArrow[]
     cards: MapCard[]
+    extent: MapExtent
   }
 
-  let { arrows, cards }: Props = $props()
+  let { arrows, cards, extent }: Props = $props()
 
   const routed = $derived(routeArrows(arrows, cards))
-  const extent = $derived(mapExtent(cards))
 </script>
 
 <svg

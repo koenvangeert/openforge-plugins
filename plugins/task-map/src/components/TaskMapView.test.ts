@@ -5,7 +5,14 @@ import type { ActiveTasks, Task } from '@openforge-app/plugin-sdk/domain'
 import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk/frontend'
 import { createMockFrontendOpenForgeApi } from '@openforge-app/plugin-sdk/testing'
 import TaskMapView from './TaskMapView.svelte'
-import { buildSeededTask, buildTaskDetail, FIXTURE_PROJECT_ID } from '../__fixtures__/tasks'
+import {
+  buildLabelAssignment,
+  buildSeededTask,
+  buildTaskDetail,
+  FIXTURE_PROJECT_ID,
+  type LabelAssignment,
+} from '../__fixtures__/tasks'
+import { OTHER_REGION_TITLE } from '../lib/regions'
 
 const PLUGIN_ID = 'dev.kvg.task-map'
 
@@ -24,11 +31,36 @@ function arrowKeys(): (string | undefined)[] {
     .sort()
 }
 
-function renderView(tasks: Task[], projectId: string | null = FIXTURE_PROJECT_ID) {
+function bandTitles(): string[] {
+  return screen.getAllByRole('heading', { level: 2 }).map((band) => band.textContent?.trim() ?? '')
+}
+
+function bandOfCard(taskId: string): string {
+  const card = screen
+    .getByTestId('task-map-layer')
+    .querySelector<HTMLElement>(`[data-task-id="${taskId}"]`)
+  if (!card) throw new Error(`no card for Task ${taskId}`)
+
+  const cardTop = Number.parseFloat(card.style.top)
+  const band = screen.getAllByTestId('task-map-region').find((element) => {
+    const bandTop = Number.parseFloat(element.style.top)
+    return cardTop >= bandTop && cardTop < bandTop + Number.parseFloat(element.style.height)
+  })
+  if (!band) throw new Error(`the card for Task ${taskId} sits in no band`)
+
+  return band.querySelector('h2')?.textContent?.trim() ?? ''
+}
+
+function renderView(
+  tasks: Task[],
+  projectId: string | null = FIXTURE_PROJECT_ID,
+  taskLabelAssignments: LabelAssignment[] = [],
+) {
   const api = createMockFrontendOpenForgeApi({
     pluginId: PLUGIN_ID,
     projectId: FIXTURE_PROJECT_ID,
     tasks,
+    taskLabelAssignments,
   })
   render(TaskMapView, { props: { api, context: viewContext(projectId) } })
   return api
@@ -241,5 +273,66 @@ describe('TaskMapView dependency arrows', () => {
       'T-2',
     ])
     expect(screen.getByTestId('task-map-arrows').getAttribute('aria-hidden')).toBe('true')
+  })
+})
+
+describe('TaskMapView label bands', () => {
+  it('seeds one band per label the active Tasks carry, with No label / Other last', async () => {
+    renderView(
+      [
+        buildSeededTask({ id: 'T-1', title: 'Rotate the tokens' }),
+        buildSeededTask({ id: 'T-2', title: 'Split the reader' }),
+        buildSeededTask({ id: 'T-3', title: 'Archive the runs', status: 'done' }),
+      ],
+      FIXTURE_PROJECT_ID,
+      [buildLabelAssignment('T-1', 'auth'), buildLabelAssignment('T-2', 'api'), buildLabelAssignment('T-3', 'archived')],
+    )
+    await screen.findByRole('button', { name: /Rotate the tokens/ })
+
+    expect(bandTitles()).toEqual(['api', 'auth', OTHER_REGION_TITLE])
+  })
+
+  it('draws a Task once, in the first band whose label it carries', async () => {
+    renderView(
+      [buildSeededTask({ id: 'T-1', title: 'Rotate the tokens' })],
+      FIXTURE_PROJECT_ID,
+      [buildLabelAssignment('T-1', 'auth', 'api')],
+    )
+    await screen.findByRole('button', { name: /Rotate the tokens/ })
+
+    expect(bandTitles()).toEqual(['api', 'auth', OTHER_REGION_TITLE])
+    expect(cardIds()).toEqual(['T-1'])
+    expect(bandOfCard('T-1')).toBe('api')
+  })
+
+  it('draws a Task carrying no label in the No label / Other band', async () => {
+    renderView(
+      [
+        buildSeededTask({ id: 'T-1', title: 'Rotate the tokens' }),
+        buildSeededTask({ id: 'T-2', title: 'Split the reader' }),
+      ],
+      FIXTURE_PROJECT_ID,
+      [buildLabelAssignment('T-1', 'auth')],
+    )
+    await screen.findByRole('button', { name: /Rotate the tokens/ })
+
+    expect(bandOfCard('T-1')).toBe('auth')
+    expect(bandOfCard('T-2')).toBe(OTHER_REGION_TITLE)
+  })
+
+  it('draws an arrow between two cards sitting in different bands', async () => {
+    renderView(
+      [
+        buildSeededTask({ id: 'T-1', title: 'Rotate the tokens' }),
+        buildSeededTask({ id: 'T-2', title: 'Split the reader', dependsOn: ['T-1'] }),
+      ],
+      FIXTURE_PROJECT_ID,
+      [buildLabelAssignment('T-1', 'auth'), buildLabelAssignment('T-2', 'api')],
+    )
+    await screen.findByRole('button', { name: /Rotate the tokens/ })
+
+    expect(bandOfCard('T-1')).toBe('auth')
+    expect(bandOfCard('T-2')).toBe('api')
+    expect(arrowKeys()).toEqual(['T-1->T-2'])
   })
 })

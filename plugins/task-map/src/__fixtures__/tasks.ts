@@ -20,6 +20,15 @@ function taskLabel(projectId: string, name: string): TaskLabel {
   return { id, projectId, name }
 }
 
+export interface LabelAssignment {
+  taskId: string
+  labels: TaskLabel[]
+}
+
+export function buildLabelAssignment(taskId: string, ...names: string[]): LabelAssignment {
+  return { taskId, labels: names.map((name) => taskLabel(FIXTURE_PROJECT_ID, name)) }
+}
+
 export function buildTaskDetail(overrides: TaskDetailOverrides = {}): TaskDetail {
   const id = overrides.id ?? 'T-1'
   const projectId = overrides.projectId ?? FIXTURE_PROJECT_ID

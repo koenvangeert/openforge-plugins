@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
 import TaskMapCanvas from './TaskMapCanvas.svelte'
 import { useMapViewport } from './useMapViewport.svelte'
-import { placeCards } from '../lib/cards'
+import { assembleRegions, OTHER_REGION_TITLE, type MapRegion } from '../lib/regions'
 import { selectArrows, type DependencyArrow } from '../lib/arrows'
 import { buildTaskDetail } from '../__fixtures__/tasks'
 
@@ -11,19 +11,27 @@ const tasks = [
   buildTaskDetail({ id: 'T-1', title: 'Rotate the tokens' }),
   buildTaskDetail({ id: 'T-2', title: 'Split the reader', dependsOn: ['T-1'] }),
 ]
-const cards = placeCards(tasks)
 const arrows = selectArrows(tasks)
 
-function renderCanvas({ drawn = arrows }: { drawn?: DependencyArrow[] } = {}) {
+interface RenderOptions {
+  drawn?: DependencyArrow[]
+  regions?: MapRegion[]
+}
+
+function renderCanvas({ drawn = arrows, regions = assembleRegions(tasks, []) }: RenderOptions = {}) {
   const onOpenTask = vi.fn()
   const viewport = useMapViewport()
-  render(TaskMapCanvas, { props: { cards, arrows: drawn, viewport, onOpenTask } })
+  render(TaskMapCanvas, { props: { regions, arrows: drawn, viewport, onOpenTask } })
   return {
     viewport,
     onOpenTask,
     surface: screen.getByTestId('task-map-surface'),
     layer: screen.getByTestId('task-map-layer'),
   }
+}
+
+function bandTitles(): string[] {
+  return screen.getAllByRole('heading', { level: 2 }).map((band) => band.textContent?.trim() ?? '')
 }
 
 // jsdom implements no PointerEvent, so a MouseEvent carries the clientX/clientY the
@@ -132,5 +140,57 @@ describe('TaskMapCanvas', () => {
     await fireEvent.click(screen.getByRole('button', { name: /Split the reader/ }))
 
     expect(onOpenTask).toHaveBeenCalledWith('T-2')
+  })
+})
+
+describe('TaskMapCanvas label bands', () => {
+  const banded = [
+    buildTaskDetail({ id: 'T-1', title: 'Rotate the tokens', labels: ['auth', 'api'] }),
+    buildTaskDetail({ id: 'T-2', title: 'Split the reader', labels: ['api'], dependsOn: ['T-1'] }),
+    buildTaskDetail({ id: 'T-3', title: 'Archive the runs' }),
+  ]
+
+  it('draws one band per curated label in curated order, with Other last', () => {
+    renderCanvas({ regions: assembleRegions(banded, ['auth', 'api']) })
+
+    expect(bandTitles()).toEqual(['auth', 'api', OTHER_REGION_TITLE])
+  })
+
+  it('draws a band for a curated label no Task carries', () => {
+    renderCanvas({ regions: assembleRegions(banded, ['auth', 'ops']) })
+
+    expect(bandTitles()).toEqual(['auth', 'ops', OTHER_REGION_TITLE])
+  })
+
+  it('draws every band the full width of the map', () => {
+    const { layer } = renderCanvas({ regions: assembleRegions(banded, ['auth', 'api']) })
+
+    for (const band of screen.getAllByTestId('task-map-region')) {
+      expect(band.style.width).toBe(layer.style.width)
+    }
+  })
+
+  it('stacks the bands down the map, none overlapping the one above it', () => {
+    renderCanvas({ regions: assembleRegions(banded, ['auth', 'api']) })
+
+    const edges = screen.getAllByTestId('task-map-region').map((band) => ({
+      top: Number.parseFloat(band.style.top),
+      bottom: Number.parseFloat(band.style.top) + Number.parseFloat(band.style.height),
+    }))
+
+    for (const [index, band] of edges.slice(1).entries()) {
+      expect(band.top).toBeGreaterThanOrEqual(edges[index].bottom)
+    }
+  })
+
+  it('draws an arrow between two cards sitting in different bands', () => {
+    renderCanvas({
+      regions: assembleRegions(banded, ['auth', 'api']),
+      drawn: selectArrows(banded),
+    })
+
+    const [arrow] = screen.getAllByTestId('task-map-arrow')
+    expect(arrow.dataset.arrow).toBe('T-1->T-2')
+    expect(arrow.getAttribute('d')).toBeTruthy()
   })
 })

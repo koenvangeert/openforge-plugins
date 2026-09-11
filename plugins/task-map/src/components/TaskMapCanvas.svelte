@@ -1,23 +1,30 @@
 <script lang="ts">
   import type { DependencyArrow } from '../lib/arrows'
-  import { mapExtent, type MapCard } from '../lib/cards'
+  import {
+    mapExtent,
+    REGION_HEADING_HEIGHT,
+    regionCards,
+    regionTitle,
+    type MapRegion,
+  } from '../lib/regions'
   import type { MapViewport } from './useMapViewport.svelte'
   import TaskCard from './TaskCard.svelte'
   import TaskMapArrows from './TaskMapArrows.svelte'
 
   interface Props {
-    cards: MapCard[]
+    regions: MapRegion[]
     arrows: DependencyArrow[]
     viewport: MapViewport
     onOpenTask: (taskId: string) => void
   }
 
-  let { cards, arrows, viewport, onOpenTask }: Props = $props()
+  let { regions, arrows, viewport, onOpenTask }: Props = $props()
 
   let surface = $state<HTMLElement | null>(null)
   let panOrigin: { x: number; y: number } | null = $state(null)
 
-  const extent = $derived(mapExtent(cards))
+  const extent = $derived(mapExtent(regions))
+  const cards = $derived(regionCards(regions))
 
   $effect(() => {
     viewport.attach(surface)
@@ -71,7 +78,19 @@
     data-testid="task-map-layer"
     style="width: {extent.width}px; height: {extent.height}px; transform: {viewport.transform}"
   >
-    <TaskMapArrows {arrows} {cards} />
+    {#each regions as region (region.label)}
+      <div
+        class="task-map-region"
+        data-testid="task-map-region"
+        data-other={region.label === null ? 'true' : 'false'}
+        style="top: {region.y}px; height: {region.height}px; width: {extent.width}px"
+      >
+        <h2 class="task-map-region-heading" style="height: {REGION_HEADING_HEIGHT}px">
+          {regionTitle(region)}
+        </h2>
+      </div>
+    {/each}
+    <TaskMapArrows {arrows} {cards} {extent} />
     {#each cards as card (card.taskId)}
       <TaskCard {card} onOpen={onOpenTask} />
     {/each}
@@ -95,5 +114,30 @@
   .task-map-layer {
     position: relative;
     transform-origin: 0 0;
+  }
+
+  .task-map-region {
+    position: absolute;
+    left: 0;
+    background: var(--of-surface-subtle);
+    border: var(--of-border-width) solid var(--of-border);
+    border-radius: var(--of-radius-container);
+  }
+
+  .task-map-region-heading {
+    display: flex;
+    align-items: center;
+    margin: 0;
+    padding: 0 var(--of-space3);
+    font-size: var(--of-text-xs);
+    line-height: var(--of-line-height-xs);
+    font-weight: var(--of-weight-semibold);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--of-text-secondary);
+  }
+
+  .task-map-region[data-other='true'] .task-map-region-heading {
+    color: var(--of-text-muted);
   }
 </style>

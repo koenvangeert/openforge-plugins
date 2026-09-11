@@ -5,7 +5,7 @@ import TaskCard from './TaskCard.svelte'
 import type { MapCard } from '../lib/cards'
 
 function card(overrides: Partial<MapCard> = {}): MapCard {
-  return { taskId: 'T-1', label: 'Rotate the tokens', status: 'backlog', x: 24, y: 48, ...overrides }
+  return { taskId: 'T-1', title: 'Rotate the tokens', status: 'backlog', x: 24, y: 48, ...overrides }
 }
 
 describe('TaskCard', () => {
@@ -16,7 +16,7 @@ describe('TaskCard', () => {
   })
 
   it('shows the Task id when the title is empty', () => {
-    render(TaskCard, { props: { card: card({ label: 'T-9' }), onOpen: vi.fn() } })
+    render(TaskCard, { props: { card: card({ title: 'T-9' }), onOpen: vi.fn() } })
 
     expect(screen.getByRole('button', { name: /T-9/ })).toBeTruthy()
   })

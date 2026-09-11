@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vitest'
+import type { TaskDetail } from '@openforge-app/plugin-sdk/domain'
 import { buildTaskDetail } from '../__fixtures__/tasks'
-import { CARD_GAP, CARD_HEIGHT, CARD_WIDTH, placeCards, type MapCard } from './cards'
+import { CARD_GAP, CARD_HEIGHT, CARD_WIDTH, isOpen, layoutCards, type MapCard } from './cards'
 import { arrowPathData, routeArrows, selectArrows } from './arrows'
+import { assembleRegions, regionCards } from './regions'
+
+function drawnCardIds(tasks: readonly TaskDetail[]): string[] {
+  return layoutCards(tasks.filter(isOpen), 0).map((card) => card.taskId)
+}
 
 function card(taskId: string, x: number, y: number): MapCard {
-  return { taskId, label: taskId, status: 'backlog', x, y }
+  return { taskId, title: taskId, status: 'backlog', x, y }
 }
 
 describe('selectArrows', () => {
@@ -37,14 +43,14 @@ describe('selectArrows', () => {
     ]
 
     expect(selectArrows(tasks)).toEqual([])
-    expect(placeCards(tasks).map((placed) => placed.taskId)).toEqual(['T-1'])
+    expect(drawnCardIds(tasks)).toEqual(['T-1'])
   })
 
   it('draws no arrow for a dependency on a Task that no longer exists', () => {
     const tasks = [buildTaskDetail({ id: 'T-1', dependsOn: ['T-gone'] })]
 
     expect(selectArrows(tasks)).toEqual([])
-    expect(placeCards(tasks).map((placed) => placed.taskId)).toEqual(['T-1'])
+    expect(drawnCardIds(tasks)).toEqual(['T-1'])
   })
 
   it('draws no arrow out of a Completed Task', () => {
@@ -91,7 +97,7 @@ describe('selectArrows', () => {
     ]
 
     expect(selectArrows(tasks)).toHaveLength(3)
-    expect(placeCards(tasks)).toHaveLength(3)
+    expect(drawnCardIds(tasks)).toHaveLength(3)
   })
 
   it('orders arrows by waiter, then by blocker', () => {
@@ -192,6 +198,24 @@ describe('routeArrows', () => {
 
     expect(routed.map((one) => one.key)).toEqual(['T-1->T-2', 'T-2->T-1'])
     expect(routed[0].path).not.toBe(routed[1].path)
+  })
+
+  it('spans the gap between two bands when the cards sit in different ones', () => {
+    const tasks = [
+      buildTaskDetail({ id: 'T-1', labels: ['auth'] }),
+      buildTaskDetail({ id: 'T-2', labels: ['api'], dependsOn: ['T-1'] }),
+    ]
+    const [blocker, waiter] = regionCards(assembleRegions(tasks, ['auth', 'api']))
+
+    const [routed] = routeArrows(selectArrows(tasks), [blocker, waiter])
+
+    expect(waiter.y).toBeGreaterThan(blocker.y + CARD_HEIGHT)
+    expect(routed.path).toBe(
+      arrowPathData([
+        { x: blocker.x + HALF_CARD, y: blocker.y + CARD_HEIGHT },
+        { x: waiter.x + HALF_CARD, y: waiter.y },
+      ]),
+    )
   })
 
   it('skips an arrow whose card is not on the map', () => {

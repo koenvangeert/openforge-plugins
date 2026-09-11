@@ -1,9 +1,9 @@
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import { selectArrows, type DependencyArrow } from '../lib/arrows'
-import { placeCards, type MapCard } from '../lib/cards'
+import { assembleRegions, regionCards, seedRegionLabels, type MapRegion } from '../lib/regions'
 
 interface TaskMapModel {
-  cards: MapCard[]
+  regions: MapRegion[]
   arrows: DependencyArrow[]
 }
 
@@ -38,7 +38,10 @@ export function useTaskMap(api: FrontendOpenForgeAPI) {
     try {
       const active = await api.tasks.active(projectId)
       if (!isCurrentActivation(projectId, activation)) return
-      model = { cards: placeCards(active.tasks), arrows: selectArrows(active.tasks) }
+      model = {
+        regions: assembleRegions(active.tasks, seedRegionLabels(active.tasks)),
+        arrows: selectArrows(active.tasks),
+      }
     } catch (cause) {
       if (!isCurrentActivation(projectId, activation)) return
       model = null
@@ -60,8 +63,8 @@ export function useTaskMap(api: FrontendOpenForgeAPI) {
   }
 
   return {
-    get cards(): MapCard[] {
-      return model?.cards ?? []
+    get regions(): MapRegion[] {
+      return model?.regions ?? []
     },
     get arrows(): DependencyArrow[] {
       return model?.arrows ?? []
@@ -76,7 +79,7 @@ export function useTaskMap(api: FrontendOpenForgeAPI) {
       return Boolean(activeProjectId)
     },
     get isEmpty(): boolean {
-      return model !== null && model.cards.length === 0
+      return model !== null && regionCards(model.regions).length === 0
     },
     activateProject,
     reload: load,

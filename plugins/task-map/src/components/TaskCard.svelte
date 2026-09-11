@@ -19,7 +19,7 @@
   style="left: {card.x}px; top: {card.y}px; width: {CARD_WIDTH}px; height: {CARD_HEIGHT}px"
   onclick={() => onOpen(card.taskId)}
 >
-  <span class="task-map-card-title">{card.label}</span>
+  <span class="task-map-card-title">{card.title}</span>
   <span class="task-map-card-status">{statusLabel}</span>
 </button>
 
