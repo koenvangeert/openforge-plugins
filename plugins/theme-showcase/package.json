@@ -1,0 +1,32 @@
+{
+  "name": "@kvg/openforge-theme-showcase",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "vite build",
+    "typecheck": "node --check frontend.js && node --check validate.mjs",
+    "test": "node ./validate.mjs"
+  },
+  "dependencies": {
+    "@openforge-app/plugin-sdk": "^0.3.2"
+  },
+  "devDependencies": {
+    "vite": "catalog:"
+  },
+  "files": [
+    "dist",
+    "warm-linen.css",
+    "warm-linen-motion.css",
+    "README.md"
+  ],
+  "openforge": {
+    "id": "dev.kvg.theme-showcase",
+    "apiVersion": 1,
+    "displayName": "Warm Linen theme",
+    "description": "A slick editorial light theme: warm paper canvas, terracotta accents, hairline borders, and refined motion.",
+    "enablement": "app",
+    "frontend": "./dist/frontend.js",
+    "requires": ["appEnablement", "themes"]
+  }
+}
