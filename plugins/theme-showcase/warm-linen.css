@@ -1,0 +1,48 @@
+/* Warm Linen — ambient layer.
+   Theme stylesheets are not sandboxed; they paint the whole app while the
+   theme is selected. Everything here is decorative and pointer-events: none,
+   so it never sits over anything you click. */
+
+:root {
+  --warm-linen: applied;
+}
+
+/* Paper ambience behind the app: soft terracotta and amber glows pooled in
+   the corners, clear through the middle so content stays crisp. */
+body {
+  background-color: #fbf7f0;
+  background-image:
+    radial-gradient(60vw 42vh at 6% -8%, rgb(224 138 43 / 18%), transparent 60%),
+    radial-gradient(52vw 40vh at 106% 6%, rgb(194 65 12 / 14%), transparent 58%),
+    radial-gradient(70vw 52vh at 102% 110%, rgb(214 91 58 / 12%), transparent 62%);
+  background-attachment: fixed;
+}
+
+/* A slim shimmering rail across the very top edge of the window. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0 0 auto;
+  height: 3px;
+  z-index: 2147483647;
+  pointer-events: none;
+  background: linear-gradient(90deg, #c2410c, #e08a2b, #d65b3a, #e08a2b, #c2410c);
+  background-size: 300% 100%;
+  animation: wl-rail-shimmer 9s linear infinite;
+}
+
+@keyframes wl-rail-shimmer {
+  from {
+    background-position: 0% 50%;
+  }
+
+  to {
+    background-position: 300% 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::before {
+    animation: none;
+  }
+}
