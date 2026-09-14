@@ -6,41 +6,44 @@
 
 ## 2. Pure map assembly
 
-- [x] 2.1 Implement Region assembly from a curated label order plus the active Tasks: one band per curated label in order, `No label / Other` last and not reorderable; verify unit tests cover an empty curated order, a curated label no Task carries, and a Task carrying no curated label, per the Region vocabulary requirement.
-- [x] 2.2 Implement the primary-label rule so a Task appears in exactly one Region, the first curated label it carries; verify a unit test asserts a Task with `[auth, api]` under curated order `auth, api` yields one card in `auth` and none in `api`, and that reversing the order moves it, per the Primary Region assignment requirement.
-- [x] 2.3 Implement the seeded curated order from the label names the active Tasks carry; verify a unit test asserts first-open seeding and that a label carried by no active Task is not seeded, per the Region vocabulary requirement.
-- [x] 2.4 Implement arrow selection: one arrow per `dependsOn` entry whose target is a card on the map, directional, same-Region or cross-Region, and none for a target that is absent; verify unit tests cover a same-Region edge, a cross-Region edge, and an edge to a Completed Task, per the Derived dependency arrows requirement.
-- [x] 2.5 Implement Region-local longest-path layering with a visited-set cycle guard, stable by Task id within a row; verify unit tests cover a linear chain, a diamond, a two-Task cycle, and a three-Task cycle, and assert the walk terminates, per the Card position and Derived dependency arrows requirements.
-- [x] 2.6 Assert every assembly function is pure, taking Tasks and the curated order and returning a model with no `api` and no DOM; verify the assembly test file imports nothing from `@openforge-app/plugin-sdk/frontend`.
+- [x] 2.1 Implement Band assembly from a curated set of Band rectangles plus the active Tasks: one Band per curated entry, plus a `No label / Other` Band that is always present; verify unit tests cover an empty curated set, a curated label no Task carries, and a Task carrying no curated label, per the Band vocabulary requirement.
+- [x] 2.2 Implement the membership rule so a Task is drawn once in every curated Band whose label it carries, and only in `No label / Other` when it carries none; verify a unit test asserts a Task with `[auth, api]` yields one card in `auth` and one in `api`, and that removing the `auth` Band leaves only the `api` card, per the Band membership requirement.
+- [x] 2.3 Implement the seeded curated set from the label names the active Tasks carry, laid out stacked and sized to fit; verify a unit test asserts first-open seeding and that a label carried by no active Task is not seeded, per the Band vocabulary and Band placement requirements.
+- [x] 2.4 Implement arrow selection and expansion: one arrow per `dependsOn` entry whose target has a card, expanded across every pair of the two Tasks' cards, none between two cards of the same Task, and none for an absent target; verify unit tests cover a same-Band edge, a cross-Band edge, an edge into a Task drawn in two Bands, and an edge to a Completed Task, per the Derived dependency arrows requirement.
+- [x] 2.5 Implement Band-local longest-path layering that drops a back edge before it walks, stable by Task id within a row, wrapping to the Band's own width; verify unit tests cover a linear chain, a diamond, a two-Task cycle, a three-Task cycle, and a reflow when the Band narrows, and assert the walk terminates, per the Card position and Band placement requirements.
+- [x] 2.6 Assert every assembly function is pure, taking Tasks and the curated Bands and returning a model with no `api` and no DOM; verify the assembly test file imports nothing from `@openforge-app/plugin-sdk/frontend`.
 
-## 3. Position store
+## 3. Placement store
 
-- [x] 3.1 Implement `regionLabels` and `cardPositions` read and write against `storage.project(projectId)` as two separate keys; verify unit tests with the SDK storage fake cover absent, present, and replacement for each key independently.
-- [x] 3.2 Store a position as a Region-relative offset and resolve it against the Region's current origin at render time; verify a unit test grows a band above a card and asserts the card stays inside its own band, per the Card position requirement.
-- [x] 3.3 Serialize every position write per Project through one promise chain that continues past a rejection, mirroring `plugins/issues/src/backend/boardStore.ts:serializePerProject`; verify a test issues three overlapping writes for different Tasks and asserts all three positions survive, per the Card position requirement.
-- [x] 3.4 Debounce position writes to the end of a drag gesture; verify a test emits many position updates for one card and asserts a single write reaches storage.
-- [x] 3.5 Discard a Task's stored position when its primary Region changes, and leave positions for Tasks absent from the map untouched; verify unit tests cover a relabel that moves a Region and a Completed Task whose neighbours keep their positions, per the Drag is clamped and Card position requirements.
-- [x] 3.6 Assert project isolation, that positions and the curated order written for one Project are not readable for another; verify a test covers two Projects.
+- [x] 3.1 Implement `bands` and `cardPositions` read and write against `storage.project(projectId)` as two separate keys, each an array carrying its own identity; verify unit tests with the SDK storage fake cover absent, present, replacement, and a stored value of the wrong shape for each key independently.
+- [x] 3.2 Store a card position as an offset inside its own Band and resolve it against the Band's current corner at render time; verify a unit test moves a Band and asserts its cards move with it, per the Band placement requirement.
+- [x] 3.3 Serialize every placement write per Project through one promise chain that continues past a rejection, mirroring `plugins/issues/src/backend/boardStore.ts:serializePerProject`; verify a test issues three overlapping writes for different cards and asserts all three positions survive, per the Card position requirement.
+- [x] 3.4 Write placement once, at the end of a drag gesture; verify a test emits many position updates for one card and asserts a single write reaches storage.
+- [x] 3.5 Key a card position by Task and Band together, so dragging one copy of a multi-Band Task moves only that copy, and leave positions for cards absent from the map untouched; verify unit tests cover both, per the Card position requirement.
+- [x] 3.6 Assert project isolation, that placement written for one Project is not readable for another; verify a test covers two Projects.
 
 ## 4. View and rendering
 
 - [x] 4.1 Register the Task Map rail View in the frontend entry with its id, title, icon, and placement; verify a `createOpenForgeRegistryFake` activation test asserts the registration and that disposal removes it.
-- [x] 4.2 Render stacked Region bands with headings and absolutely positioned cards, using `PluginPageShell` and `PluginPageHeader` from the SDK UI layer; verify a component test asserts one band per Region in curated order with `No label / Other` last.
+- [x] 4.2 Render Band rectangles with headings and absolutely positioned cards, using `PluginPageShell` and `PluginPageHeader` from the SDK UI layer; verify a component test asserts one Band per curated entry plus `No label / Other`, each at its stored rectangle.
 - [x] 4.3 Render a card showing its Task title, falling back to the Task id when the title is empty, and distinguishing `backlog` from `doing`; verify component tests cover both statuses and the empty title, per the Card set requirement.
-- [x] 4.4 Render directional arrows between cards from the assembled arrow list, including cross-Region arrows; verify a component test asserts an arrow element per expected edge and none for an edge to an absent Task.
+- [x] 4.4 Render directional arrows between cards from the assembled arrow list, including cross-Band arrows and arrows to each copy of a multi-Band Task; verify a component test asserts an arrow element per expected edge and none for an edge to an absent Task.
 - [x] 4.5 Implement the empty states: no active Project, and a Project whose every Task is Completed, using `PluginViewState`; verify component tests cover both, per the Map availability requirement.
 - [x] 4.6 Add pan and zoom over the canvas; verify a component test asserts the rendered transform changes and that card hit targets follow it.
 
 ## 5. Drag
 
-- [x] 5.1 Implement card drag with the drop clamped to the card's own Region band; verify a component test drags a card past its band boundary and asserts it comes to rest inside its own band, per the Drag is clamped to the Region requirement.
-- [x] 5.2 Assert a cross-Region drag attempt performs no Task write; verify a test asserts no `tasks` mutation call is recorded on the API fake.
-- [x] 5.3 Restore stored positions on mount so a stored position takes priority over layering; verify a component test seeds a position, mounts, and asserts the card renders there rather than at its layered row, per the Card position requirement.
+- [x] 5.1 Implement card drag with no clamp, so a card rests where it is dropped even outside its own Band; verify a component test drags a card past its Band edge and asserts it rests there and still belongs to that Band, per the Card position requirement.
+- [x] 5.2 Implement Band drag by its heading and Band resize by its corner, persisting the rectangle; verify component tests assert the cards move with the Band and that narrowing it reflows the rows, per the Band placement requirement.
+- [x] 5.3 Assert a card dragged over another Band performs no Task write; verify a test asserts no `tasks` mutation call is recorded on the API fake.
+- [x] 5.4 Restore stored placement on mount so a stored card position takes priority over layering; verify a component test seeds a position, mounts, and asserts the card renders there rather than at its layered row, per the Card position requirement.
 
-## 6. Region curation
+## 6. Band curation
 
-- [ ] 6.1 Build the Region order editor as an in-view modal offering the labels the active Tasks carry, modelled on `plugins/issues/src/components/ColumnSettingsModal.svelte`; verify a component test asserts the offered labels and that saving persists the new order.
-- [ ] 6.2 Assert a curated label carried by no active Task keeps its place and renders an empty band; verify a component test covers it, per the Region vocabulary requirement.
+- [x] 6.1 Build the Band editor as an in-view modal offering the labels the active Tasks carry, modelled on `plugins/issues/src/components/ColumnSettingsModal.svelte` but curating a set rather than an order; verify a component test asserts the offered labels and that saving persists the new set.
+- [x] 6.2 Assert a curated label carried by no active Task keeps its Band and renders it empty, and that `No label / Other` offers no remove control; verify component tests cover both, per the Band vocabulary requirement.
+- [x] 6.3 Assert removing a curated Band moves the Tasks that carried only that label into `No label / Other`; verify a component test covers it, per the Band membership requirement.
+- [x] 6.4 Store an edited curated set before the map shows it, and keep the editor open with the reason when the store refuses; verify a component test refuses the write and asserts the Bands on screen are unchanged, per the Band vocabulary requirement.
 
 ## 7. Task reads and navigation
 
@@ -51,7 +54,7 @@
 
 ## 8. Documentation and delivery
 
-- [ ] 8.1 Add a Task Map glossary section to `CONTEXT.md` covering Region, primary label, and derived arrow; verify the terms used in the code match the glossary entries.
+- [x] 8.1 Add a Task Map glossary section to `CONTEXT.md` covering Band, membership, and derived arrow; verify the terms used in the code match the glossary entries.
 - [x] 8.2 Add the `dev.kvg.task-map` row to the plugin-id table in `AGENTS.md`; verify the table lists the plugin.
 - [x] 8.3 Write `plugins/task-map/README.md` stating what the map derives and what it cannot change; verify it names the two read-only limits (`dependsOn` and Task Labels).
 - [x] 8.4 Run `npm test && npm run typecheck && npm run build`, install the plugin from its local path, enable it for the Project, and reload it; verify the reload reports `"reloaded": true`, per the test/build/reload cycle in `AGENTS.md`.

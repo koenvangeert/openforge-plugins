@@ -1,11 +1,12 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
-  import { Minus, Plus, Scan } from '@lucide/svelte'
+  import { Minus, Plus, Scan, Tags } from '@lucide/svelte'
   import type { PluginViewProps } from '@openforge-app/plugin-sdk/frontend'
   import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
   import PluginPageHeader from '@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte'
   import PluginPageShell from '@openforge-app/plugin-sdk/ui/PluginPageShell.svelte'
   import PluginViewState from '@openforge-app/plugin-sdk/ui/PluginViewState.svelte'
+  import BandSettingsModal from './BandSettingsModal.svelte'
   import TaskMapCanvas from './TaskMapCanvas.svelte'
   import { useMapViewport } from './useMapViewport.svelte'
   import { useTaskMap } from './useTaskMap.svelte'
@@ -17,9 +18,32 @@
   const map = useTaskMap(api)
   const viewport = useMapViewport()
 
+  let editingBands = $state(false)
+  let savingBands = $state(false)
+  let bandError = $state<string | null>(null)
+
   $effect(() => {
     map.activateProject(context.projectId)
+    closeBandEditor()
   })
+
+  function closeBandEditor(): void {
+    editingBands = false
+    savingBands = false
+    bandError = null
+  }
+
+  async function saveBands(labels: string[]): Promise<void> {
+    savingBands = true
+    bandError = null
+    try {
+      await map.saveCuratedLabels(labels)
+      closeBandEditor()
+    } catch (cause) {
+      bandError = String(cause instanceof Error ? cause.message : cause)
+      savingBands = false
+    }
+  }
 
   function openTask(taskId: string): void {
     void api.navigation.navigate({ viewId: 'board', taskId })
@@ -35,6 +59,14 @@
     <PluginPageHeader title="Task Map">
       {#snippet actions()}
         <div class="task-map-zoom">
+          <IconButton
+            label="Edit bands"
+            size="sm"
+            disabled={!map.hasProject}
+            onClick={() => (editingBands = true)}
+          >
+            <Tags size={16} aria-hidden="true" />
+          </IconButton>
           <IconButton label="Zoom out" size="sm" disabled={!viewport.canZoomOut} onClick={viewport.zoomOut}>
             <Minus size={16} aria-hidden="true" />
           </IconButton>
@@ -67,16 +99,29 @@
         emptyDescription="Every Task in this Project is Completed."
       >
         <TaskMapCanvas
-          regions={map.regions}
+          bands={map.bands}
           arrows={map.arrows}
           {viewport}
           onOpenTask={openTask}
           onDropCard={map.dropCard}
+          onDropBand={map.dropBand}
+          onSizeBand={map.sizeBand}
         />
       </PluginViewState>
     {/if}
   {/snippet}
 </PluginPageShell>
+
+{#if editingBands && map.hasProject}
+  <BandSettingsModal
+    availableLabels={map.availableLabels}
+    curatedLabels={map.curatedLabels}
+    busy={savingBands}
+    error={bandError}
+    onClose={closeBandEditor}
+    onSave={(labels) => void saveBands(labels)}
+  />
+{/if}
 
 <style>
   .task-map-zoom {

@@ -2,10 +2,21 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
 import TaskCard from './TaskCard.svelte'
-import type { MapCard } from '../lib/cards'
+import { cardKey, type MapCard } from '../lib/cards'
 
 function card(overrides: Partial<MapCard> = {}): MapCard {
-  return { taskId: 'T-1', title: 'Rotate the tokens', status: 'backlog', x: 24, y: 48, ...overrides }
+  const taskId = overrides.taskId ?? 'T-1'
+  const band = overrides.band ?? null
+  return {
+    key: cardKey(band, taskId),
+    band,
+    taskId,
+    title: 'Rotate the tokens',
+    status: 'backlog',
+    x: 24,
+    y: 48,
+    ...overrides,
+  }
 }
 
 describe('TaskCard', () => {
@@ -58,6 +69,14 @@ describe('TaskCard', () => {
     render(TaskCard, { props: { card: card(), onOpen: vi.fn() } })
 
     expect(screen.getAllByRole('button')).toHaveLength(1)
+  })
+
+  it('carries its own card key, so two copies of a Task are told apart', () => {
+    render(TaskCard, { props: { card: card({ band: 'auth' }), onOpen: vi.fn() } })
+
+    expect(screen.getByRole('button', { name: /Rotate the tokens/ }).dataset.cardKey).toBe(
+      cardKey('auth', 'T-1'),
+    )
   })
 
   it('marks the card the user is dragging', () => {

@@ -1,23 +1,25 @@
 import type { Disposable, FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import type { TaskDetail } from '@openforge-app/plugin-sdk/domain'
 import { selectArrows, type DependencyArrow } from '../lib/arrows'
-import type { CardPosition, CardPositions } from '../lib/cards'
+import { cardKey, type CardPosition, type CardPositions } from '../lib/cards'
+import { readCardPositions, resolveBands, writeBands, writeCardPosition } from '../lib/mapStore'
 import {
-  forgetCardPositions,
-  readCardPositions,
-  resolveRegionLabels,
-  writeCardPosition,
-} from '../lib/mapStore'
-import {
-  assembleRegions,
-  regionCards,
-  stalePositionIds,
-  type MapRegion,
-} from '../lib/regions'
+  assembleBands,
+  bandCards,
+  curatedLabels,
+  labelsInUse,
+  moveBand,
+  resizeBand,
+  withCuratedLabels,
+  type Band,
+  type MapBand,
+  type MapSize,
+} from '../lib/bands'
+import type { CanvasPoint } from '../lib/viewport'
 
 interface TaskMapSnapshot {
   tasks: TaskDetail[]
-  regionLabels: string[]
+  bands: Band[]
   positions: CardPositions
 }
 
@@ -26,7 +28,7 @@ function errorMessage(error: unknown): string {
 }
 
 function reportStorageFailure(cause: unknown): void {
-  console.warn('[task-map] a card position could not be stored', cause)
+  console.warn('[task-map] a placement could not be stored', cause)
 }
 
 export function useTaskMap(api: FrontendOpenForgeAPI) {
@@ -38,13 +40,14 @@ export function useTaskMap(api: FrontendOpenForgeAPI) {
   let taskChanges: Disposable | null = null
   let readInFlight = false
   let rereadRequested = false
-  // Every drop of this activation. A read that was already in flight when the
-  // user let go resolves from the snapshot before it, so a card would spring
-  // back to where the map laid it out unless the drops win over what it read.
-  let drops = new Map<string, CardPosition>()
+  // Every placement this activation. A read that was already in flight when the
+  // user let go resolves from the snapshot before it, so a card or a Band would
+  // spring back unless what the user did wins over what the read found.
+  let placedCards = new Map<string, CardPosition>()
+  let placedBands: Band[] | null = null
 
-  const regions = $derived(
-    snapshot ? assembleRegions(snapshot.tasks, snapshot.regionLabels, snapshot.positions) : [],
+  const bands = $derived(
+    snapshot ? assembleBands(snapshot.tasks, snapshot.bands, snapshot.positions) : [],
   )
   const arrows = $derived(snapshot ? selectArrows(snapshot.tasks) : [])
 
@@ -55,11 +58,17 @@ export function useTaskMap(api: FrontendOpenForgeAPI) {
     return activeProjectId === projectId && projectActivation === activation
   }
 
+  function mergePositions(stored: CardPositions): CardPositions {
+    const kept = stored.filter((entry) => !placedCards.has(cardKey(entry.band, entry.taskId)))
+    return [...kept, ...placedCards.values()]
+  }
+
   async function readActiveTasks(background: boolean): Promise<void> {
     const projectId = activeProjectId
     const activation = projectActivation
     if (!projectId) {
       snapshot = null
+      isLoading = false
       return
     }
 
@@ -67,16 +76,18 @@ export function useTaskMap(api: FrontendOpenForgeAPI) {
       const active = await api.tasks.active(projectId)
       if (!isCurrentActivation(projectId, activation)) return
 
-      const [regionLabels, stored] = await Promise.all([
-        resolveRegionLabels(api.storage, projectId, active.tasks),
+      const [storedBands, storedPositions] = await Promise.all([
+        resolveBands(api.storage, projectId, active.tasks),
         readCardPositions(api.storage, projectId),
       ])
       if (!isCurrentActivation(projectId, activation)) return
 
-      const positions = { ...stored, ...Object.fromEntries(drops) }
-      snapshot = { tasks: active.tasks, regionLabels, positions }
+      snapshot = {
+        tasks: active.tasks,
+        bands: placedBands ?? storedBands,
+        positions: mergePositions(storedPositions),
+      }
       error = null
-      forgetPositions(projectId, stalePositionIds(regions, positions))
     } catch (cause) {
       // A failed background read leaves the map it could not replace on screen.
       if (background || !isCurrentActivation(projectId, activation)) return
@@ -126,7 +137,8 @@ export function useTaskMap(api: FrontendOpenForgeAPI) {
 
     activeProjectId = projectId
     projectActivation += 1
-    drops = new Map()
+    placedCards = new Map()
+    placedBands = null
     snapshot = null
     error = null
     isLoading = false
@@ -136,44 +148,71 @@ export function useTaskMap(api: FrontendOpenForgeAPI) {
     void reload()
   }
 
-  function forgetPositions(projectId: string, taskIds: readonly string[]): void {
-    if (!snapshot || taskIds.length === 0) return
-
-    for (const taskId of taskIds) drops.delete(taskId)
-    snapshot = {
-      ...snapshot,
-      positions: Object.fromEntries(
-        Object.entries(snapshot.positions).filter(([taskId]) => !taskIds.includes(taskId)),
-      ),
-    }
-    void forgetCardPositions(api.storage, projectId, taskIds).catch(reportStorageFailure)
-  }
-
-  function dropCard(taskId: string, position: CardPosition): void {
+  function placeBands(next: Band[]): void {
     const projectId = activeProjectId
     if (!snapshot || !projectId) return
 
-    // A reactive proxy cannot cross the clone the host writes it through.
-    const dropped = $state.snapshot(position)
-    snapshot = { ...snapshot, positions: { ...snapshot.positions, [taskId]: dropped } }
-    drops.set(taskId, dropped)
+    // A reactive proxy cannot cross the clone the host writes a value through.
+    placedBands = $state.snapshot(next)
+    snapshot = { ...snapshot, bands: next }
     // A refused write raises no error state: that would take the map away from
-    // the user over a card that is already where they dropped it.
-    void writeCardPosition(api.storage, projectId, taskId, dropped).catch(reportStorageFailure)
+    // the user over a Band that is already where they put it.
+    void writeBands(api.storage, projectId, placedBands).catch(reportStorageFailure)
+  }
+
+  function dropBand(label: string | null, point: CanvasPoint): void {
+    if (!snapshot) return
+    placeBands(moveBand(snapshot.bands, label, point))
+  }
+
+  function sizeBand(label: string | null, size: MapSize): void {
+    if (!snapshot) return
+    placeBands(resizeBand(snapshot.bands, label, size))
+  }
+
+  // Written before it is shown, unlike a drag: the user cannot see that a Band
+  // set they typed into a dialog never reached storage.
+  async function saveCuratedLabels(labels: readonly string[]): Promise<void> {
+    const projectId = activeProjectId
+    if (!snapshot || !projectId) return
+
+    const next = $state.snapshot(withCuratedLabels(snapshot.bands, snapshot.tasks, [...labels]))
+    await writeBands(api.storage, projectId, next)
+    if (!snapshot || activeProjectId !== projectId) return
+
+    placedBands = next
+    snapshot = { ...snapshot, bands: next }
+  }
+
+  function dropCard(position: CardPosition): void {
+    const projectId = activeProjectId
+    if (!snapshot || !projectId) return
+
+    const dropped = $state.snapshot(position)
+    placedCards.set(cardKey(dropped.band, dropped.taskId), dropped)
+    snapshot = { ...snapshot, positions: mergePositions(snapshot.positions) }
+    void writeCardPosition(api.storage, projectId, dropped).catch(reportStorageFailure)
   }
 
   function dispose(): void {
     taskChanges?.dispose()
     taskChanges = null
+    activeProjectId = null
     projectActivation += 1
   }
 
   return {
-    get regions(): MapRegion[] {
-      return regions
+    get bands(): MapBand[] {
+      return bands
     },
     get arrows(): DependencyArrow[] {
       return arrows
+    },
+    get curatedLabels(): string[] {
+      return snapshot ? curatedLabels(snapshot.bands) : []
+    },
+    get availableLabels(): string[] {
+      return snapshot ? labelsInUse(snapshot.tasks) : []
     },
     get isLoading(): boolean {
       return isLoading
@@ -185,11 +224,14 @@ export function useTaskMap(api: FrontendOpenForgeAPI) {
       return Boolean(activeProjectId)
     },
     get isEmpty(): boolean {
-      return snapshot !== null && regionCards(regions).length === 0
+      return snapshot !== null && bandCards(bands).length === 0
     },
     activateProject,
     dispose,
+    dropBand,
     dropCard,
     reload,
+    saveCuratedLabels,
+    sizeBand,
   }
 }

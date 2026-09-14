@@ -408,3 +408,44 @@ on a diagram that stays fully readable and regenerable, never a reason to hide o
 delete it.
 _Avoid_: deleting a stale diagram; hiding the tab; comparing commits to decide
 staleness (a diagram covering uncommitted work has no commit to compare).
+
+## Task Map plugin
+
+Domain language owned by the Task Map plugin (`dev.kvg.task-map`). A
+**Plugin-owned Domain**: OpenForge's **Task** and **Task Label** stay the units
+of work; the terms below name the picture drawn from them.
+
+**Band**:
+A named rectangle the user places anywhere on the map, standing for one Task
+Label, plus one `No label / Other` Band that always exists and cannot be
+removed. The user owns its corner and its size; the size sets how many cards fit
+in a row. Bands carry no order and may overlap.
+_Avoid_: "column", "swimlane", "region" (all imply an ordered strip); band
+order; a Band the map places for the user after the first open.
+
+**Band Membership**:
+Which Bands draw a card for a Task: every Band whose label the Task carries, and
+`No label / Other` when it carries none. A Task carrying two curated labels is
+drawn twice, once per Band. Membership is read from the Task's labels alone, so
+where a card rests never changes it.
+_Avoid_: "the band a Task is in" (there can be several); deciding membership
+from a card's position; writing a Task Label from the map (the SDK has no
+surface for it).
+
+**Card Placement**:
+Where the user dropped a card, stored as an offset inside its own Band and per
+Band, so moving a Band carries its cards and dragging one copy of a
+multi-Band Task leaves the other copies alone. A drag is not clamped to the
+Band outline. A stored placement outlives a label the Task no longer carries and
+applies again if the label returns.
+_Avoid_: an absolute canvas position; one position per Task; clamping a card to
+its Band; pruning a placement whose card is off the map.
+
+**Derived Dependency Arrow**:
+An arrow the map draws from a blocker card to a card that waits on it, read from
+`dependsOn` and never edited on the map. It is expanded across every pair of the
+two Tasks' cards, and no arrow joins two cards standing for the same Task. A
+dependency on a Completed or absent Task draws nothing, and the waiting card
+still renders.
+_Avoid_: an arrow the user can draw, move, or delete; one arrow per Task pair
+when either Task is drawn twice; hiding a card whose blocker is gone.

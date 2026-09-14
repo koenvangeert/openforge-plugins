@@ -4,7 +4,7 @@ export type OpenTaskStatus = Exclude<BoardStatus, 'done'>
 
 export type OpenTask = TaskDetail & { status: OpenTaskStatus }
 
-export interface MapCard {
+export interface CardSlot {
   taskId: string
   title: string
   status: OpenTaskStatus
@@ -12,18 +12,33 @@ export interface MapCard {
   y: number
 }
 
-/** Where a card the user dragged sits, as an offset from its band's own origin. */
-export type CardPosition = { region: string | null; x: number; y: number }
+export interface MapCard extends CardSlot {
+  key: string
+  band: string | null
+}
 
-export type CardPositions = Record<string, CardPosition>
+// An object literal type, not an interface: only the former satisfies the SDK's
+// `JsonValue` constraint, and both this and `Band` are written straight to storage.
+export type CardPosition = {
+  band: string | null
+  taskId: string
+  x: number
+  y: number
+}
+
+export type CardPositions = CardPosition[]
 
 export const CARD_WIDTH = 220
 export const CARD_HEIGHT = 92
 export const CARD_GAP = 24
-export const CARDS_PER_ROW = 4
 export const CANVAS_PADDING = 24
 
 const STATUS_ORDER: Record<OpenTaskStatus, number> = { doing: 0, backlog: 1 }
+
+// JSON rather than a separator: a Task Label name may hold any character.
+export function cardKey(band: string | null, taskId: string): string {
+  return JSON.stringify([band, taskId])
+}
 
 export function isOpen(task: TaskDetail): task is OpenTask {
   return task.status !== 'done'
@@ -108,24 +123,25 @@ function groupByRow(tasks: readonly OpenTask[], rows: Map<string, number>): Open
   return [...layers.entries()].sort(([left], [right]) => left - right).map(([, layer]) => layer)
 }
 
-function gridCards(tasks: readonly OpenTask[], originY: number): MapCard[] {
+function gridSlots(tasks: readonly OpenTask[], perRow: number, top: number): CardSlot[] {
   return tasks.map((task, index) => ({
     taskId: task.id,
     title: cardTitle(task),
     status: task.status,
-    x: CANVAS_PADDING + (index % CARDS_PER_ROW) * (CARD_WIDTH + CARD_GAP),
-    y: originY + Math.floor(index / CARDS_PER_ROW) * (CARD_HEIGHT + CARD_GAP),
+    x: (index % perRow) * (CARD_WIDTH + CARD_GAP),
+    y: top + Math.floor(index / perRow) * (CARD_HEIGHT + CARD_GAP),
   }))
 }
 
-export function layoutCards(tasks: readonly OpenTask[], originY: number): MapCard[] {
+export function layoutCards(tasks: readonly OpenTask[], perRow: number): CardSlot[] {
   const ordered = [...tasks].sort(byStatusThenId)
+  const columns = Math.max(1, Math.floor(perRow))
 
-  const cards: MapCard[] = []
-  let top = originY
+  const slots: CardSlot[] = []
+  let top = 0
   for (const layer of groupByRow(ordered, dependencyRows(ordered))) {
-    cards.push(...gridCards(layer, top))
-    top += Math.ceil(layer.length / CARDS_PER_ROW) * (CARD_HEIGHT + CARD_GAP)
+    slots.push(...gridSlots(layer, columns, top))
+    top += Math.ceil(layer.length / columns) * (CARD_HEIGHT + CARD_GAP)
   }
-  return cards
+  return slots
 }

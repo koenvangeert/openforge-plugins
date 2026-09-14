@@ -12,6 +12,7 @@ export interface ArrowPoint {
 }
 
 export interface RoutedArrow extends DependencyArrow {
+  /** Unique per card pair, so a Task drawn twice does not collide with itself. */
   key: string
   path: string
 }
@@ -67,17 +68,32 @@ function elbow(blocker: MapCard, waiter: MapCard): ArrowPoint[] {
   return [start, { x: start.x, y: lane }, { x: end.x, y: lane }, end]
 }
 
+function cardsByTaskId(cards: readonly MapCard[]): Map<string, MapCard[]> {
+  const grouped = new Map<string, MapCard[]>()
+  for (const card of cards) {
+    const known = grouped.get(card.taskId)
+    if (known) known.push(card)
+    else grouped.set(card.taskId, [card])
+  }
+  return grouped
+}
+
 export function routeArrows(
   arrows: readonly DependencyArrow[],
   cards: readonly MapCard[],
 ): RoutedArrow[] {
-  const byTaskId = new Map(cards.map((card) => [card.taskId, card]))
+  const byTaskId = cardsByTaskId(cards)
 
   return arrows.flatMap((arrow) => {
-    const blocker = byTaskId.get(arrow.dependencyTaskId)
-    const waiter = byTaskId.get(arrow.dependentTaskId)
-    if (!blocker || !waiter) return []
+    const blockers = byTaskId.get(arrow.dependencyTaskId) ?? []
+    const waiters = byTaskId.get(arrow.dependentTaskId) ?? []
 
-    return [{ ...arrow, key: arrowKey(arrow), path: arrowPathData(elbow(blocker, waiter)) }]
+    return blockers.flatMap((blocker) =>
+      waiters.map((waiter) => ({
+        ...arrow,
+        key: `${blocker.key}->${waiter.key}`,
+        path: arrowPathData(elbow(blocker, waiter)),
+      })),
+    )
   })
 }

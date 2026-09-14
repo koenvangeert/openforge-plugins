@@ -1,12 +1,12 @@
 <script lang="ts">
   import { routeArrows, type DependencyArrow } from '../lib/arrows'
   import type { MapCard } from '../lib/cards'
-  import type { MapExtent } from '../lib/regions'
+  import type { MapSize } from '../lib/bands'
 
   interface Props {
     arrows: DependencyArrow[]
     cards: MapCard[]
-    extent: MapExtent
+    extent: MapSize
   }
 
   let { arrows, cards, extent }: Props = $props()
@@ -38,7 +38,7 @@
     <path
       class="task-map-arrow"
       data-testid="task-map-arrow"
-      data-arrow={arrow.key}
+      data-arrow={`${arrow.dependencyTaskId}->${arrow.dependentTaskId}`}
       d={arrow.path}
       marker-end="url(#task-map-arrowhead)"
     />

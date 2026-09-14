@@ -3,7 +3,18 @@ import { fireEvent, render, screen } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
 import TaskMapCanvas from './TaskMapCanvas.svelte'
 import { useMapViewport } from './useMapViewport.svelte'
-import { assembleRegions, OTHER_REGION_TITLE, type MapRegion } from '../lib/regions'
+import {
+  assembleBands,
+  bandKey,
+  bandWidthFor,
+  BAND_HEADING_HEIGHT,
+  BAND_PADDING,
+  MIN_BAND_HEIGHT,
+  OTHER_BAND_TITLE,
+  seedBands,
+  type Band,
+  type MapBand,
+} from '../lib/bands'
 import { selectArrows, type DependencyArrow } from '../lib/arrows'
 import { buildTaskDetail } from '../__fixtures__/tasks'
 import { pointerEvent } from '../__fixtures__/pointer'
@@ -16,18 +27,24 @@ const arrows = selectArrows(tasks)
 
 interface RenderOptions {
   drawn?: DependencyArrow[]
-  regions?: MapRegion[]
+  bands?: MapBand[]
 }
 
-function renderCanvas({ drawn = arrows, regions = assembleRegions(tasks, []) }: RenderOptions = {}) {
+function renderCanvas({ drawn = arrows, bands = assembleBands(tasks, []) }: RenderOptions = {}) {
   const onOpenTask = vi.fn()
   const onDropCard = vi.fn()
+  const onDropBand = vi.fn()
+  const onSizeBand = vi.fn()
   const viewport = useMapViewport()
-  render(TaskMapCanvas, { props: { regions, arrows: drawn, viewport, onOpenTask, onDropCard } })
+  render(TaskMapCanvas, {
+    props: { bands, arrows: drawn, viewport, onOpenTask, onDropCard, onDropBand, onSizeBand },
+  })
   return {
     viewport,
     onOpenTask,
     onDropCard,
+    onDropBand,
+    onSizeBand,
     surface: screen.getByTestId('task-map-surface'),
     layer: screen.getByTestId('task-map-layer'),
   }
@@ -35,6 +52,26 @@ function renderCanvas({ drawn = arrows, regions = assembleRegions(tasks, []) }: 
 
 function bandTitles(): string[] {
   return screen.getAllByRole('heading', { level: 2 }).map((band) => band.textContent?.trim() ?? '')
+}
+
+function headingOf(label: string | null): HTMLElement {
+  const heading = screen
+    .getByTestId('task-map-layer')
+    .querySelector<HTMLElement>(`[data-band-handle='${bandKey(label)}']`)
+  if (!heading) throw new Error(`no heading for the ${label ?? OTHER_BAND_TITLE} band`)
+  return heading
+}
+
+function boxOf(label: string | null): HTMLElement {
+  const box = headingOf(label).closest<HTMLElement>('[data-testid="task-map-band"]')
+  if (!box) throw new Error(`no box for the ${label ?? OTHER_BAND_TITLE} band`)
+  return box
+}
+
+function handleOf(label: string | null): HTMLElement {
+  const handle = boxOf(label).querySelector<HTMLElement>('[data-band-resize]')
+  if (!handle) throw new Error(`no resize handle for the ${label ?? OTHER_BAND_TITLE} band`)
+  return handle
 }
 
 describe('TaskMapCanvas', () => {
@@ -118,7 +155,12 @@ describe('TaskMapCanvas', () => {
     await fireEvent(card, pointerEvent('pointerup', 40, 40))
 
     expect(layer.style.transform).toBe('translate(0px, 0px) scale(1)')
-    expect(onDropCard).toHaveBeenCalledExactlyOnceWith('T-1', { region: null, x: 40, y: 40 })
+    expect(onDropCard).toHaveBeenCalledExactlyOnceWith({
+      band: null,
+      taskId: 'T-1',
+      x: 40,
+      y: 40,
+    })
   })
 
   it('draws the card under the pointer before the drop is stored', async () => {
@@ -133,16 +175,22 @@ describe('TaskMapCanvas', () => {
     expect(onDropCard).not.toHaveBeenCalled()
   })
 
-  it('grows the band under the pointer before the drop is stored', async () => {
-    renderCanvas({ regions: assembleRegions([tasks[0]], []), drawn: [] })
+  it('lets a card rest outside its own band', async () => {
+    const { onDropCard } = renderCanvas({ bands: assembleBands([tasks[0]], []), drawn: [] })
 
     const card = screen.getByRole('button', { name: /Rotate the tokens/ })
-    const band = screen.getAllByTestId('task-map-region')[0]
-    const before = Number.parseFloat(band.style.height)
+    const box = boxOf(null)
+    const beyond = Number.parseFloat(box.style.height) + 400
     await fireEvent(card, pointerEvent('pointerdown', 0, 0))
-    await fireEvent(card, pointerEvent('pointermove', 0, 120))
+    await fireEvent(card, pointerEvent('pointermove', 0, beyond))
+    await fireEvent(card, pointerEvent('pointerup', 0, beyond))
 
-    expect(Number.parseFloat(band.style.height)).toBe(before + 120)
+    expect(onDropCard).toHaveBeenCalledExactlyOnceWith({
+      band: null,
+      taskId: 'T-1',
+      x: 0,
+      y: beyond,
+    })
   })
 
   it('writes the drop once when the pointer leaves the canvas mid-drag', async () => {
@@ -154,7 +202,12 @@ describe('TaskMapCanvas', () => {
     await fireEvent(surface, pointerEvent('pointerleave', 40, 40))
     await fireEvent(surface, pointerEvent('pointerup', 60, 60))
 
-    expect(onDropCard).toHaveBeenCalledExactlyOnceWith('T-1', { region: null, x: 40, y: 40 })
+    expect(onDropCard).toHaveBeenCalledExactlyOnceWith({
+      band: null,
+      taskId: 'T-1',
+      x: 40,
+      y: 40,
+    })
   })
 
   it('writes the drop once when the gesture is cancelled', async () => {
@@ -165,7 +218,12 @@ describe('TaskMapCanvas', () => {
     await fireEvent(card, pointerEvent('pointermove', 40, 40))
     await fireEvent(surface, pointerEvent('pointercancel', 40, 40))
 
-    expect(onDropCard).toHaveBeenCalledExactlyOnceWith('T-1', { region: null, x: 40, y: 40 })
+    expect(onDropCard).toHaveBeenCalledExactlyOnceWith({
+      band: null,
+      taskId: 'T-1',
+      x: 40,
+      y: 40,
+    })
   })
 
   it('drags a card by what the pointer travelled on a zoomed canvas', async () => {
@@ -177,7 +235,12 @@ describe('TaskMapCanvas', () => {
     await fireEvent(surface, pointerEvent('pointermove', 50, 25))
     await fireEvent(surface, pointerEvent('pointerup', 50, 25))
 
-    expect(onDropCard).toHaveBeenCalledExactlyOnceWith('T-1', { region: null, x: 40, y: 20 })
+    expect(onDropCard).toHaveBeenCalledExactlyOnceWith({
+      band: null,
+      taskId: 'T-1',
+      x: 40,
+      y: 20,
+    })
   })
 
   it('reports no drop for a press that never moved', async () => {
@@ -219,47 +282,148 @@ describe('TaskMapCanvas label bands', () => {
     buildTaskDetail({ id: 'T-3', title: 'Archive the runs' }),
   ]
 
-  it('draws one band per curated label in curated order, with Other last', () => {
-    renderCanvas({ regions: assembleRegions(banded, ['auth', 'api']) })
+  function box(label: string | null, overrides: Partial<Band> = {}): Band {
+    return { label, x: 0, y: 0, width: bandWidthFor(4), height: MIN_BAND_HEIGHT, ...overrides }
+  }
 
-    expect(bandTitles()).toEqual(['auth', 'api', OTHER_REGION_TITLE])
+  it('draws one band per curated label, plus Other', () => {
+    renderCanvas({ bands: assembleBands(banded, [box('auth'), box('api')]) })
+
+    expect(bandTitles()).toEqual(['auth', 'api', OTHER_BAND_TITLE])
   })
 
   it('draws a band for a curated label no Task carries', () => {
-    renderCanvas({ regions: assembleRegions(banded, ['auth', 'ops']) })
+    renderCanvas({ bands: assembleBands(banded, [box('auth'), box('ops')]) })
 
-    expect(bandTitles()).toEqual(['auth', 'ops', OTHER_REGION_TITLE])
+    expect(bandTitles()).toEqual(['auth', 'ops', OTHER_BAND_TITLE])
   })
 
-  it('draws every band the full width of the map', () => {
-    const { layer } = renderCanvas({ regions: assembleRegions(banded, ['auth', 'api']) })
+  it('draws a Task carrying two curated labels in both bands', () => {
+    renderCanvas({ bands: assembleBands(banded, [box('auth'), box('api', { y: 400 })]) })
 
-    for (const band of screen.getAllByTestId('task-map-region')) {
-      expect(band.style.width).toBe(layer.style.width)
-    }
+    expect(screen.getAllByRole('button', { name: /Rotate the tokens/ })).toHaveLength(2)
   })
 
-  it('stacks the bands down the map, none overlapping the one above it', () => {
-    renderCanvas({ regions: assembleRegions(banded, ['auth', 'api']) })
+  it('draws each band at its own rectangle', () => {
+    renderCanvas({ bands: assembleBands(banded, [box('auth', { x: 300, y: 200, width: 500 })]) })
 
-    const edges = screen.getAllByTestId('task-map-region').map((band) => ({
-      top: Number.parseFloat(band.style.top),
-      bottom: Number.parseFloat(band.style.top) + Number.parseFloat(band.style.height),
-    }))
+    expect(boxOf('auth').style.left).toBe('300px')
+    expect(boxOf('auth').style.top).toBe('200px')
+    expect(boxOf('auth').style.width).toBe('500px')
+  })
 
-    for (const [index, band] of edges.slice(1).entries()) {
-      expect(band.top).toBeGreaterThanOrEqual(edges[index].bottom)
-    }
+  it('lets two bands overlap where the user put them', () => {
+    renderCanvas({ bands: assembleBands(banded, [box('auth', { y: 0 }), box('api', { y: 10 })]) })
+
+    expect(boxOf('api').style.top).toBe('10px')
+    expect(Number.parseFloat(boxOf('auth').style.height)).toBeGreaterThan(10)
   })
 
   it('draws an arrow between two cards sitting in different bands', () => {
     renderCanvas({
-      regions: assembleRegions(banded, ['auth', 'api']),
+      bands: assembleBands(banded, [box('auth'), box('api', { y: 400 })]),
       drawn: selectArrows(banded),
     })
 
     const [arrow] = screen.getAllByTestId('task-map-arrow')
     expect(arrow.dataset.arrow).toBe('T-1->T-2')
     expect(arrow.getAttribute('d')).toBeTruthy()
+  })
+
+  it('draws the edge from each copy of a Task drawn in two bands', () => {
+    renderCanvas({
+      bands: assembleBands(banded, [box('auth'), box('api', { y: 400 })]),
+      drawn: selectArrows(banded),
+    })
+
+    expect(screen.getAllByTestId('task-map-arrow')).toHaveLength(2)
+  })
+})
+
+describe('TaskMapCanvas band drag', () => {
+  const banded = [buildTaskDetail({ id: 'T-1', title: 'Rotate the tokens', labels: ['auth'] })]
+
+  function placed() {
+    return assembleBands(banded, seedBands(banded))
+  }
+
+  it('drags a band by its heading', async () => {
+    const { onDropBand } = renderCanvas({ bands: placed(), drawn: [] })
+
+    const heading = headingOf('auth')
+    await fireEvent(heading, pointerEvent('pointerdown', 0, 0))
+    await fireEvent(heading, pointerEvent('pointermove', 120, 90))
+    await fireEvent(heading, pointerEvent('pointerup', 120, 90))
+
+    const seeded = seedBands(banded)[0]
+    expect(onDropBand).toHaveBeenCalledExactlyOnceWith('auth', {
+      x: seeded.x + 120,
+      y: seeded.y + 90,
+    })
+  })
+
+  it('carries the band cards with it while the drag is under the pointer', async () => {
+    renderCanvas({ bands: placed(), drawn: [] })
+
+    const card = screen.getByRole('button', { name: /Rotate the tokens/ })
+    const before = Number.parseFloat(card.style.left)
+    const heading = headingOf('auth')
+    await fireEvent(heading, pointerEvent('pointerdown', 0, 0))
+    await fireEvent(heading, pointerEvent('pointermove', 120, 0))
+
+    expect(Number.parseFloat(card.style.left)).toBe(before + 120)
+  })
+
+  it('reports no band drop for a press that never moved', async () => {
+    const { onDropBand } = renderCanvas({ bands: placed(), drawn: [] })
+
+    const heading = headingOf('auth')
+    await fireEvent(heading, pointerEvent('pointerdown', 10, 10))
+    await fireEvent(heading, pointerEvent('pointermove', 11, 11))
+    await fireEvent(heading, pointerEvent('pointerup', 11, 11))
+
+    expect(onDropBand).not.toHaveBeenCalled()
+  })
+
+  it('does not pan the canvas while a band is being dragged', async () => {
+    const { layer } = renderCanvas({ bands: placed(), drawn: [] })
+
+    const heading = headingOf('auth')
+    await fireEvent(heading, pointerEvent('pointerdown', 0, 0))
+    await fireEvent(heading, pointerEvent('pointermove', 40, 40))
+
+    expect(layer.style.transform).toBe('translate(0px, 0px) scale(1)')
+  })
+
+  it('resizes a band by its corner handle', async () => {
+    const { onSizeBand } = renderCanvas({ bands: placed(), drawn: [] })
+
+    const handle = handleOf('auth')
+    await fireEvent(handle, pointerEvent('pointerdown', 0, 0))
+    await fireEvent(handle, pointerEvent('pointermove', -200, 60))
+    await fireEvent(handle, pointerEvent('pointerup', -200, 60))
+
+    const seeded = seedBands(banded)[0]
+    expect(onSizeBand).toHaveBeenCalledExactlyOnceWith('auth', {
+      width: seeded.width - 200,
+      height: seeded.height + 60,
+    })
+  })
+
+  it('shows the band under the pointer while it is resized', async () => {
+    renderCanvas({ bands: placed(), drawn: [] })
+
+    const before = Number.parseFloat(boxOf('auth').style.width)
+    const handle = handleOf('auth')
+    await fireEvent(handle, pointerEvent('pointerdown', 0, 0))
+    await fireEvent(handle, pointerEvent('pointermove', 150, 0))
+
+    expect(Number.parseFloat(boxOf('auth').style.width)).toBe(before + 150)
+  })
+
+  it('offers no dependency control on a band', () => {
+    renderCanvas({ bands: placed(), drawn: [] })
+
+    expect(screen.getAllByRole('button')).toHaveLength(1)
   })
 })

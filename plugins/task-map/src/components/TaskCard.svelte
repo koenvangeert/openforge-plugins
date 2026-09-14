@@ -16,6 +16,7 @@
   type="button"
   class="task-map-card"
   data-task-id={card.taskId}
+  data-card-key={card.key}
   data-status={card.status}
   data-dragging={dragging ? 'true' : 'false'}
   style="left: {card.x}px; top: {card.y}px; width: {CARD_WIDTH}px; height: {CARD_HEIGHT}px"
