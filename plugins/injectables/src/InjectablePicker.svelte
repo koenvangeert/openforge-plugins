@@ -49,7 +49,12 @@
 </script>
 
 {#snippet detailFooter(selected: Injectable)}
-  <button class="btn btn-primary btn-sm" disabled={!selected.insertable} onclick={() => insert(selected)} type="button">
+  <button
+    data-testid="detail-primary-action"
+    class="btn btn-primary btn-sm"
+    disabled={!selected.insertable}
+    onclick={() => insert(selected)}
+    type="button">
     Insert into prompt
   </button>
   {#if !selected.insertable && selected.disabledReason}
@@ -89,6 +94,8 @@
     <!-- Footer: keyboard hints -->
     <div class="flex items-center gap-4 border-t border-base-300 px-5 py-2 text-xs opacity-60">
       <span class="flex items-center gap-1"><kbd class="kbd kbd-xs">↑</kbd><kbd class="kbd kbd-xs">↓</kbd> move</span>
+      <span class="flex items-center gap-1"><kbd class="kbd kbd-xs">→</kbd> open</span>
+      <span class="flex items-center gap-1"><kbd class="kbd kbd-xs">←</kbd> close panel</span>
       <span class="flex items-center gap-1"><kbd class="kbd kbd-xs">↵</kbd> insert</span>
       <span class="flex items-center gap-1"><kbd class="kbd kbd-xs">esc</kbd> close</span>
     </div>

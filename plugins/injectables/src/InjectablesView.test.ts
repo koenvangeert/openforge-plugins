@@ -111,8 +111,9 @@ describe('InjectablesView', () => {
 
     // 'refactor' is a skill (list only); the snippet auto-selects, so its name
     // shows in both the list and the detail header — hence getAllByText.
+    expect((await screen.findAllByText('PR boilerplate')).length).toBeGreaterThan(0)
+    await fireEvent.click(document.querySelector('[data-injectable-id="group:personal"]') as HTMLElement)
     expect((await screen.findAllByText('refactor')).length).toBeGreaterThan(0)
-    expect(screen.getAllByText('PR boilerplate').length).toBeGreaterThan(0)
   })
 
   it('renders the reading pane for the selected item', async () => {

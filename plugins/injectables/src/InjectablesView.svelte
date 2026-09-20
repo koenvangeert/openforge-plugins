@@ -46,7 +46,7 @@
 
 {#snippet detailFooter(selected: Injectable)}
   <button
-    data-testid="copy-injectable"
+    data-testid="detail-primary-action"
     class="btn btn-primary btn-sm"
     onclick={() => void copySelected(selected)}
     type="button">{copied ? 'Copied' : 'Copy'}</button>
