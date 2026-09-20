@@ -8,13 +8,18 @@ today drops `.codex`, `.pi`, and `.opencode` skills and only shows the folder
 badge in manage (rail) mode. The trigger ignores `location` and `taskId`. The
 public SDK injection props are `api`, `context`, `location`, `projectId`,
 `taskId`, and `onInsert`. There is no current provider, no installed-provider
-list, and no prompt text. `commands.listCatalog` takes only `projectId` and follows the **project default**
+list, and no prompt text. The host `InjectionPointSlot` still passes only
+those fields. `TaskStartPrefixContext` is `taskId` and `projectId` only.
+`commands.listCatalog` takes only `projectId` and follows the **project default**
 provider. It cannot list every local folder. Plugin rows have origin `plugin`
 but no plugin name on `CommandInfo`.
 
-Folder compatibility is not symmetric. Grok reads `.claude` and `.agents` by
-default. Claude does not read `.grok` or `.agents`. Codex, Pi, and OpenCode read
-`.agents`. That matrix belongs in one function, not in the UI.
+Folder compatibility is not symmetric, and the host scan is not the agent.
+Grok Build reads `.grok`, `.claude`, and `.agents`. OpenForge’s Grok
+`list_commands` omits `.claude`. OpenCode the agent also reads `.claude` and
+`.agents`; OpenForge’s OpenCode scan is `.opencode` only. Claude Code reads
+`.claude` and does not read `.grok` or `.agents`. Codex and Pi read `.agents`
+plus their own folder. That matrix belongs in one function, not in the UI.
 
 ## Goals / Non-Goals
 
@@ -105,8 +110,9 @@ plugin backend MUST scan `.agents`, `.claude`, `.grok`, `.codex`, `.pi`, and
 plugin/builtin items of a given provider.
 
 **Why this over unioning host catalogs:** the host has no “all providers”
-catalog today, and Grok’s OpenForge scan omits `.claude` even though Grok
-reads it.
+catalog today. Each provider’s OpenForge scan is incomplete relative to the
+agent: Grok’s scan omits `.claude` even though Grok reads it; OpenCode’s scan
+is `.opencode` only, even though OpenCode also reads `.claude` and `.agents`.
 
 ### 3c. Group list like Grok’s Skills tab
 
@@ -152,19 +158,23 @@ leaves the rest.
   fail even when the skill is usable. → This change still inserts the catalog’s
   `invocationText`. A Codex invocation-prefix fix is out of scope unless it is
   already in `invocationText`.
-- **[Catalog completeness]** `listCatalog` is Claude-shaped and follows the
-  project default. → Scan local folders in the plugin. Keep `listCatalog` for
-  plugin/builtin of the current (or installed) provider only.
+- **[Catalog completeness]** `listCatalog` follows the project default
+  provider’s OpenForge scan, not the agent’s real folders. Claude’s scan
+  already walks every local skill dir (including `.grok`); Grok’s scan omits
+  `.claude`; OpenCode’s scan omits `.claude` and `.agents`. → Scan local
+  folders in the plugin. Keep `listCatalog` for plugin/builtin of the current
+  (or installed) provider only.
 - **[No plugin name]** `CommandInfo` has no plugin id/name. → Add it in the SDK
   and have each provider’s `list_commands` fill it. Until then, nested plugin
   groups cannot be built honestly.
 
 ## Migration Plan
 
-1. Add the SDK fields in OpenForge and publish a plugin-sdk version the plugin
-   can depend on.
-2. Teach the injectables plugin the compatibility table, disabled rows, folder
-   badge in insert mode, panel chips, and create-task warning.
+1. In the **OpenForge checkout** (not this plugins repo): add the SDK fields
+   and host wiring, then publish or link a plugin-sdk version the plugin can
+   depend on.
+2. In **`plugins/injectables`**: teach the compatibility table, disabled rows,
+   folder badge in insert mode, panel chips, and create-task warning.
 3. Build, typecheck, test, then `plugin install` if `requires` changes, then
    `plugin reload`.
 4. Rollback is a plugin reload of the previous artifact; no stored data format

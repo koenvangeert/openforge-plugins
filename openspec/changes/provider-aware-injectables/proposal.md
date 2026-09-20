@@ -60,8 +60,10 @@ None. This repository has no existing injectables spec.
   the panel needs the list of **installed** OpenForge providers, and plugin rows
   need the **plugin name** (today `CommandInfo` only has origin `plugin`). Local
   skills must be listed from disk; `listCatalog` is one project-default provider
-  and cannot show every folder. If the public SDK does not expose those fields
-  yet, this change must extend the SDK contract rather than reach into app
-  internals.
+  and cannot show every folder. Those SDK fields still do not exist
+  (`PluginInjectionPointProps` has no provider or prompt;
+  `TaskStartPrefixContext` has no provider). That work belongs in the OpenForge
+  checkout, then a plugin-sdk version bump. The plugin still MUST NOT import
+  app internals.
 - **Reload**: after build, reinstall if the manifest `requires` list grows, then
   reload `com.openforge.injectables` for the active project.
