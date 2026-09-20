@@ -5,6 +5,7 @@ import { defineBackendPlugin } from '@openforge-app/plugin-sdk/backend'
 import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
 import { SKILL_SOURCE_DIRS, type SkillInfo, type SkillSourceDir } from './lib/skillDomain'
 import { METHOD } from './lib/protocol'
+import { listLocalSkillsFromRoots, skillSourceDir } from './backend/localSkillStore'
 import { createSnippet, deleteSnippet, listSnippets, snippetsFilePath, updateSnippet, type SnippetInput } from './backend/snippetFileStore'
 import type { Snippet } from './lib/injectableDomain'
 
@@ -22,23 +23,6 @@ interface SaveSkillContentRequest {
 }
 
 type DeleteSkillRequest = Omit<SaveSkillContentRequest, 'content'>
-
-function codexHomeDir(): string {
-  const codexHome = process.env.CODEX_HOME
-  return codexHome && codexHome.length > 0 ? codexHome : join(homedir(), '.codex')
-}
-
-function skillSourceDir(root: string, sourceDir: string, level: SkillLevel): string {
-  if (sourceDir === '.pi' && level === 'user') {
-    return join(root, '.pi', 'agent', 'skills')
-  }
-
-  if (sourceDir === '.codex' && level === 'user') {
-    return join(codexHomeDir(), 'skills')
-  }
-
-  return join(root, sourceDir, 'skills')
-}
 
 function isSupportedSkillSourceDir(sourceDir: string): sourceDir is SkillSourceDir {
   return (SKILL_SOURCE_DIRS as readonly string[]).includes(sourceDir)
@@ -195,6 +179,20 @@ export default defineBackendPlugin({
         },
       },
       handler: (request) => deleteSkill(openforge, request),
+    }))
+
+    context.subscriptions.add(openforge.backend.registerMethod<{ projectId: string | null }, Awaited<ReturnType<typeof listLocalSkillsFromRoots>>>(METHOD.listLocalSkills, {
+      input: {
+        type: 'object',
+        required: ['projectId'],
+        properties: {
+          projectId: { type: ['string', 'null'] },
+        },
+      },
+      handler: async (request) => {
+        const projectRoot = request.projectId ? (await openforge.projects.get(request.projectId))?.path ?? null : null
+        return listLocalSkillsFromRoots(homedir(), projectRoot)
+      },
     }))
 
     context.subscriptions.add(openforge.backend.registerMethod<null, Snippet[]>(METHOD.listSnippets, {

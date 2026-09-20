@@ -9,18 +9,18 @@ spec without the new public fields.
 - [ ] 1.2 Add an installed-providers API (OpenForge-supported agents this instance can start) and verify a test returns only startable providers, not every folder on disk
 - [ ] 1.3 Add create-task prompt text plus a Remove/replace path for skill tokens on the `createTaskPrompt` injection point, and verify a test can read the prompt and remove a named token without touching the rest
 - [ ] 1.4 Add plugin name on catalog rows (`CommandInfo` / injectable view model), and verify a test keeps two skills from different plugins as distinct plugin groups rather than one “Plugin” bucket
-- [ ] 1.5 Publish or link that SDK version into `plugins/injectables` and verify `npm run typecheck` in the plugin sees the new fields
+- [x] 1.5 Publish or link that SDK version into `plugins/injectables` and verify `npm run typecheck` in the plugin sees the new fields
 
 ## 2. Folder compatibility (`plugins/injectables`)
 
-- [ ] 2.1 Encode the local-folder × provider matrix from design.md in one module, and verify unit tests cover Grok reading `.claude` and `.agents`, Claude reading only `.claude`, Codex/Pi reading `.agents`, and OpenCode reading `.opencode`, `.claude`, and `.agents`
-- [ ] 2.2 Treat snippets as usable for every provider, and verify a test asserts a snippet is never disabled
-- [ ] 2.3 Treat plugin and builtin items as usable only when they come from the current provider’s catalog, and verify a test does not use `sourceDir` as a proxy for those rows
+- [x] 2.1 Encode the local-folder × provider matrix from design.md in one module, and verify unit tests cover Grok reading `.claude` and `.agents`, Claude reading only `.claude`, Codex/Pi reading `.agents`, and OpenCode reading `.opencode`, `.claude`, and `.agents`
+- [x] 2.2 Treat snippets as usable for every provider, and verify a test asserts a snippet is never disabled
+- [x] 2.3 Treat plugin and builtin items as usable only when they come from the current provider’s catalog, and verify a test does not use `sourceDir` as a proxy for those rows
 
 ## 3. Local disk catalog (`plugins/injectables`)
 
-- [ ] 3.1 Scan user and project skill folders (`.agents`, `.claude`, `.grok`, `.codex`, `.pi`, `.opencode`) in the injectables backend, including `.grok`, and verify a test lists a `~/.grok/skills` skill even when `listCatalog` returns only Claude items
-- [ ] 3.2 Merge that disk scan with snippets and with `listCatalog` plugin/builtin rows, and verify a test does not drop a disk skill just because the project default provider is Claude
+- [x] 3.1 Scan user and project skill folders (`.agents`, `.claude`, `.grok`, `.codex`, `.pi`, `.opencode`) in the injectables backend, including `.grok`, and verify a test lists a `~/.grok/skills` skill even when `listCatalog` returns only Claude items
+- [x] 3.2 Merge that disk scan with snippets and with `listCatalog` plugin/builtin rows, and verify a test does not drop a disk skill just because the project default provider is Claude
 
 ## 4. Insert dialog (`plugins/injectables`)
 
@@ -46,5 +46,5 @@ spec without the new public fields.
 
 ## 7. Build and reload (`plugins/injectables`)
 
-- [ ] 7.1 Run `npm test && npm run typecheck && npm run build` in `plugins/injectables` and verify all three succeed
-- [ ] 7.2 If `package.json#openforge` `requires` changed, `openforge plugin install --path plugins/injectables`; then reload `com.openforge.injectables` for the active project and verify `"reloaded": true`
+- [x] 7.1 Run `npm test && npm run typecheck && npm run build` in `plugins/injectables` and verify all three succeed
+- [x] 7.2 If `package.json#openforge` `requires` changed, `openforge plugin install --path plugins/injectables`; then reload `com.openforge.injectables` for the active project and verify `"reloaded": true`

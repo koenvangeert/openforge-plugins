@@ -20,6 +20,11 @@ const fixtureInjectables: Injectable[] = [
     sourcePath: 'refactor',
     content: '---\nname: refactor\n---\nbody text',
     invocationText: '/refactor ',
+    pluginName: null,
+    insertable: true,
+    disabledReason: null,
+    compatibleProviderIds: [],
+    sourceAgent: 'Claude',
   },
   {
     id: 'personal:skill:pr-writer',
@@ -32,6 +37,11 @@ const fixtureInjectables: Injectable[] = [
     sourcePath: 'pr-writer',
     content: 'pr body',
     invocationText: '/pr-writer ',
+    pluginName: null,
+    insertable: true,
+    disabledReason: null,
+    compatibleProviderIds: [],
+    sourceAgent: 'Claude',
   },
   {
     id: 'snippet:s1',
@@ -44,6 +54,11 @@ const fixtureInjectables: Injectable[] = [
     sourcePath: null,
     content: 'Summary body',
     invocationText: 'Summary body',
+    pluginName: null,
+    insertable: true,
+    disabledReason: null,
+    compatibleProviderIds: [],
+    sourceAgent: null,
   },
 ]
 
@@ -92,6 +107,8 @@ function makeApi(initialSnippets: Snippet[] = fixtureSnippets) {
 
   const invoke = vi.fn(async (method: string, payload?: unknown): Promise<unknown> => {
     switch (method) {
+      case METHOD.listLocalSkills:
+        return []
       case METHOD.listSnippets:
         return snippets
       case METHOD.createSnippet: {
@@ -197,9 +214,9 @@ describe('InjectablePicker', () => {
     const onSelect = vi.fn()
     const { getByPlaceholderText } = render(InjectablePicker, { props: props({ onSelect }) })
     const input = getByPlaceholderText('Search injectables…')
-    // Rows in order: group:snippet, snippet:s1, group:personal, personal:skill:pr-writer,
-    // group:project, project:skill:refactor. 6 downs land on refactor.
-    for (let i = 0; i < 6; i++) await fireEvent.keyDown(input, { key: 'ArrowDown' })
+    // Rows in order: snippet:s1, project:skill:refactor, personal:skill:pr-writer.
+    // Expanded headers are skipped. Two downs land on refactor.
+    for (let i = 0; i < 2; i++) await fireEvent.keyDown(input, { key: 'ArrowDown' })
     await fireEvent.keyDown(input, { key: 'Enter' })
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ invocationText: '/refactor ' }))
   })
@@ -435,7 +452,7 @@ describe('InjectablePicker', () => {
     // Next down crosses into the following group without stopping on its header.
     await fireEvent.keyDown(input, { key: 'ArrowDown' })
     expect(document.activeElement).toBe(
-      document.querySelector('[data-injectable-id="personal:skill:pr-writer"]'),
+      document.querySelector('[data-injectable-id="project:skill:refactor"]'),
     )
   })
 

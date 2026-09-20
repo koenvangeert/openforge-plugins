@@ -32,6 +32,7 @@
     type BrowseMode,
     snippetVisibleIn,
   } from './lib/injectables'
+  import { providerDisplayName } from './lib/folderCompatibility'
   import { METHOD } from './lib/protocol'
   import Sparkles from '@lucide/svelte/icons/sparkles'
   import SquareTerminal from '@lucide/svelte/icons/square-terminal'
@@ -80,12 +81,13 @@
   }
   function groupBadge(key: string): string {
     if (key === 'snippet') return SNIPPET_BADGE
+    if (key.startsWith('plugin:')) return ORIGIN_BADGE.plugin
     return groupBy === 'origin' ? ORIGIN_BADGE[key as InjectableOrigin] : 'badge-ghost'
   }
   function groupDescription(key: string): string {
-    return key === 'snippet'
-      ? 'Saved text you reuse — stored by OpenForge'
-      : (ORIGIN_DESCRIPTIONS[key as InjectableOrigin] ?? '')
+    if (key === 'snippet') return 'Saved text you reuse — stored by OpenForge'
+    if (key.startsWith('plugin:')) return ORIGIN_DESCRIPTIONS.plugin
+    return ORIGIN_DESCRIPTIONS[key as InjectableOrigin] ?? ''
   }
 
   interface Props {
@@ -104,12 +106,15 @@
      */
     autoSelectFirst?: boolean
     /**
-     * What this surface is for. `insert` (the picker) shows only what is usable in
-     * this context: Claude-invokable skill dirs, and snippets scoped to the active
-     * project. `manage` (the rail view) shows everything that exists so it can be
-     * edited — every scanned skill dir, and every snippet whatever its scope.
+     * What this surface is for. `insert` (the picker) lists every local folder and
+     * greys out skills the current provider cannot use. `manage` (the rail view)
+     * shows everything that exists so it can be edited.
      */
     mode?: BrowseMode
+    /** Current AI provider at an insert point. Null on the project panel. */
+    provider?: string | null
+    /** Providers this OpenForge instance can start. Used by the project panel. */
+    installedProviders?: import('@openforge-app/plugin-sdk').InstalledAiProvider[]
   }
   let {
     api,
@@ -119,11 +124,18 @@
     onEscape = null,
     autoSelectFirst = false,
     mode = 'insert',
+    provider = null,
+    installedProviders = [],
   }: Props = $props()
 
-  const catalog = useInjectableCatalog(() => api, () => projectId, () => mode)
-  // Only worth labelling a row's directory when more than one can appear.
-  const showSourceDir = $derived(mode === 'manage')
+  const catalog = useInjectableCatalog(
+    () => api,
+    () => projectId,
+    () => mode,
+    () => provider,
+    () => installedProviders,
+  )
+  const showSourceDir = true
   // `manage` lists snippets that are not available in the active project, so those rows
   // are marked rather than hidden. Derived from the raw snippet records, which carry the
   // scope the Injectable view model does not. Empty when there is no project to be
@@ -188,10 +200,13 @@
   // parent-driven initial load can silently no-op. Explicit previous-value comparison
   // (not effect cleanup) so a re-run with an unchanged project does not refetch.
   let loadedProjectId: string | null | undefined = undefined
+  let loadedProvider: string | null | undefined = undefined
   $effect(() => {
     const pid = projectId
-    if (pid === loadedProjectId) return
+    const currentProvider = provider
+    if (pid === loadedProjectId && currentProvider === loadedProvider) return
     loadedProjectId = pid
+    loadedProvider = currentProvider
     void catalog.reload()
     void loadProjects()
   })
@@ -649,7 +664,7 @@
         toggleCollapse(selectedId.slice('group:'.length))
         return true
       }
-      if (selected && onActivate) {
+      if (selected && onActivate && selected.insertable) {
         e.preventDefault()
         onActivate(selected)
         return true
@@ -778,17 +793,19 @@
             {#each group.items as item (item.id)}
               {@const Icon = KIND_ICON[item.kind]}
               {@const outOfProject = outOfProjectSnippetIds.has(item.id)}
+              {@const dimmed = outOfProject || !item.insertable || (mode === 'manage' && item.sourceDir != null && item.compatibleProviderIds.length === 0)}
               <button
                 data-injectable-id={item.id}
                 data-out-of-project={outOfProject ? 'true' : undefined}
+                data-insertable={item.insertable ? undefined : 'false'}
                 class="flex w-full flex-col gap-0.5 rounded-md py-2 pr-2 text-left hover:bg-base-200"
-                style="padding-left: 3rem{outOfProject ? '; opacity: 0.55' : ''}"
+                style="padding-left: 3rem{dimmed ? '; opacity: 0.55' : ''}"
                 class:ring-2={selectedId === item.id}
                 class:ring-primary={selectedId === item.id}
                 class:bg-base-200={selectedId === item.id}
                 tabindex={selectedId === item.id ? 0 : -1}
                 onclick={() => onRowClick(item.id)}
-                ondblclick={() => onActivate?.(item)}
+                ondblclick={() => { if (item.insertable) onActivate?.(item) }}
                 type="button">
                 <span class="flex items-center gap-2">
                   <Icon size={14} class="shrink-0 {KIND_ICON_CLASS[item.kind]}" />
@@ -804,10 +821,19 @@
                       title="Not available in this project — still editable here; use “Available in” to add this project back"
                       >Not in this project</span>
                   {/if}
-                  {#if showSourceDir && item.sourceDir}
+                  {#if item.sourceAgent}
+                    <span
+                      class="badge badge-xs shrink-0 {item.sourceAgent === 'Grok' ? 'badge-primary' : item.sourceAgent === 'Claude' ? 'badge-secondary' : 'badge-ghost'}"
+                      title={item.sourceDir ? `Lives in ${item.sourceDir}/skills` : item.sourceAgent}>{item.sourceAgent}</span>
+                  {:else if showSourceDir && item.sourceDir}
                     <span
                       class="badge badge-xs badge-ghost shrink-0 font-mono"
                       title="Lives in {item.sourceDir}/skills">{item.sourceDir}</span>
+                  {/if}
+                  {#if mode === 'manage' && item.sourceDir}
+                    {#each item.compatibleProviderIds as providerId (providerId)}
+                      <span class="badge badge-xs badge-ghost shrink-0">{providerDisplayName(providerId)}</span>
+                    {/each}
                   {/if}
                   {#if item.content}
                     <span class="ml-auto shrink-0 pl-2 text-xs tabular-nums opacity-45">{formatCharCount(item.content.length)}</span>
@@ -928,7 +954,10 @@
               {#if selected.kind === 'snippet'}
                 <span class="badge badge-sm {SNIPPET_BADGE}">Snippet</span>
               {:else}
-                <span class="badge badge-sm badge-outline {ORIGIN_BADGE[selected.origin]}">{ORIGIN_LABELS[selected.origin]}</span>
+                <span class="badge badge-sm badge-outline {ORIGIN_BADGE[selected.origin]}">{selected.origin === 'plugin' && selected.pluginName ? `Plugin: ${selected.pluginName}` : ORIGIN_LABELS[selected.origin]}</span>
+                {#if selected.sourceAgent}
+                  <span class="badge badge-sm {selected.sourceAgent === 'Grok' ? 'badge-primary' : selected.sourceAgent === 'Claude' ? 'badge-secondary' : 'badge-ghost'}">{selected.sourceAgent}</span>
+                {/if}
                 <span class="text-sm leading-none" title={TRIGGER_LABELS[selected.triggerMode]}>{TRIGGER_EMOJI[selected.triggerMode]}</span>
               {/if}
               {#if selected.content}
@@ -1015,7 +1044,7 @@
               {/if}
             {:else}
               <p class="mt-5 text-sm opacity-70">
-                Provided by Claude Code — no source file to read. Insert it with its command.
+                Provided by {selected.sourceAgent ?? 'the agent'} — no source file to read. Insert it with its command.
               </p>
             {/if}
           {/if}

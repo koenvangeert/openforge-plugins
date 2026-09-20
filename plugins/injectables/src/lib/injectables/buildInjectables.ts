@@ -1,19 +1,15 @@
-import type { CommandInfo } from '@openforge-app/plugin-sdk'
+import type { CommandInfo, InstalledAiProvider } from '@openforge-app/plugin-sdk'
+import type { LocalSkillRecord } from '../skillDomain'
+import {
+  compatibleInstalledProviders,
+  folderAgentLabel,
+  isLocalSkillDir,
+  localSkillUsableWithProvider,
+  unusableFolderReason,
+} from '../folderCompatibility'
 import type { Injectable, InjectableOrigin, InjectableTriggerMode, Snippet } from '../injectableDomain'
 
-// Directories the picker (`insert` mode) offers for insertion. Historically this was
-// Claude-only ('.claude', '.agents') because the picker only ever inserted into a Claude
-// prompt; now that Codex/Pi/OpenCode/Grok sessions exist too, '.grok' is included so a
-// Grok-authored skill is offered the same way a Claude-authored one is. '.opencode',
-// '.codex', and '.pi' stay out of `insert` deliberately — unlike '.grok', nothing in this
-// plugin has confirmed those tools resolve a plain `/name` the same way Claude and Grok do.
-const INSERT_SKILL_DIRS = new Set(['.claude', '.agents', '.grok'])
-// Every local skill directory the sidecar scans. The rail view browses all of them.
-const ALL_SKILL_DIRS = new Set(['.claude', '.agents', '.opencode', '.codex', '.pi', '.grok'])
-// builtin commands and plugin-provided items are always relevant regardless of source
-// dir: a builtin never has one, and a plugin item may or may not (e.g. a Grok plugin
-// skill does carry one — see GrokProvider::list_commands on the app side).
-const CLAUDE_PROVIDED_ORIGINS = new Set(['builtin', 'plugin'])
+const CATALOG_ORIGINS = new Set(['builtin', 'plugin'])
 
 /**
  * What the surface is for, which decides how much of the catalog it shows.
@@ -30,16 +26,8 @@ export type BrowseMode = 'insert' | 'manage'
 const ORIGINS = new Set<InjectableOrigin>(['personal', 'project', 'plugin', 'builtin'])
 const TRIGGERS = new Set<InjectableTriggerMode>(['auto+manual', 'manual-only'])
 
-function isRelevant(c: CommandInfo, mode: BrowseMode): boolean {
-  // Tool/plugin-provided items are always relevant (no source dir to gate on).
-  if (c.origin != null && CLAUDE_PROVIDED_ORIGINS.has(c.origin)) return true
-  // Everything else — skills AND legacy .md commands — must live in a known source dir.
-  // Under `insert` that drops .pi/.codex/.opencode skills and .opencode/commands. A
-  // provider whose host-side discovery doesn't emit origin/sourceDir enrichment yields
-  // an empty catalog here regardless of mode (no sourceDir to match against at all).
-  // Under `manage` every scanned directory is kept.
-  const allowed = mode === 'manage' ? ALL_SKILL_DIRS : INSERT_SKILL_DIRS
-  return c.sourceDir != null && allowed.has(c.sourceDir)
+function isCatalogRow(c: CommandInfo): boolean {
+  return c.origin != null && CATALOG_ORIGINS.has(c.origin)
 }
 
 function normOrigin(v: string | null | undefined): InjectableOrigin {
@@ -69,14 +57,76 @@ function snippetToInjectable(s: Snippet): Injectable {
     sourcePath: null,
     content: s.body,
     invocationText: s.body,
+    pluginName: null,
+    insertable: true,
+    disabledReason: null,
+    compatibleProviderIds: [],
+    sourceAgent: null,
   }
 }
 
-/**
- * Map the provider command list (plus the user's personal snippets) into the
- * picker's Claude-scoped Injectable view model. Drops non-Claude ecosystem
- * skills (.pi/.codex/.opencode) and hidden background skills.
- */
+function localSkillToInjectable(
+  skill: LocalSkillRecord,
+  provider: string | null,
+  installed: readonly InstalledAiProvider[],
+  mode: BrowseMode,
+): Injectable {
+  const compatible = compatibleInstalledProviders(skill.sourceDir, installed)
+  const usableNow = localSkillUsableWithProvider(skill.sourceDir, provider)
+  const insertable = mode === 'manage' || usableNow
+  return {
+    id: [skill.origin, 'skill', skill.sourceDir, skill.pluginName, skill.sourcePath, skill.name]
+      .filter(Boolean)
+      .join(':'),
+    kind: 'skill',
+    name: skill.name,
+    description: skill.description,
+    origin: skill.origin,
+    triggerMode: 'auto+manual',
+    sourceDir: skill.sourceDir,
+    sourcePath: skill.sourcePath,
+    content: skill.content,
+    invocationText: `/${skill.name} `,
+    pluginName: skill.pluginName,
+    insertable,
+    disabledReason: insertable || !isLocalSkillDir(skill.sourceDir) ? null : unusableFolderReason(provider, skill.sourceDir),
+    compatibleProviderIds: compatible.map((item) => item.id),
+    sourceAgent: folderAgentLabel(skill.sourceDir),
+  }
+}
+
+function catalogAgentLabel(c: CommandInfo, provider: string | null): string | null {
+  const fromFolder = folderAgentLabel(c.sourceDir)
+  if (fromFolder) return fromFolder
+  if (c.origin === 'builtin') {
+    if (provider === 'grok') return 'Grok'
+    if (provider === 'claude-code') return 'Claude'
+  }
+  return null
+}
+
+function catalogToInjectable(c: CommandInfo, provider: string | null): Injectable {
+  const kind = c.source === 'skill' ? 'skill' : 'command'
+  const origin = normOrigin(c.origin)
+  return {
+    id: [origin, kind, c.sourceDir, c.pluginName, c.name].filter(Boolean).join(':'),
+    kind,
+    name: c.name,
+    description: c.description,
+    origin,
+    triggerMode: normTrigger(c.triggerMode),
+    sourceDir: c.sourceDir ?? null,
+    sourcePath: c.sourcePath ?? null,
+    content: c.content ?? null,
+    invocationText: `/${c.name} `,
+    pluginName: c.pluginName ?? null,
+    insertable: true,
+    disabledReason: null,
+    compatibleProviderIds: [],
+    sourceAgent: catalogAgentLabel(c, provider),
+  }
+}
+
 /** A snippet is visible in the active project when it targets all projects, or when
  * its explicit scope includes that project. With no active project only all-projects
  * snippets show. */
@@ -85,41 +135,32 @@ export function snippetVisibleIn(s: Snippet, projectId: string | null): boolean 
 }
 
 export function buildInjectables(input: {
-  commands: CommandInfo[]
+  commands?: CommandInfo[]
+  localSkills?: LocalSkillRecord[]
   snippets?: Snippet[]
   projectId?: string | null
   mode?: BrowseMode
+  provider?: string | null
+  installedProviders?: readonly InstalledAiProvider[]
 }): Injectable[] {
   const projectId = input.projectId ?? null
   const mode = input.mode ?? 'insert'
-  const commands = input.commands
-    .filter((c) => isRelevant(c, mode) && c.userInvocable !== false)
-    .map((c) => {
-      const kind = c.source === 'skill' ? 'skill' : 'command'
-      const origin = normOrigin(c.origin)
-      return {
-        // The source dir is part of the identity: the same skill name can exist in
-        // several directories (e.g. ~/.claude/skills and ~/.codex/skills), and under
-        // `all` scope both are listed, so name alone is not unique. Tool/plugin-provided
-        // items carry no source dir and keep the shorter id.
-        id: [origin, kind, c.sourceDir, c.name].filter(Boolean).join(':'),
-        kind,
-        name: c.name,
-        description: c.description,
-        origin,
-        triggerMode: normTrigger(c.triggerMode),
-        sourceDir: c.sourceDir ?? null,
-        sourcePath: c.sourcePath ?? null,
-        content: c.content ?? null,
-        invocationText: `/${c.name} `,
-      } satisfies Injectable
+  const provider = input.provider ?? null
+  const installed = input.installedProviders ?? []
+  const local = (input.localSkills ?? [])
+    .filter((skill) => skill.userInvocable !== false)
+    .map((skill) => localSkillToInjectable(skill, provider, installed, mode))
+  const catalog = (input.commands ?? [])
+    .filter((c) => isCatalogRow(c) && c.userInvocable !== false)
+    .map((c) => catalogToInjectable(c, provider))
+    .filter((item) => {
+      // Grok's real plugin + bundled lists live on disk. The host catalog follows the
+      // project default provider and would otherwise dump Claude builtins into Bundled.
+      if (provider === 'grok' && (item.origin === 'plugin' || item.origin === 'builtin')) return false
+      if (item.origin !== 'plugin' || !item.pluginName) return true
+      return !local.some((row) => row.origin === 'plugin' && row.pluginName === item.pluginName && row.name === item.name)
     })
-  // `manage` keeps every snippet: the rail view is where you edit scope, so a snippet
-  // must not disappear at the moment you remove the project you are standing in.
   const kept = (input.snippets ?? []).filter((s) => mode === 'manage' || snippetVisibleIn(s, projectId))
-  // Those that are not available here sink to the bottom of the Snippets section — kept
-  // for editing, but never pushing the usable ones down. Sorting is stable, so the
-  // relative order inside each half is whatever the store returned.
   const ordered =
     mode === 'manage' && projectId !== null
       ? [...kept].sort(
@@ -127,6 +168,15 @@ export function buildInjectables(input: {
             Number(!snippetVisibleIn(a, projectId)) - Number(!snippetVisibleIn(b, projectId)),
         )
       : kept
-  const snippets = ordered.map(snippetToInjectable)
-  return [...snippets, ...commands]
+  return uniquifyIds([...ordered.map(snippetToInjectable), ...local, ...catalog])
+}
+
+function uniquifyIds(items: Injectable[]): Injectable[] {
+  const seen = new Map<string, number>()
+  return items.map((item) => {
+    const count = seen.get(item.id) ?? 0
+    seen.set(item.id, count + 1)
+    if (count === 0) return item
+    return { ...item, id: `${item.id}:${count}` }
+  })
 }

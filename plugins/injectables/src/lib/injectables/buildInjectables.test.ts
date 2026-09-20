@@ -1,46 +1,101 @@
 import { describe, it, expect } from 'vitest'
 import { buildInjectables } from './buildInjectables'
 import type { CommandInfo } from '@openforge-app/plugin-sdk'
+import type { LocalSkillRecord } from '../skillDomain'
 
 const cmd = (over: Partial<CommandInfo>): CommandInfo => ({
   name: 'x',
   description: null,
   source: 'skill',
   agent: null,
-  origin: 'project',
+  origin: 'plugin',
+  pluginName: 'mattpocock-skills',
   triggerMode: 'auto+manual',
   userInvocable: null,
-  sourceDir: '.claude',
+  sourceDir: null,
   sourcePath: 'x',
   ...over,
 })
 
+const local = (over: Partial<LocalSkillRecord>): LocalSkillRecord => ({
+  name: 'x',
+  description: null,
+  origin: 'project',
+  sourceDir: '.claude',
+  sourcePath: 'x',
+  content: null,
+  userInvocable: null,
+  pluginName: null,
+  ...over,
+})
+
 describe('buildInjectables', () => {
-  it('drops non-Claude, non-Grok skills (pi/codex/opencode source dirs)', () => {
+  it('lists every local folder in insert mode and greys out ones the provider cannot use', () => {
     const out = buildInjectables({
-      commands: [cmd({ name: 'keep', sourceDir: '.claude' }), cmd({ name: 'drop', sourceDir: '.pi' })],
+      commands: [],
+      localSkills: [local({ name: 'keep', sourceDir: '.claude' }), local({ name: 'drop', sourceDir: '.pi', sourcePath: 'drop' })],
+      provider: 'claude-code',
     })
-    expect(out.map((i) => i.name)).toEqual(['keep'])
+    expect(out.map((i) => i.name)).toEqual(['keep', 'drop'])
+    expect(out.find((i) => i.name === 'keep')?.insertable).toBe(true)
+    expect(out.find((i) => i.name === 'drop')?.insertable).toBe(false)
+    expect(out.find((i) => i.name === 'drop')?.disabledReason).toContain('.pi')
   })
 
-  it('keeps .grok skills when inserting, same as .claude and .agents', () => {
+  it('labels .grok skills as Grok and .claude skills as Claude', () => {
+    const out = buildInjectables({
+      localSkills: [
+        local({ name: 'g', sourceDir: '.grok', sourcePath: 'g' }),
+        local({ name: 'c', sourceDir: '.claude', sourcePath: 'c' }),
+      ],
+      provider: 'grok',
+    })
+    expect(out.find((item) => item.name === 'g')?.sourceAgent).toBe('Grok')
+    expect(out.find((item) => item.name === 'c')?.sourceAgent).toBe('Claude')
+  })
+
+  it('keeps a snippet insertable for every provider', () => {
+    const out = buildInjectables({
+      commands: [],
+      snippets: [{ id: 's1', name: 'Here', body: 'x', allProjects: true, projectIds: [] }],
+      provider: 'claude-code',
+    })
+    expect(out[0]?.insertable).toBe(true)
+  })
+
+  it('does not mix Claude catalog builtins into a Grok insert list', () => {
+    const out = buildInjectables({
+      commands: [cmd({ name: 'compact', source: 'builtin', origin: 'builtin', sourceDir: null, pluginName: null })],
+      localSkills: [
+        local({ name: 'review', origin: 'builtin', sourceDir: '.grok', sourcePath: 'review', pluginName: null }),
+      ],
+      provider: 'grok',
+    })
+    expect(out.map((item) => item.name)).toEqual(['review'])
+    expect(out[0]?.sourceAgent).toBe('Grok')
+  })
+
+  it('does not use sourceDir as a proxy for plugin or builtin rows', () => {
     const out = buildInjectables({
       commands: [
-        cmd({ name: 'grokskill', sourceDir: '.grok', origin: 'personal' }),
-        cmd({ name: 'codexskill', sourceDir: '.codex' }),
+        cmd({ name: 'pluginc', origin: 'plugin', sourceDir: '.grok' }),
+        cmd({ name: 'builtinc', source: 'builtin', origin: 'builtin', sourceDir: null, pluginName: null }),
       ],
+      provider: 'claude-code',
     })
-    expect(out.map((i) => i.name)).toEqual(['grokskill'])
+    expect(out.map((i) => i.name).sort()).toEqual(['builtinc', 'pluginc'])
+    expect(out.every((i) => i.insertable)).toBe(true)
   })
 
   it('keeps every local skill directory under manage mode', () => {
     const out = buildInjectables({
-      commands: [
-        cmd({ name: 'claudeskill', sourceDir: '.claude' }),
-        cmd({ name: 'codexskill', sourceDir: '.codex' }),
-        cmd({ name: 'piskill', sourceDir: '.pi' }),
-        cmd({ name: 'opencodeskill', sourceDir: '.opencode' }),
-        cmd({ name: 'grokskill', sourceDir: '.grok' }),
+      commands: [],
+      localSkills: [
+        local({ name: 'claudeskill', sourceDir: '.claude', sourcePath: 'claudeskill' }),
+        local({ name: 'codexskill', sourceDir: '.codex', sourcePath: 'codexskill' }),
+        local({ name: 'piskill', sourceDir: '.pi', sourcePath: 'piskill' }),
+        local({ name: 'opencodeskill', sourceDir: '.opencode', sourcePath: 'opencodeskill' }),
+        local({ name: 'grokskill', sourceDir: '.grok', sourcePath: 'grokskill' }),
       ],
       mode: 'manage',
     })
@@ -97,13 +152,34 @@ describe('buildInjectables', () => {
     expect(out.map((i) => i.name)).toEqual(['Here A', 'Here B', 'Away A', 'Away B'])
   })
 
-  it('gives same-named skills in different directories distinct ids', () => {
-    // Real case: ~/.claude/skills/openforge and ~/.codex/skills/openforge both exist.
-    // Without the source dir in the id these collide and break keyed rendering.
+  it('gives same-named nested plugin skills distinct ids', () => {
     const out = buildInjectables({
-      commands: [
-        cmd({ name: 'openforge', origin: 'personal', sourceDir: '.claude' }),
-        cmd({ name: 'openforge', origin: 'personal', sourceDir: '.codex' }),
+      localSkills: [
+        local({
+          name: 'tdd',
+          origin: 'plugin',
+          pluginName: 'mattpocock-skills',
+          sourceDir: '.claude',
+          sourcePath: 'engineering/tdd',
+        }),
+        local({
+          name: 'tdd',
+          origin: 'plugin',
+          pluginName: 'mattpocock-skills',
+          sourceDir: '.claude',
+          sourcePath: 'tdd',
+        }),
+      ],
+    })
+    expect(out).toHaveLength(2)
+    expect(new Set(out.map((item) => item.id)).size).toBe(2)
+  })
+
+  it('gives same-named skills in different directories distinct ids', () => {
+    const out = buildInjectables({
+      localSkills: [
+        local({ name: 'openforge', origin: 'personal', sourceDir: '.claude', sourcePath: 'openforge' }),
+        local({ name: 'openforge', origin: 'personal', sourceDir: '.codex', sourcePath: 'openforge' }),
       ],
       mode: 'manage',
     })
@@ -111,48 +187,43 @@ describe('buildInjectables', () => {
     expect(new Set(out.map((i) => i.id)).size).toBe(2)
   })
 
-  it('keeps .agents skills and plugin/builtin commands', () => {
+  it('keeps plugin and builtin catalog rows and local .agents skills', () => {
     const out = buildInjectables({
       commands: [
-        cmd({ name: 'agentskill', sourceDir: '.agents' }),
         cmd({ name: 'pluginc', source: 'plugin', origin: 'plugin', sourceDir: null }),
-        cmd({ name: 'builtinc', source: 'builtin', origin: 'builtin', sourceDir: null }),
+        cmd({ name: 'builtinc', source: 'builtin', origin: 'builtin', sourceDir: null, pluginName: null }),
       ],
+      localSkills: [local({ name: 'agentskill', sourceDir: '.agents', sourcePath: 'agentskill' })],
+      provider: 'claude-code',
     })
     expect(out.map((i) => i.name).sort()).toEqual(['agentskill', 'builtinc', 'pluginc'])
   })
 
-  it('keeps .claude/commands but drops .opencode/commands (legacy command path)', () => {
+  it('drops host catalog rows that are not plugin or builtin', () => {
     const out = buildInjectables({
       commands: [
         cmd({ name: 'keepcmd', source: 'command', origin: 'project', sourceDir: '.claude' }),
-        cmd({ name: 'dropcmd', source: 'command', origin: 'project', sourceDir: '.opencode' }),
-      ],
-    })
-    expect(out.map((i) => i.name)).toEqual(['keepcmd'])
-  })
-
-  it('drops everything for a non-claude provider (no enrichment)', () => {
-    // opencode/pi/codex return items without origin/sourceDir enrichment
-    const out = buildInjectables({
-      commands: [
         { name: 'oc', description: null, source: 'command', agent: null } as unknown as CommandInfo,
-        { name: 'sk', description: null, source: 'skill', agent: null } as unknown as CommandInfo,
       ],
     })
     expect(out).toHaveLength(0)
   })
 
   it('drops user-invocable:false items', () => {
-    const out = buildInjectables({ commands: [cmd({ name: 'bg', userInvocable: false })] })
+    const out = buildInjectables({
+      commands: [cmd({ name: 'bg', userInvocable: false })],
+      localSkills: [local({ name: 'hidden', userInvocable: false })],
+    })
     expect(out).toHaveLength(0)
   })
 
-  it('maps kind, id and invocationText for a skill', () => {
-    const [i] = buildInjectables({ commands: [cmd({ name: 'refactor', source: 'skill', origin: 'project' })] })
+  it('maps kind, id and invocationText for a local skill', () => {
+    const [i] = buildInjectables({
+      localSkills: [local({ name: 'refactor', origin: 'project', sourceDir: '.claude', sourcePath: 'refactor' })],
+      provider: 'claude-code',
+    })
     expect(i).toMatchObject({
-      // The source dir is part of the id so the same name in two directories stays distinct.
-      id: 'project:skill:.claude:refactor',
+      id: 'project:skill:.claude:refactor:refactor',
       kind: 'skill',
       invocationText: '/refactor ',
     })
@@ -160,36 +231,40 @@ describe('buildInjectables', () => {
 
   it('carries the source dir and folder identity for edit/delete; null when absent', () => {
     const [skill] = buildInjectables({
-      commands: [cmd({ name: 's', sourceDir: '.claude', sourcePath: 's' })],
+      localSkills: [local({ name: 's', sourceDir: '.claude', sourcePath: 's' })],
+      provider: 'claude-code',
     })
     expect(skill).toMatchObject({ sourceDir: '.claude', sourcePath: 's' })
     const [builtin] = buildInjectables({
-      commands: [cmd({ name: 'init', source: 'builtin', origin: 'builtin', sourceDir: null })],
+      commands: [cmd({ name: 'init', source: 'builtin', origin: 'builtin', sourceDir: null, pluginName: null })],
     })
     expect(builtin.sourceDir).toBeNull()
   })
 
   it('carries source content for the reading pane; null when absent', () => {
-    const [skill] = buildInjectables({ commands: [cmd({ name: 's', content: '---\nname: s\n---\nbody' })] })
+    const [skill] = buildInjectables({
+      localSkills: [local({ name: 's', content: '---\nname: s\n---\nbody' })],
+      provider: 'claude-code',
+    })
     expect(skill.content).toContain('body')
     const [builtin] = buildInjectables({
-      commands: [cmd({ name: 'init', source: 'builtin', origin: 'builtin', sourceDir: null, content: undefined })],
+      commands: [cmd({ name: 'init', source: 'builtin', origin: 'builtin', sourceDir: null, pluginName: null, content: undefined })],
     })
     expect(builtin.content).toBeNull()
   })
 
   it('maps a command to kind "command"', () => {
     const [i] = buildInjectables({
-      commands: [cmd({ name: 'init', source: 'builtin', origin: 'builtin', sourceDir: null })],
+      commands: [cmd({ name: 'init', source: 'builtin', origin: 'builtin', sourceDir: null, pluginName: null })],
     })
     expect(i).toMatchObject({ id: 'builtin:command:init', kind: 'command' })
   })
 
-  it('normalizes unknown origin/trigger to safe defaults', () => {
+  it('normalizes unknown trigger to a safe default', () => {
     const [i] = buildInjectables({
-      commands: [cmd({ name: 'weird', origin: 'wat' as unknown as string, triggerMode: 'huh' as unknown as string })],
+      commands: [cmd({ name: 'weird', origin: 'plugin', triggerMode: 'huh' as unknown as string })],
     })
-    expect(i.origin).toBe('project')
+    expect(i.origin).toBe('plugin')
     expect(i.triggerMode).toBe('auto+manual')
   })
 
@@ -211,7 +286,7 @@ describe('buildInjectables', () => {
     })
   })
 
-  it('includes both snippets and commands; omitting snippets yields none', () => {
+  it('includes both snippets and catalog rows; omitting snippets yields none', () => {
     const both = buildInjectables({
       commands: [cmd({ name: 'skill1' })],
       snippets: [{ id: 's1', name: 'snip', body: 'text', allProjects: true, projectIds: [] }],

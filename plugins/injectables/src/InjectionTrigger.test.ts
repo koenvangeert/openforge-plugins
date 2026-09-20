@@ -8,6 +8,9 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('./InjectablePicker.svelte', async () => ({
   default: (await import('./test/InjectablePickerTestDouble.svelte')).default,
 }))
+vi.mock('./lib/injectableCatalog', () => ({
+  loadInjectableCatalog: vi.fn(async () => ({ injectables: [], snippets: [] })),
+}))
 
 import InjectionTrigger from './InjectionTrigger.svelte'
 import { receivedPickerProps } from './test/injectablePickerTestDoubleState'

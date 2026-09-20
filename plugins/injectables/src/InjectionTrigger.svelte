@@ -3,10 +3,11 @@
   import type { PluginInjectionPointProps } from '@openforge-app/plugin-sdk/frontend'
   import Sparkles from '@lucide/svelte/icons/sparkles'
   import InjectablePicker from './InjectablePicker.svelte'
+  import { loadInjectableCatalog } from './lib/injectableCatalog'
+  import { invalidInsertedSkillNames } from './lib/promptSkillTokens'
+  import type { Injectable } from './lib/injectableDomain'
 
-  // Only api/projectId/onInsert are used here; context/location/taskId are part of the
-  // injection-point contract but this trigger doesn't need them.
-  let { api, projectId, onInsert }: PluginInjectionPointProps = $props()
+  let { api, projectId, location, provider, promptText, onRemoveNamedTokens, onInsert }: PluginInjectionPointProps = $props()
 
   let open = $state(false)
   let triggerEl = $state<HTMLElement | null>(null)
@@ -18,6 +19,25 @@
   // <body>. In the create/edit dialogs the host's prompt field refocuses itself, so
   // this simply hands focus back to that same field.
   let previouslyFocused: HTMLElement | null = null
+  let catalogItems = $state<Injectable[]>([])
+  let catalogProvider = $state<string | null | undefined>(undefined)
+
+  $effect(() => {
+    const current = provider ?? null
+    if (location !== 'createTaskPrompt' || catalogProvider === current) return
+    catalogProvider = current
+    void loadInjectableCatalog(api, projectId, 'insert', current).then((result) => {
+      catalogItems = result.injectables
+    }).catch(() => {
+      catalogItems = []
+    })
+  })
+
+  const invalidNames = $derived(
+    location === 'createTaskPrompt' && promptText
+      ? invalidInsertedSkillNames(promptText, catalogItems)
+      : [],
+  )
 
   function openPicker() {
     // Capture before opening, so it is the field the user came from rather than the
@@ -87,12 +107,29 @@
   <Sparkles size={14} aria-hidden="true" />
 </button>
 
+{#if invalidNames.length > 0 && onRemoveNamedTokens}
+  <div class="flex max-w-xs flex-col gap-1 text-xs text-warning" data-testid="provider-change-warning" role="status">
+    <span>
+      These skills will not work with the current provider: {invalidNames.map((name) => `/${name}`).join(', ')}
+    </span>
+    <button
+      class="btn btn-ghost btn-xs self-start"
+      type="button"
+      data-testid="remove-invalid-skills"
+      onclick={() => onRemoveNamedTokens(invalidNames)}>
+      Remove
+    </button>
+  </div>
+{/if}
+
 <InjectablePicker
   {api}
   projectId={projectId}
+  provider={provider ?? null}
   open={open}
   onClose={() => (open = false)}
   onSelect={(inj) => {
+    if (!inj.insertable) return
     onInsert(inj.invocationText)
     open = false
   }}

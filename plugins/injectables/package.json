@@ -31,6 +31,7 @@
     "description": "Browse and insert Claude skills, slash-commands, and personal snippets",
     "icon": "sparkles",
     "frontend": "./dist/frontend.js",
+    "frontendStyles": ["./dist/plugin-injectables.css"],
     "backend": "./dist/backend.js",
     "requires": [
       "views",

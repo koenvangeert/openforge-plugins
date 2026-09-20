@@ -21,7 +21,7 @@
   <div data-testid="picker-double">
     <button
       data-testid="picker-select"
-      onclick={() => onSelect({ invocationText: 'INSERTED' })}
+      onclick={() => onSelect({ invocationText: 'INSERTED', insertable: true })}
       type="button">Select</button>
     <button data-testid="picker-close" onclick={onClose} type="button">Close</button>
   </div>

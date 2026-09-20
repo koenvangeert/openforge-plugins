@@ -10,7 +10,8 @@ const skill = (name: string): CommandInfo => ({
   description: null,
   source: 'skill',
   agent: null,
-  origin: 'project',
+  origin: 'plugin',
+  pluginName: 'mattpocock-skills',
   triggerMode: 'auto+manual',
   sourceDir: '.claude',
   sourcePath: name,
@@ -21,6 +22,7 @@ function makeApi(catalog: CommandInfo[] = [], snippets: Snippet[] = []) {
   const listCatalog = vi.fn(async () => catalog)
   const invoke = vi.fn(async (method: string) => {
     if (method === METHOD.listSnippets) return snippets
+    if (method === METHOD.listLocalSkills) return []
     throw new Error(`Unexpected method invoked: ${method}`)
   })
   const whenReady = vi.fn(async () => undefined)

@@ -1,20 +1,14 @@
+import type { InstalledAiProvider } from '@openforge-app/plugin-sdk'
 import { loadInjectableCatalog, type CatalogApi } from './injectableCatalog'
 import type { Injectable, Snippet } from './injectableDomain'
 import type { BrowseMode } from './injectables'
 
-/**
- * Reactive loader for the injectable catalog, used by the injectable picker dialog.
- * Delegates the actual fetch (host command catalog + plugin-backend snippets, merged
- * into the shared `Injectable` view model) to `loadInjectableCatalog` so the fetch
- * sequence lives in one place, not duplicated between the Skills tab and the picker.
- *
- * `getMode` selects how much of the catalog to surface — the picker shows only what is
- * usable in this context, the rail view shows everything so it can be managed.
- */
 export function useInjectableCatalog(
   getApi: () => CatalogApi,
   getProjectId: () => string | null,
   getMode: () => BrowseMode = () => 'insert',
+  getProvider: () => string | null = () => null,
+  getInstalledProviders: () => readonly InstalledAiProvider[] = () => [],
 ) {
   let injectables = $state<Injectable[]>([])
   let snippets = $state<Snippet[]>([])
@@ -25,7 +19,13 @@ export function useInjectableCatalog(
     loading = true
     error = null
     try {
-      const result = await loadInjectableCatalog(getApi(), getProjectId(), getMode())
+      const result = await loadInjectableCatalog(
+        getApi(),
+        getProjectId(),
+        getMode(),
+        getProvider(),
+        getInstalledProviders(),
+      )
       injectables = result.injectables
       snippets = result.snippets
     } catch (e) {

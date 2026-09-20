@@ -42,4 +42,14 @@ export interface Injectable {
   content: string | null;
   /** `/${name} ` */
   invocationText: string;
+  /** Plugin that contributed this row when origin is plugin. */
+  pluginName: string | null;
+  /** False for a local skill the current provider cannot use. Preview still works. */
+  insertable: boolean;
+  /** Why insert is off, including provider and folder. */
+  disabledReason: string | null;
+  /** Installed providers that can use this local skill. Empty for snippets (all) and catalog rows. */
+  compatibleProviderIds: string[];
+  /** Grok, Claude, Codex, … from the skill folder. Null for snippets and untagged catalog rows. */
+  sourceAgent: string | null;
 }

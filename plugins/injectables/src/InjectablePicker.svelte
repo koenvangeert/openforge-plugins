@@ -10,8 +10,9 @@
     open: boolean
     onClose: () => void
     onSelect: (injectable: Injectable) => void
+    provider?: string | null
   }
-  let { api, projectId, open, onClose, onSelect }: Props = $props()
+  let { api, projectId, open, onClose, onSelect, provider = null }: Props = $props()
 
   // The shared browser (list + detail + keyboard model) is the same component the
   // Injectables rail view renders; this picker only adds the modal shell, the insert
@@ -26,6 +27,7 @@
   })
 
   function insert(injectable: Injectable) {
+    if (!injectable.insertable) return
     onSelect(injectable)
     onClose()
   }
@@ -47,10 +49,12 @@
 </script>
 
 {#snippet detailFooter(selected: Injectable)}
-  <button class="btn btn-primary btn-sm" onclick={() => insert(selected)} type="button">
+  <button class="btn btn-primary btn-sm" disabled={!selected.insertable} onclick={() => insert(selected)} type="button">
     Insert into prompt
   </button>
-  {#if selected.kind === 'snippet'}
+  {#if !selected.insertable && selected.disabledReason}
+    <span class="text-xs text-warning">{selected.disabledReason}</span>
+  {:else if selected.kind === 'snippet'}
     <span class="text-xs opacity-60">Inserts the snippet text — you review before sending</span>
   {:else}
     <span class="text-xs opacity-60">Inserts <code>{selected.invocationText}</code> — you review before sending</span>
@@ -77,6 +81,7 @@
       bind:this={browser}
       {api}
       {projectId}
+      {provider}
       onActivate={insert}
       onEscape={onClose}
       {detailFooter} />

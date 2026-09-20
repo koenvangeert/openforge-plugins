@@ -13,6 +13,11 @@ const make = (over: Partial<Injectable>): Injectable => ({
   sourcePath: null,
   content: null,
   invocationText: '/a ',
+  pluginName: null,
+  insertable: true,
+  disabledReason: null,
+  compatibleProviderIds: [],
+  sourceAgent: null,
   ...over,
 })
 
@@ -50,9 +55,10 @@ describe('facets', () => {
       make({ name: 'c', origin: 'project' }),
     ]
     const groups = groupInjectables(items, 'origin')
-    expect(groups.map((g) => g.key)).toEqual(['personal', 'project', 'builtin'])
-    expect(groups[0].label).toBe('Personal')
-    expect(groups.find((g) => g.key === 'builtin')!.label).toBe('Claude Code')
+    expect(groups.map((g) => g.key)).toEqual(['project', 'personal', 'builtin'])
+    expect(groups[0].label).toBe('Project')
+    expect(groups[1].label).toBe('User')
+    expect(groups.find((g) => g.key === 'builtin')!.label).toBe('Bundled')
   })
 
   it('groups by trigger with friendly labels', () => {
@@ -67,6 +73,17 @@ describe('facets', () => {
     expect(sectionOf(make({ kind: 'snippet', origin: 'personal' }))).toBe('snippet')
   })
 
+  it('nests plugin skills under each plugin name', () => {
+    const groups = groupInjectables(
+      [
+        make({ name: 'review-ui', origin: 'plugin', pluginName: 'frontend-design' }),
+        make({ name: 'tdd', origin: 'plugin', pluginName: 'mattpocock-skills' }),
+      ],
+      'origin',
+    )
+    expect(groups.map((g) => g.label)).toEqual(['Plugin: frontend-design', 'Plugin: mattpocock-skills'])
+  })
+
   it('groups snippets into a first-position "Snippets" section in origin mode', () => {
     const items = [
       make({ name: 'a', origin: 'project' }),
@@ -74,7 +91,7 @@ describe('facets', () => {
       make({ name: 'p', origin: 'personal' }),
     ]
     const groups = groupInjectables(items, 'origin')
-    expect(groups.map((g) => g.key)).toEqual(['snippet', 'personal', 'project'])
+    expect(groups.map((g) => g.key)).toEqual(['snippet', 'project', 'personal'])
     expect(groups[0].label).toBe('Snippets')
   })
 

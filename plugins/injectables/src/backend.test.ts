@@ -84,6 +84,70 @@ describe('injectables backend skill file operations', () => {
     await expect(readFile(join(projectPath, '.agents/skills/review/SKILL.md'), 'utf8')).rejects.toThrow()
   })
 
+  it('lists local skills from every folder, including ones listCatalog would omit', async () => {
+    const projectPath = await mkdtemp(join(tempRoot(), 'injectables-project-'))
+    await createSkillFile(projectPath, '.grok/skills/only-grok/SKILL.md', '---\nname: only-grok\ndescription: Grok only\n---\n# Grok\n')
+    await createSkillFile(mockedUserHome.path, '.claude/skills/user-claude/SKILL.md', '---\nname: user-claude\ndescription: User Claude\n---\n# Claude\n')
+
+    const methods = await activateBackendWithProject(projectPath)
+    const listed = await methods.get('listLocalSkills')?.({ projectId: 'P-1' }) as Array<{ name: string; sourceDir: string; origin: string }>
+
+    expect(listed).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'only-grok', sourceDir: '.grok', origin: 'project' }),
+      expect.objectContaining({ name: 'user-claude', sourceDir: '.claude', origin: 'personal' }),
+    ]))
+  })
+
+  it('lists nested plugin skills from Grok installed-plugins using the registry name', async () => {
+    const projectPath = await mkdtemp(join(tempRoot(), 'injectables-project-'))
+    const installPath = join(mockedUserHome.path, '.grok/installed-plugins/vercel-plugin-8723ecfa')
+    await createSkillFile(
+      mockedUserHome.path,
+      '.grok/installed-plugins/vercel-plugin-8723ecfa/skills/routing-middleware/SKILL.md',
+      '---\nname: routing-middleware\ndescription: Routing\n---\n# Routing\n',
+    )
+    await mkdir(join(mockedUserHome.path, '.grok/installed-plugins'), { recursive: true })
+    await writeFile(
+      join(mockedUserHome.path, '.grok/installed-plugins/registry.json'),
+      JSON.stringify({
+        version: 1,
+        repos: {
+          'vercel-plugin-8723ecfa': {
+            path: installPath,
+            plugins: { vercel: { version: '1.0.0' } },
+          },
+        },
+      }),
+    )
+
+    const methods = await activateBackendWithProject(projectPath)
+    const listed = await methods.get('listLocalSkills')?.({ projectId: 'P-1' }) as Array<{
+      name: string
+      origin: string
+      pluginName: string | null
+    }>
+
+    expect(listed).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'routing-middleware', origin: 'plugin', pluginName: 'vercel' }),
+    ]))
+  })
+
+  it('nests Grok plugin skills under the plugin folder name', async () => {
+    const projectPath = await mkdtemp(join(tempRoot(), 'injectables-project-'))
+    await createSkillFile(
+      mockedUserHome.path,
+      '.grok/plugins/mattpocock-skills/skills/tdd/SKILL.md',
+      '---\nname: tdd\ndescription: TDD\n---\n# TDD\n',
+    )
+
+    const methods = await activateBackendWithProject(projectPath)
+    const listed = await methods.get('listLocalSkills')?.({ projectId: 'P-1' }) as Array<{ name: string; origin: string; pluginName: string | null }>
+
+    expect(listed).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'tdd', origin: 'plugin', pluginName: 'mattpocock-skills' }),
+    ]))
+  })
+
   it('rejects unsafe relative save paths', async () => {
     const projectPath = await mkdtemp(join(tempRoot(), 'injectables-project-'))
     const methods = await activateBackendWithProject(projectPath)

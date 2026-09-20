@@ -32,6 +32,19 @@ function makeApi(catalog: CommandInfo[], initialSnippets: Snippet[] = []) {
 
   const invoke = vi.fn(async (method: string, payload?: unknown): Promise<unknown> => {
     switch (method) {
+      case METHOD.listLocalSkills:
+        return catalog
+          .filter((item) => item.origin === 'personal' || item.origin === 'project')
+          .map((item) => ({
+            name: item.name,
+            description: item.description,
+            origin: item.origin,
+            sourceDir: item.sourceDir,
+            sourcePath: item.sourcePath,
+            content: item.content,
+            userInvocable: item.userInvocable ?? null,
+            pluginName: item.pluginName ?? null,
+          }))
       case METHOD.listSnippets:
         return snippets
       case METHOD.createSnippet: {
@@ -72,7 +85,10 @@ function makeApi(catalog: CommandInfo[], initialSnippets: Snippet[] = []) {
   })
 
   const api = {
-    commands: { listCatalog: vi.fn(async () => catalog) },
+    commands: {
+      listCatalog: vi.fn(async () => catalog),
+      listInstalledProviders: vi.fn(async () => [{ id: 'claude-code' as const, displayName: 'Claude Code' }]),
+    },
     backend: { whenReady: vi.fn(async () => undefined), invoke },
     navigation: { navigate: vi.fn(async () => undefined) },
     system: { openUrl: vi.fn(async () => undefined) },
