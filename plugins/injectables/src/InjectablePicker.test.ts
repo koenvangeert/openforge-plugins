@@ -203,14 +203,15 @@ describe('InjectablePicker', () => {
     expect(onClose).toHaveBeenCalled()
   })
 
-  it('clicking the already-selected row again closes the preview', async () => {
+  it('clicking a skill opens the right panel and keeps the list row in view', async () => {
     const { getByText, queryByText } = render(InjectablePicker, { props: props() })
     await expandProject()
     await fireEvent.click(getByText('refactor'))
     expect(queryByText('Insert into prompt')).not.toBeNull()
-    const row = document.querySelector('[data-injectable-id="project:skill:refactor"]')!
+    const row = document.querySelector('[data-injectable-id="project:skill:refactor"]') as HTMLElement
+    expect(row.getAttribute('data-selected')).toBe('true')
     await fireEvent.click(row)
-    expect(queryByText('Insert into prompt')).toBeNull()
+    expect(queryByText('Insert into prompt')).not.toBeNull()
   })
 
   it('the ✕ button closes the preview', async () => {
@@ -569,11 +570,9 @@ describe('InjectablePicker', () => {
     const input = getByPlaceholderText('Search injectables…')
     await fireEvent.keyDown(input, { key: 'ArrowDown' })
     await fireEvent.keyDown(input, { key: 'ArrowDown' })
-    const rings = [...document.querySelectorAll('[data-injectable-id]')].filter((el) =>
-      el.className.includes('ring-primary'),
-    )
-    expect(rings).toHaveLength(1)
-    expect(rings[0]?.getAttribute('data-injectable-id')).toBe('group:project')
+    const selected = document.querySelectorAll('[data-injectable-id][data-selected="true"]')
+    expect(selected).toHaveLength(1)
+    expect(selected[0]?.getAttribute('data-injectable-id')).toBe('group:project')
   })
 
   it('keyboard nav keeps the list full-width; Space toggles the detail panel', async () => {

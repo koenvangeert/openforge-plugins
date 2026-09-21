@@ -1,7 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte'
   import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
-  import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
   import { useInjectableCatalog } from './lib/useInjectableCatalog.svelte'
   import {
@@ -371,15 +370,13 @@
     expandedKeys = next
   }
 
-  // Click a row to preview it; click the already-open row again to close the preview.
   function onRowClick(id: string) {
-    if (detailOpen && selectedId === id && !creating) {
-      closeDetail()
-    } else {
-      creating = false
-      selectedId = id
-      detailOpen = true
-    }
+    creating = false
+    selectedId = id
+    detailOpen = true
+    void tick().then(() => {
+      listEl?.querySelector<HTMLElement>(`[data-injectable-id="${id}"]`)?.scrollIntoView?.({ block: 'nearest' })
+    })
   }
 
   function closeDetail() {
@@ -818,9 +815,8 @@
       <div class="flex w-full items-center gap-2 px-2 py-1.5">
         <button
           data-injectable-id={groupRowId(group.key)}
-          class="flex flex-1 items-center gap-2 rounded text-left outline-none focus:outline-none focus-visible:outline-none {selectedId === groupRowId(group.key) ? 'bg-base-200' : ''}"
-          class:ring-2={selectedId === groupRowId(group.key)}
-          class:ring-primary={selectedId === groupRowId(group.key)}
+          data-selected={selectedId === groupRowId(group.key) ? 'true' : undefined}
+          class="injectable-row flex flex-1 items-center gap-2 rounded text-left {selectedId === groupRowId(group.key) ? 'bg-base-200' : ''}"
           tabindex={selectedId === groupRowId(group.key) ? 0 : -1}
           onclick={() => {
             selectedId = groupRowId(group.key)
@@ -851,12 +847,11 @@
               {@const dimmed = outOfProject || !item.insertable || (mode === 'manage' && item.sourceDir != null && item.compatibleProviderIds.length === 0)}
               <button
                 data-injectable-id={item.id}
+                data-selected={selectedId === item.id ? 'true' : undefined}
                 data-out-of-project={outOfProject ? 'true' : undefined}
                 data-insertable={item.insertable ? undefined : 'false'}
-                class="flex w-full items-center gap-2 rounded-md py-1 pr-2 text-left outline-none focus:outline-none focus-visible:outline-none {selectedId === item.id ? 'bg-base-200' : 'hover:bg-base-200/50'}"
+                class="injectable-row flex w-full items-center gap-2 rounded-md py-1 pr-2 text-left {selectedId === item.id ? 'bg-base-200' : ''}"
                 style="padding-left: 3rem{dimmed ? '; opacity: 0.55' : ''}"
-                class:ring-2={selectedId === item.id}
-                class:ring-primary={selectedId === item.id}
                 tabindex={selectedId === item.id ? 0 : -1}
                 onclick={() => onRowClick(item.id)}
                 ondblclick={() => { if (item.insertable) onActivate?.(item) }}
@@ -893,8 +888,9 @@
   {/if}
 {/snippet}
 
+<div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
 <!-- Search + controls: one padded band, generous around it, tight (gap-3) inside -->
-<div class="flex flex-col gap-3 px-5 pt-4 pb-4">
+<div class="flex shrink-0 flex-col gap-3 px-5 pt-4 pb-4">
   <input
     bind:this={searchInputEl}
     class="input input-bordered w-full"
@@ -945,26 +941,22 @@
   </div>
 </div>
 
-<!-- Body: list + detail -->
-<div class="flex min-h-0 flex-1 border-t border-base-300">
-  {#if detailOpen}
-    <!-- Draggable divider between the list and the preview. -->
-    <ResizablePanel
-      storageKey="injectable-picker-list"
-      defaultWidth={420}
-      minWidth={280}
-      maxWidth={720}
-      side="left">
-      <div bind:this={listEl} class="h-full overflow-y-auto p-2">
-        {@render listBody()}
-      </div>
-    </ResizablePanel>
+<!-- Body: list + detail. The list node stays mounted so scroll position is kept. -->
+<div class="flex min-h-0 min-w-0 flex-1 overflow-hidden border-t border-base-300">
+  <div
+    class="flex min-h-0 flex-col overflow-hidden {detailOpen ? 'shrink-0' : 'min-w-0 flex-1'}"
+    style={detailOpen ? 'width: 28rem; flex: 0 0 28rem' : undefined}>
+    <div bind:this={listEl} class="min-h-0 flex-1 overflow-y-auto p-2">
+      {@render listBody()}
+    </div>
+  </div>
 
-    <div bind:this={detailEl} tabindex="-1" class="flex min-w-0 flex-1 flex-col border-l border-base-300">
+  {#if detailOpen}
+    <div bind:this={detailEl} tabindex="-1" class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-l border-base-300">
       {#if selected}
         {@const Icon = KIND_ICON[selected.kind]}
         <!-- Detail header: identity (left, primary) + actions (right) -->
-        <div class="flex items-start justify-between gap-4 border-b border-base-300 px-5 py-3">
+        <div class="flex shrink-0 items-start justify-between gap-4 border-b border-base-300 px-5 py-3">
           <div class="min-w-0">
             <div class="flex items-center gap-2">
               <Icon size={18} class="shrink-0 {KIND_ICON_CLASS[selected.kind]}" />
@@ -1077,7 +1069,7 @@
         </div>
 
         <!-- Detail footer -->
-        <div class="flex items-center gap-3 border-t border-base-300 px-5 py-3">
+        <div class="flex shrink-0 items-center gap-3 border-t border-base-300 px-5 py-3">
           {#if editing}
             <button class="btn btn-primary btn-sm" disabled={saveDisabled} onclick={saveEditor} type="button">
               Save
@@ -1124,11 +1116,8 @@
         </div>
       {/if}
     </div>
-  {:else}
-    <div bind:this={listEl} class="flex-1 overflow-y-auto p-2">
-      {@render listBody()}
-    </div>
   {/if}
+</div>
 </div>
 
 {#if confirmingDelete && selected}
@@ -1169,3 +1158,12 @@
   </Modal>
   </div>
 {/if}
+
+<style>
+  :global(.injectable-row),
+  :global(.injectable-row:focus),
+  :global(.injectable-row:focus-visible) {
+    outline: none !important;
+    box-shadow: none !important;
+  }
+</style>

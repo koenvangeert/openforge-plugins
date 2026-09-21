@@ -1,20 +1,29 @@
-import {
-  isOpenForgeAiProviderId,
-  OPENFORGE_AI_PROVIDERS,
-  type InstalledAiProvider,
-  type OpenForgeAiProviderId,
-} from '@openforge-app/plugin-sdk'
+type ProviderId = 'grok' | 'claude-code' | 'codex' | 'pi' | 'opencode'
+
+type InstalledAiProvider = { id: ProviderId; displayName: string }
+
+const PROVIDER_NAMES: Record<ProviderId, string> = {
+  grok: 'Grok',
+  'claude-code': 'Claude Code',
+  codex: 'Codex',
+  pi: 'Pi Coding Agent',
+  opencode: 'OpenCode',
+}
 
 /** Local skill folders the plugin scans for insert and manage. */
 export const LOCAL_SKILL_DIRS = ['.agents', '.claude', '.grok', '.codex', '.pi', '.opencode'] as const
 export type LocalSkillDir = (typeof LOCAL_SKILL_DIRS)[number]
 
-const USABLE_FOLDERS: Record<OpenForgeAiProviderId, ReadonlySet<string>> = {
+const USABLE_FOLDERS: Record<ProviderId, ReadonlySet<string>> = {
   grok: new Set(['.grok', '.claude', '.agents']),
   'claude-code': new Set(['.claude']),
   codex: new Set(['.codex', '.agents']),
   pi: new Set(['.pi', '.agents']),
   opencode: new Set(['.opencode', '.claude', '.agents']),
+}
+
+function isProviderId(value: string): value is ProviderId {
+  return Object.hasOwn(USABLE_FOLDERS, value)
 }
 
 export function isLocalSkillDir(sourceDir: string | null | undefined): sourceDir is LocalSkillDir {
@@ -23,7 +32,7 @@ export function isLocalSkillDir(sourceDir: string | null | undefined): sourceDir
 
 export function providerDisplayName(provider: string | null | undefined): string {
   if (provider == null) return 'this provider'
-  return OPENFORGE_AI_PROVIDERS.find((item) => item.id === provider)?.displayName ?? provider
+  return isProviderId(provider) ? PROVIDER_NAMES[provider] : provider
 }
 
 /** Short agent name for a local skill folder. Claude and Grok are the ones users compare. */
@@ -52,7 +61,7 @@ export function localSkillUsableWithProvider(
   provider: string | null | undefined,
 ): boolean {
   if (!isLocalSkillDir(sourceDir)) return false
-  if (provider == null || !isOpenForgeAiProviderId(provider)) return false
+  if (provider == null || !isProviderId(provider)) return false
   return USABLE_FOLDERS[provider].has(sourceDir)
 }
 
@@ -61,7 +70,7 @@ export function compatibleInstalledProviders(
   installed: readonly InstalledAiProvider[],
 ): InstalledAiProvider[] {
   if (!isLocalSkillDir(sourceDir)) return []
-  return installed.filter((item) => USABLE_FOLDERS[item.id].has(sourceDir))
+  return installed.filter((item) => isProviderId(item.id) && USABLE_FOLDERS[item.id].has(sourceDir))
 }
 
 export function unusableFolderReason(provider: string | null | undefined, sourceDir: string): string {

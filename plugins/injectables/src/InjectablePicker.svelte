@@ -73,7 +73,7 @@
     onKeydown={(e: KeyboardEvent) => browser?.handleKeydown(e)}
     ariaLabel="Injectable picker"
     maxWidth="90vw"
-    boxClass="w-[90vw] h-[85vh]"
+    boxClass="injectable-picker-box w-[90vw] h-[85vh]"
     initialFocus="input">
     {#snippet header()}
       <div class="flex items-center gap-3">
@@ -82,23 +82,32 @@
       </div>
     {/snippet}
 
-    <InjectableBrowser
-      bind:this={browser}
-      {api}
-      {projectId}
-      {provider}
-      onActivate={insert}
-      onEscape={onClose}
-      {detailFooter} />
-
-    <!-- Footer: keyboard hints -->
-    <div class="flex items-center gap-4 border-t border-base-300 px-5 py-2 text-xs opacity-60">
-      <span class="flex items-center gap-1"><kbd class="kbd kbd-xs">↑</kbd><kbd class="kbd kbd-xs">↓</kbd> move</span>
-      <span class="flex items-center gap-1"><kbd class="kbd kbd-xs">→</kbd> open</span>
-      <span class="flex items-center gap-1"><kbd class="kbd kbd-xs">←</kbd> close panel</span>
-      <span class="flex items-center gap-1"><kbd class="kbd kbd-xs">↵</kbd> insert</span>
-      <span class="flex items-center gap-1"><kbd class="kbd kbd-xs">esc</kbd> close</span>
+    <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <InjectableBrowser
+        bind:this={browser}
+        {api}
+        {projectId}
+        {provider}
+        onActivate={insert}
+        onEscape={onClose}
+        {detailFooter} />
     </div>
+
+    {#snippet footer()}
+      <div class="flex w-full items-center justify-start gap-4 text-xs opacity-60">
+        <span class="flex items-center gap-1"><kbd class="kbd kbd-xs">↑</kbd><kbd class="kbd kbd-xs">↓</kbd> move</span>
+        <span class="flex items-center gap-1"><kbd class="kbd kbd-xs">→</kbd> open</span>
+        <span class="flex items-center gap-1"><kbd class="kbd kbd-xs">←</kbd> close panel</span>
+        <span class="flex items-center gap-1"><kbd class="kbd kbd-xs">↵</kbd> insert</span>
+        <span class="flex items-center gap-1"><kbd class="kbd kbd-xs">esc</kbd> close</span>
+      </div>
+    {/snippet}
   </Modal>
   </div>
 {/if}
+
+<style>
+  :global(.injectable-picker-box) {
+    overflow: hidden !important;
+  }
+</style>
