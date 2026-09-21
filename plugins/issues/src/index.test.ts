@@ -43,7 +43,16 @@ describe('issues plugin metadata', () => {
     expect(packageJson.openforge.frontend).toBe('./dist/frontend.js')
     expect(packageJson.openforge.backend).toBe('./dist/backend.js')
     expect(packageJson.openforge.requires).toEqual(
-      expect.arrayContaining(['views', 'backend', 'tasks', 'projectConfig', 'storage', 'system.openUrl', 'context']),
+      expect.arrayContaining([
+        'views',
+        'backend',
+        'tasks',
+        'projectConfig',
+        'storage',
+        'system.openUrl',
+        'system.writeClipboardText',
+        'context',
+      ]),
     )
   })
 

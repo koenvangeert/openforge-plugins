@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ChevronDown, ChevronRight, ExternalLink, Copy, MoreVertical } from '@lucide/svelte'
+  import { ChevronDown, ChevronRight, ExternalLink, Copy, Play } from '@lucide/svelte'
   import type { BoardCard } from '../lib/board'
   import { cardExcerpt, type SearchTerms } from '../lib/search'
   import { valueBandColor } from '../lib/valueColor'
@@ -16,13 +16,13 @@
     onOpenTask: (taskId: string) => void
     onCopyLink: (issueNumber: number) => void
     onSetValue: (issueNumber: number, value: number | null) => void
-    onContextMenu: (event: MouseEvent) => void
+    onStart: () => void
     /** Active search terms, for title highlighting and the body-match excerpt. */
     terms?: SearchTerms
+    busy?: boolean
     expanded?: boolean
     onToggleExpand?: (issueNumber: number) => void
     onOpenChild?: (card: BoardCard) => void
-    onChildContextMenu?: (event: MouseEvent, card: BoardCard) => void
     isExpanded?: (issueNumber: number) => boolean
   }
 
@@ -34,12 +34,12 @@
     onOpenTask,
     onCopyLink,
     onSetValue,
-    onContextMenu,
+    onStart,
     terms = [],
+    busy = false,
     expanded = false,
     onToggleExpand,
     onOpenChild,
-    onChildContextMenu,
     isExpanded,
   }: Props = $props()
 
@@ -76,7 +76,6 @@
 
 <article
   class="card card-compact bg-base-100 border border-base-300 shadow-sm hover:border-primary/50 transition-colors"
-  oncontextmenu={onContextMenu}
 >
   <div class="card-body p-3 gap-2">
     <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -156,15 +155,6 @@
           <button
             type="button"
             class="btn btn-ghost btn-xs btn-square"
-            title="Issue actions"
-            aria-label="Issue actions"
-            onclick={(e) => { e.stopPropagation(); onContextMenu(e) }}
-          >
-            <MoreVertical size={14} />
-          </button>
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs btn-square"
             title="Open issue on GitHub"
             aria-label="Open issue on GitHub"
             onclick={(e) => { e.stopPropagation(); onOpenUrl(issueUrl) }}
@@ -180,10 +170,20 @@
           >
             <Copy size={14} />
           </button>
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs"
+            title="Start a task"
+            aria-label="Start a task"
+            disabled={busy}
+            onclick={(e) => { e.stopPropagation(); onStart() }}
+          >
+            <Play size={14} /> Start
+          </button>
         </div>
       </div>
     </div>
-    {#if nestedCount > 0 && onToggleExpand && onOpenChild && onChildContextMenu && isExpanded}
+    {#if nestedCount > 0 && onToggleExpand && onOpenChild && isExpanded}
       <button
         type="button"
         class="btn btn-ghost btn-xs justify-start gap-1 h-7 min-h-0 px-1 self-start"
@@ -209,7 +209,6 @@
           {isExpanded}
           onToggleExpand={onToggleExpand}
           onOpen={onOpenChild}
-          onContextMenu={onChildContextMenu}
           {onOpenUrl}
         />
       {/if}

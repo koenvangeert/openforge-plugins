@@ -87,9 +87,9 @@
     if (!issues.repoSlug) return
     const url = `https://github.com/${issues.repoSlug}/issues/${issueNumber}`
     try {
-      await navigator.clipboard.writeText(url)
-    } catch {
-      openUrl(url)
+      await api.system.writeClipboardText(url)
+    } catch (cause) {
+      console.error('[issues] Failed to copy the issue link.', cause)
     }
   }
 

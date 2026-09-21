@@ -14,7 +14,14 @@ const card: BoardCard = {
   ...emptyHierarchy(),
 }
 
-function renderCard(overrides: Partial<BoardCard> = {}, onOpen = vi.fn(), onOpenUrl = vi.fn(), onOpenTask = vi.fn()) {
+function renderCard(
+  overrides: Partial<BoardCard> = {},
+  onOpen = vi.fn(),
+  onOpenUrl = vi.fn(),
+  onOpenTask = vi.fn(),
+  onCopyLink = vi.fn(),
+  onStart = vi.fn(),
+) {
   render(Card, {
     props: {
       card: { ...card, ...overrides },
@@ -22,13 +29,64 @@ function renderCard(overrides: Partial<BoardCard> = {}, onOpen = vi.fn(), onOpen
       onOpen,
       onOpenUrl,
       onOpenTask,
-      onCopyLink: vi.fn(),
+      onCopyLink,
       onSetValue: vi.fn(),
-      onContextMenu: vi.fn(),
+      onStart,
     },
   })
-  return { onOpen, onOpenUrl, onOpenTask }
+  return { onOpen, onOpenUrl, onOpenTask, onCopyLink, onStart }
 }
+
+describe('Card issue actions', () => {
+  it('opens the issue on GitHub without opening the card', async () => {
+    const { onOpen, onOpenUrl } = renderCard()
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Open issue on GitHub' }))
+
+    expect(onOpenUrl).toHaveBeenCalledWith('https://github.com/octo/cat/issues/1')
+    expect(onOpen).not.toHaveBeenCalled()
+  })
+
+  it('copies the issue link without opening the card or the browser', async () => {
+    const { onOpen, onOpenUrl, onCopyLink } = renderCard()
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Copy issue link' }))
+
+    expect(onCopyLink).toHaveBeenCalledWith(1)
+    expect(onOpenUrl).not.toHaveBeenCalled()
+    expect(onOpen).not.toHaveBeenCalled()
+  })
+
+  it('starts a task from the card without a menu', async () => {
+    const { onOpen, onStart } = renderCard()
+
+    expect(screen.queryByRole('button', { name: 'Issue actions' })).toBeNull()
+    expect(screen.queryByRole('menu', { name: 'Issue actions' })).toBeNull()
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Start a task' }))
+
+    expect(onStart).toHaveBeenCalledOnce()
+    expect(onOpen).not.toHaveBeenCalled()
+  })
+
+  it('disables start while the board is busy', () => {
+    render(Card, {
+      props: {
+        card,
+        repo: 'octo/cat',
+        busy: true,
+        onOpen: vi.fn(),
+        onOpenUrl: vi.fn(),
+        onOpenTask: vi.fn(),
+        onCopyLink: vi.fn(),
+        onSetValue: vi.fn(),
+        onStart: vi.fn(),
+      },
+    })
+
+    expect(screen.getByRole('button', { name: 'Start a task' })).toHaveProperty('disabled', true)
+  })
+})
 
 describe('Card task and pull-request chips', () => {
   it('renders the task chip next to a linked pull request chip', () => {
@@ -157,11 +215,10 @@ describe('Card linked pull requests', () => {
         onOpenTask: vi.fn(),
         onCopyLink: vi.fn(),
         onSetValue: vi.fn(),
-        onContextMenu: vi.fn(),
+        onStart: vi.fn(),
         expanded: true,
         onToggleExpand: vi.fn(),
         onOpenChild: vi.fn(),
-        onChildContextMenu: vi.fn(),
         isExpanded: () => true,
       },
     })

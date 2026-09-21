@@ -11,14 +11,12 @@
     parentNumber: number
     terms?: SearchTerms
     onOpen: (card: BoardCard) => void
-    onContextMenu: (event: MouseEvent, card: BoardCard) => void
     onOpenUrl: (url: string) => void
     isExpanded: (issueNumber: number) => boolean
     onToggleExpand: (issueNumber: number) => void
   }
 
-  let { issues, parentNumber, terms = [], onOpen, onContextMenu, onOpenUrl, isExpanded, onToggleExpand }: Props =
-    $props()
+  let { issues, parentNumber, terms = [], onOpen, onOpenUrl, isExpanded, onToggleExpand }: Props = $props()
 
   function handleKeydown(event: KeyboardEvent, card: BoardCard) {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -67,7 +65,6 @@
           aria-label={`Issue #${issue.issueNumber}: ${issue.title}`}
           onclick={() => onOpen(issue)}
           onkeydown={(event) => handleKeydown(event, issue)}
-          oncontextmenu={(event) => onContextMenu(event, issue)}
         >
           <div class="sub-issue-main">
             <span class="sub-issue-number">#{issue.issueNumber}</span>
@@ -97,7 +94,6 @@
           {isExpanded}
           {onToggleExpand}
           {onOpen}
-          {onContextMenu}
           {onOpenUrl}
         />
       {/if}

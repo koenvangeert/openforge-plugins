@@ -48,6 +48,7 @@
       "storage",
       "fs",
       "system.openUrl",
+      "system.writeClipboardText",
       "navigation",
       "context"
     ]

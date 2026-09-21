@@ -24,7 +24,10 @@ export function createIssuesViewApi(handlers: InvokeHandlers) {
       },
       invoke,
     },
-    system: { openUrl: vi.fn(async () => undefined) },
+    system: {
+      openUrl: vi.fn(async () => undefined),
+      writeClipboardText: vi.fn(async () => undefined),
+    },
     projectConfig: { get: vi.fn(async () => null) },
   }
 
