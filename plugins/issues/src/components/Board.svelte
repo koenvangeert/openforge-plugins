@@ -5,7 +5,6 @@
   import { flattenCards } from '../lib/board'
   import Card from './Card.svelte'
   import ColorPicker from './ColorPicker.svelte'
-  import IssueContextMenu from './IssueContextMenu.svelte'
 
   interface Props {
     columns: BoardColumn[]
@@ -48,12 +47,6 @@
   // there's nothing to persist for a drop back inside the same column.
   let draggedCard = $state<{ issueNumber: number; fromLabel: string } | null>(null)
   let dragOverLabel = $state<string | null>(null)
-  let contextMenu = $state<{ visible: boolean; x: number; y: number; card: BoardCard | null }>({
-    visible: false,
-    x: 0,
-    y: 0,
-    card: null,
-  })
   // Sub-issue trees start collapsed so a parent with many children does not fill
   // the column. Search expands every node so a match in a nested card is visible.
   let expandedIssueNumbers = $state(new Set<number>())
@@ -81,22 +74,6 @@
   function pickColor(label: string, color: string) {
     openColorLabel = null
     onRecolor(label, color)
-  }
-
-  function openContextMenu(event: MouseEvent, card: BoardCard) {
-    event.preventDefault()
-    event.stopPropagation()
-    contextMenu = { visible: true, x: event.clientX, y: event.clientY, card }
-  }
-
-  function closeContextMenu() {
-    contextMenu = { ...contextMenu, visible: false }
-  }
-
-  function runStart() {
-    const card = contextMenu.card
-    closeContextMenu()
-    if (card) onStart(card)
   }
 
   function addCard(event: MouseEvent, label: string) {
@@ -221,23 +198,17 @@
               {card}
               {repo}
               {terms}
+              {busy}
               expanded={isExpanded(card.issueNumber)}
               {isExpanded}
               onToggleExpand={toggleExpanded}
-              onOpen={() => {
-                closeContextMenu()
-                onCardClick(card, column)
-              }}
-              onOpenChild={(child) => {
-                closeContextMenu()
-                onCardClick(child, column)
-              }}
+              onOpen={() => onCardClick(card, column)}
+              onOpenChild={(child) => onCardClick(child, column)}
               {onOpenUrl}
               {onOpenTask}
               {onCopyLink}
               {onSetValue}
-              onContextMenu={(event) => openContextMenu(event, card)}
-              onChildContextMenu={(event, child) => openContextMenu(event, child)}
+              onStart={() => onStart(card)}
             />
           </div>
         {/each}
@@ -247,15 +218,6 @@
       </div>
     </div>
   {/each}
-
-  <IssueContextMenu
-    visible={contextMenu.visible}
-    x={contextMenu.x}
-    y={contextMenu.y}
-    disabled={busy}
-    onClose={closeContextMenu}
-    onStart={runStart}
-  />
 </div>
 
 <style>

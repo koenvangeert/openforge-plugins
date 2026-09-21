@@ -52,6 +52,34 @@ function dragEvent(type: string, dataTransfer: ReturnType<typeof fakeDataTransfe
   return event
 }
 
+describe('Board card actions', () => {
+  it('starts a task from the card without opening the card or a menu', async () => {
+    const onStart = vi.fn()
+    const onCardClick = vi.fn()
+    render(Board, { props: { ...props(), columns: columnsWithCard, onStart, onCardClick } })
+
+    expect(screen.queryByRole('menu', { name: 'Issue actions' })).toBeNull()
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Start a task' }))
+
+    expect(onStart).toHaveBeenCalledWith(bugCard)
+    expect(onCardClick).not.toHaveBeenCalled()
+  })
+
+  it('copies the issue link without opening the issue', async () => {
+    const onCopyLink = vi.fn()
+    const onOpenUrl = vi.fn()
+    const onCardClick = vi.fn()
+    render(Board, { props: { ...props(), columns: columnsWithCard, onCopyLink, onOpenUrl, onCardClick } })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Copy issue link' }))
+
+    expect(onCopyLink).toHaveBeenCalledWith(1)
+    expect(onOpenUrl).not.toHaveBeenCalled()
+    expect(onCardClick).not.toHaveBeenCalled()
+  })
+})
+
 describe('Board column create actions', () => {
   it('opens create for a labeled column', async () => {
     const onAddCard = vi.fn()
