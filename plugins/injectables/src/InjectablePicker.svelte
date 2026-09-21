@@ -10,8 +10,9 @@
     open: boolean
     onClose: () => void
     onSelect: (injectable: Injectable) => void
+    provider?: string | null
   }
-  let { api, projectId, open, onClose, onSelect }: Props = $props()
+  let { api, projectId, open, onClose, onSelect, provider = null }: Props = $props()
 
   // The shared browser (list + detail + keyboard model) is the same component the
   // Injectables rail view renders; this picker only adds the modal shell, the insert
@@ -26,6 +27,7 @@
   })
 
   function insert(injectable: Injectable) {
+    if (!injectable.insertable) return
     onSelect(injectable)
     onClose()
   }
@@ -47,10 +49,17 @@
 </script>
 
 {#snippet detailFooter(selected: Injectable)}
-  <button class="btn btn-primary btn-sm" onclick={() => insert(selected)} type="button">
+  <button
+    data-testid="detail-primary-action"
+    class="btn btn-primary btn-sm"
+    disabled={!selected.insertable}
+    onclick={() => insert(selected)}
+    type="button">
     Insert into prompt
   </button>
-  {#if selected.kind === 'snippet'}
+  {#if !selected.insertable && selected.disabledReason}
+    <span class="text-xs text-warning">{selected.disabledReason}</span>
+  {:else if selected.kind === 'snippet'}
     <span class="text-xs opacity-60">Inserts the snippet text — you review before sending</span>
   {:else}
     <span class="text-xs opacity-60">Inserts <code>{selected.invocationText}</code> — you review before sending</span>
@@ -64,7 +73,7 @@
     onKeydown={(e: KeyboardEvent) => browser?.handleKeydown(e)}
     ariaLabel="Injectable picker"
     maxWidth="90vw"
-    boxClass="w-[90vw] h-[85vh]"
+    boxClass="injectable-picker-box w-[90vw] h-[85vh]"
     initialFocus="input">
     {#snippet header()}
       <div class="flex items-center gap-3">
@@ -73,20 +82,32 @@
       </div>
     {/snippet}
 
-    <InjectableBrowser
-      bind:this={browser}
-      {api}
-      {projectId}
-      onActivate={insert}
-      onEscape={onClose}
-      {detailFooter} />
-
-    <!-- Footer: keyboard hints -->
-    <div class="flex items-center gap-4 border-t border-base-300 px-5 py-2 text-xs opacity-60">
-      <span class="flex items-center gap-1"><kbd class="kbd kbd-xs">↑</kbd><kbd class="kbd kbd-xs">↓</kbd> move</span>
-      <span class="flex items-center gap-1"><kbd class="kbd kbd-xs">↵</kbd> insert</span>
-      <span class="flex items-center gap-1"><kbd class="kbd kbd-xs">esc</kbd> close</span>
+    <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <InjectableBrowser
+        bind:this={browser}
+        {api}
+        {projectId}
+        {provider}
+        onActivate={insert}
+        onEscape={onClose}
+        {detailFooter} />
     </div>
+
+    {#snippet footer()}
+      <div class="flex w-full items-center justify-start gap-4 text-xs opacity-60">
+        <span class="flex items-center gap-1"><kbd class="kbd kbd-xs">↑</kbd><kbd class="kbd kbd-xs">↓</kbd> move</span>
+        <span class="flex items-center gap-1"><kbd class="kbd kbd-xs">→</kbd> open</span>
+        <span class="flex items-center gap-1"><kbd class="kbd kbd-xs">←</kbd> close panel</span>
+        <span class="flex items-center gap-1"><kbd class="kbd kbd-xs">↵</kbd> insert</span>
+        <span class="flex items-center gap-1"><kbd class="kbd kbd-xs">esc</kbd> close</span>
+      </div>
+    {/snippet}
   </Modal>
   </div>
 {/if}
+
+<style>
+  :global(.injectable-picker-box) {
+    overflow: hidden !important;
+  }
+</style>

@@ -15,6 +15,7 @@ import type { Injectable } from './injectableDomain'
 export function pickInjectable(
   api: FrontendOpenForgeAPI,
   projectId: string | null,
+  provider: string | null = null,
 ): Promise<string | null> {
   return new Promise<string | null>((resolve) => {
     const host = document.createElement('div')
@@ -42,6 +43,7 @@ export function pickInjectable(
       props: {
         api,
         projectId,
+        provider,
         open: true,
         onClose: () => settle(null),
         onSelect: (injectable: Injectable) => settle(injectable.invocationText),

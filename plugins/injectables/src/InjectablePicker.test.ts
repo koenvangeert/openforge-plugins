@@ -20,6 +20,11 @@ const fixtureInjectables: Injectable[] = [
     sourcePath: 'refactor',
     content: '---\nname: refactor\n---\nbody text',
     invocationText: '/refactor ',
+    pluginName: null,
+    insertable: true,
+    disabledReason: null,
+    compatibleProviderIds: [],
+    sourceAgent: 'Claude',
   },
   {
     id: 'personal:skill:pr-writer',
@@ -32,6 +37,11 @@ const fixtureInjectables: Injectable[] = [
     sourcePath: 'pr-writer',
     content: 'pr body',
     invocationText: '/pr-writer ',
+    pluginName: null,
+    insertable: true,
+    disabledReason: null,
+    compatibleProviderIds: [],
+    sourceAgent: 'Claude',
   },
   {
     id: 'snippet:s1',
@@ -44,6 +54,11 @@ const fixtureInjectables: Injectable[] = [
     sourcePath: null,
     content: 'Summary body',
     invocationText: 'Summary body',
+    pluginName: null,
+    insertable: true,
+    disabledReason: null,
+    compatibleProviderIds: [],
+    sourceAgent: null,
   },
 ]
 
@@ -92,6 +107,8 @@ function makeApi(initialSnippets: Snippet[] = fixtureSnippets) {
 
   const invoke = vi.fn(async (method: string, payload?: unknown): Promise<unknown> => {
     switch (method) {
+      case METHOD.listLocalSkills:
+        return []
       case METHOD.listSnippets:
         return snippets
       case METHOD.createSnippet: {
@@ -159,27 +176,47 @@ describe('InjectablePicker', () => {
     expect(queryByText('Insert into prompt')).toBeNull()
   })
 
+  async function expandGroup(key: string) {
+    await fireEvent.click(document.querySelector(`[data-injectable-id="group:${key}"]`) as HTMLElement)
+  }
+
+  async function expandProject() {
+    await expandGroup('project')
+  }
+
+  it('lists names only and keeps non-snippet categories collapsed', () => {
+    const { queryByText, getByText } = render(InjectablePicker, { props: props() })
+    expect(getByText('pr-boilerplate')).toBeTruthy()
+    expect(queryByText('restructure code')).toBeNull()
+    expect(queryByText('refactor')).toBeNull()
+    expect(queryByText('pr-writer')).toBeNull()
+  })
+
   it('clicking a row opens the preview; inserting yields that injectable and closes', async () => {
     const onSelect = vi.fn()
     const onClose = vi.fn()
     const { getByText } = render(InjectablePicker, { props: props({ onSelect, onClose }) })
+    await expandProject()
     await fireEvent.click(getByText('refactor'))
     await fireEvent.click(getByText('Insert into prompt'))
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ invocationText: '/refactor ' }))
     expect(onClose).toHaveBeenCalled()
   })
 
-  it('clicking the already-selected row again closes the preview', async () => {
+  it('clicking a skill opens the right panel and keeps the list row in view', async () => {
     const { getByText, queryByText } = render(InjectablePicker, { props: props() })
+    await expandProject()
     await fireEvent.click(getByText('refactor'))
     expect(queryByText('Insert into prompt')).not.toBeNull()
-    const row = document.querySelector('[data-injectable-id="project:skill:refactor"]')!
+    const row = document.querySelector('[data-injectable-id="project:skill:refactor"]') as HTMLElement
+    expect(row.getAttribute('data-selected')).toBe('true')
     await fireEvent.click(row)
-    expect(queryByText('Insert into prompt')).toBeNull()
+    expect(queryByText('Insert into prompt')).not.toBeNull()
   })
 
   it('the ✕ button closes the preview', async () => {
     const { getByText, getByLabelText, queryByText } = render(InjectablePicker, { props: props() })
+    await expandProject()
     await fireEvent.click(getByText('refactor'))
     await fireEvent.click(getByLabelText('Close preview'))
     expect(queryByText('Insert into prompt')).toBeNull()
@@ -188,6 +225,7 @@ describe('InjectablePicker', () => {
   it('selecting a different row then inserting yields that injectable', async () => {
     const onSelect = vi.fn()
     const { getByText } = render(InjectablePicker, { props: props({ onSelect }) })
+    await fireEvent.click(document.querySelector('[data-injectable-id="group:personal"]') as HTMLElement)
     await fireEvent.click(getByText('pr-writer'))
     await fireEvent.click(getByText('Insert into prompt'))
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ invocationText: '/pr-writer ' }))
@@ -197,9 +235,9 @@ describe('InjectablePicker', () => {
     const onSelect = vi.fn()
     const { getByPlaceholderText } = render(InjectablePicker, { props: props({ onSelect }) })
     const input = getByPlaceholderText('Search injectables…')
-    // Rows in order: group:snippet, snippet:s1, group:personal, personal:skill:pr-writer,
-    // group:project, project:skill:refactor. 6 downs land on refactor.
-    for (let i = 0; i < 6; i++) await fireEvent.keyDown(input, { key: 'ArrowDown' })
+    await fireEvent.keyDown(input, { key: 'ArrowDown' })
+    await fireEvent.keyDown(input, { key: 'ArrowDown' })
+    await fireEvent.keyDown(input, { key: 'ArrowRight' })
     await fireEvent.keyDown(input, { key: 'Enter' })
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ invocationText: '/refactor ' }))
   })
@@ -212,6 +250,7 @@ describe('InjectablePicker', () => {
 
   it('defaults to rendered view, toggles to raw, and keeps the choice across selections', async () => {
     const { getByText, queryByTestId } = render(InjectablePicker, { props: props() })
+    await expandProject()
     await fireEvent.click(getByText('refactor'))
     expect(queryByTestId('injectable-content-md')).not.toBeNull()
     expect(queryByTestId('injectable-content-raw')).toBeNull()
@@ -221,18 +260,21 @@ describe('InjectablePicker', () => {
     expect(queryByTestId('injectable-content-md')).toBeNull()
 
     // Choice persists when switching to another injectable.
+    await expandGroup('personal')
     await fireEvent.click(getByText('pr-writer'))
     expect(queryByTestId('injectable-content-raw')).not.toBeNull()
   })
 
   it('resets the view toggle back to rendered when the dialog is reopened', async () => {
     const { getByText, queryByTestId, rerender } = render(InjectablePicker, { props: props() })
+    await expandProject()
     await fireEvent.click(getByText('refactor'))
     await fireEvent.click(getByText('Raw'))
     expect(queryByTestId('injectable-content-raw')).not.toBeNull()
 
     await rerender(props({ open: false }))
     await rerender(props({ open: true }))
+    await expandProject()
     await fireEvent.click(getByText('refactor'))
     expect(queryByTestId('injectable-content-md')).not.toBeNull()
     expect(queryByTestId('injectable-content-raw')).toBeNull()
@@ -240,15 +282,18 @@ describe('InjectablePicker', () => {
 
   it('offers Edit/Delete only for personal skills', async () => {
     const { getByText, queryByText } = render(InjectablePicker, { props: props() })
-    await fireEvent.click(getByText('refactor')) // project origin -> read-only
+    await expandProject()
+    await fireEvent.click(getByText('refactor'))
     expect(queryByText('Edit')).toBeNull()
-    await fireEvent.click(getByText('pr-writer')) // personal origin -> editable
+    await expandGroup('personal')
+    await fireEvent.click(getByText('pr-writer'))
     expect(queryByText('Edit')).not.toBeNull()
   })
 
   it('editing a personal skill saves via api.backend.invoke and reloads the catalog', async () => {
     const { api, invoke } = makeApi()
     const { getByText, getByTestId } = render(InjectablePicker, { props: props({ api }) })
+    await expandGroup('personal')
     await fireEvent.click(getByText('pr-writer'))
     await fireEvent.click(getByText('Edit'))
     await fireEvent.input(getByTestId('skill-editor'), { target: { value: 'updated body' } })
@@ -269,6 +314,7 @@ describe('InjectablePicker', () => {
   it('deleting a personal skill confirms first, then calls api.backend.invoke(deleteSkill)', async () => {
     const { api, invoke } = makeApi()
     const { getByText, getByTestId, queryByTestId } = render(InjectablePicker, { props: props({ api }) })
+    await expandGroup('personal')
     await fireEvent.click(getByText('pr-writer'))
     expect(invoke).not.toHaveBeenCalledWith(METHOD.deleteSkill, expect.anything())
     await fireEvent.click(getByText('Delete')) // opens confirmation
@@ -286,6 +332,7 @@ describe('InjectablePicker', () => {
     const { getByText, getByTestId, queryByTestId } = render(InjectablePicker, {
       props: props({ onSelect, onClose }),
     })
+    await expandGroup('personal')
     await fireEvent.click(getByText('pr-writer'))
     await fireEvent.click(getByText('Edit'))
     const editor = getByTestId('skill-editor')
@@ -396,9 +443,8 @@ describe('InjectablePicker', () => {
   it('⌘2 cycles the filter to snippets-only and ⌘1 returns to All', async () => {
     const { getByPlaceholderText, queryByText } = render(InjectablePicker, { props: props() })
     const input = getByPlaceholderText('Search injectables…')
-    // Default "All": every item visible.
-    expect(queryByText('refactor')).not.toBeNull()
     expect(queryByText('pr-boilerplate')).not.toBeNull()
+    expect(queryByText('refactor')).toBeNull()
     // ⌘2 → cursor moves All → Snippets (single-select).
     await fireEvent.keyDown(input, { key: '2', metaKey: true })
     expect(queryByText('pr-boilerplate')).not.toBeNull()
@@ -406,17 +452,19 @@ describe('InjectablePicker', () => {
     expect(queryByText('pr-writer')).toBeNull()
     // ⌘1 → back to All.
     await fireEvent.keyDown(input, { key: '1', metaKey: true })
-    expect(queryByText('refactor')).not.toBeNull()
-    expect(queryByText('pr-writer')).not.toBeNull()
+    expect(queryByText('pr-boilerplate')).not.toBeNull()
+    expect(queryByText('refactor')).toBeNull()
   })
 
   it('the All chip clears an active multi-select filter', async () => {
     const { getByTestId, queryByText } = render(InjectablePicker, { props: props() })
     await fireEvent.click(getByTestId('filter-chip-personal'))
-    expect(queryByText('pr-writer')).not.toBeNull() // personal skill kept
-    expect(queryByText('refactor')).toBeNull() // project skill hidden
+    await fireEvent.click(document.querySelector('[data-injectable-id="group:personal"]') as HTMLElement)
+    expect(queryByText('pr-writer')).not.toBeNull()
+    expect(queryByText('refactor')).toBeNull()
     await fireEvent.click(getByTestId('filter-chip-all'))
-    expect(queryByText('refactor')).not.toBeNull() // everything back
+    await expandProject()
+    expect(queryByText('refactor')).not.toBeNull()
   })
 
   it('one Tab from the search input moves focus straight to the first list row', async () => {
@@ -432,11 +480,8 @@ describe('InjectablePicker', () => {
     const input = getByPlaceholderText('Search injectables…')
     await fireEvent.keyDown(input, { key: 'ArrowDown' })
     expect(document.activeElement).toBe(document.querySelector('[data-injectable-id="snippet:s1"]'))
-    // Next down crosses into the following group without stopping on its header.
     await fireEvent.keyDown(input, { key: 'ArrowDown' })
-    expect(document.activeElement).toBe(
-      document.querySelector('[data-injectable-id="personal:skill:pr-writer"]'),
-    )
+    expect(document.activeElement).toBe(document.querySelector('[data-injectable-id="group:project"]'))
   })
 
   it('⌘ filter change keeps focus in the list, re-homing when the active row is filtered out', async () => {
@@ -450,7 +495,7 @@ describe('InjectablePicker', () => {
     await fireEvent.keyDown(snippetRow, { key: '2', metaKey: true })
     await waitFor(() =>
       expect(document.activeElement).toBe(
-        document.querySelector('[data-injectable-id="personal:skill:pr-writer"]'),
+        document.querySelector('[data-injectable-id="group:personal"]'),
       ),
     )
   })
@@ -481,17 +526,59 @@ describe('InjectablePicker', () => {
     const row = document.querySelector('[data-injectable-id="snippet:s1"]') as HTMLElement
     row.focus()
     await fireEvent.keyDown(row, { key: 'Tab' })
-    const detail = document.querySelector('.border-l') as HTMLElement
-    expect(detail.contains(document.activeElement)).toBe(true)
+    expect(document.activeElement).toBe(document.querySelector('[data-testid="detail-body"]'))
     await fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Tab', shiftKey: true })
     expect(document.activeElement).toBe(row)
+  })
+
+  it('ArrowRight on a skill opens the panel and ArrowLeft closes it without collapsing the group', async () => {
+    const { getByPlaceholderText, queryByText } = render(InjectablePicker, { props: props() })
+    const input = getByPlaceholderText('Search injectables…')
+    await fireEvent.keyDown(input, { key: 'ArrowDown' })
+    expect(queryByText('Insert into prompt')).toBeNull()
+    await fireEvent.keyDown(input, { key: 'ArrowRight' })
+    expect(queryByText('Insert into prompt')).not.toBeNull()
+    await waitFor(() =>
+      expect(document.activeElement).toBe(document.querySelector('[data-testid="detail-body"]')),
+    )
+    await fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'ArrowLeft' })
+    expect(queryByText('Insert into prompt')).toBeNull()
+    expect(document.querySelector('[data-injectable-id="snippet:s1"]')).not.toBeNull()
+    await waitFor(() =>
+      expect(document.activeElement).toBe(document.querySelector('[data-injectable-id="snippet:s1"]')),
+    )
+  })
+
+  it('ArrowRight from the panel moves to the primary action; ArrowLeft returns then closes', async () => {
+    const { getByPlaceholderText, getByTestId } = render(InjectablePicker, { props: props() })
+    const input = getByPlaceholderText('Search injectables…')
+    await fireEvent.keyDown(input, { key: 'ArrowDown' })
+    await fireEvent.keyDown(input, { key: 'ArrowRight' })
+    await waitFor(() =>
+      expect(document.activeElement).toBe(document.querySelector('[data-testid="detail-body"]')),
+    )
+    await fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'ArrowRight' })
+    expect(document.activeElement).toBe(getByTestId('detail-primary-action'))
+    await fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'ArrowLeft' })
+    expect(document.activeElement).toBe(document.querySelector('[data-testid="detail-body"]'))
+    await fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Tab' })
+    expect(document.activeElement).toBe(getByTestId('detail-primary-action'))
+  })
+
+  it('keyboard selection highlights only one row', async () => {
+    const { getByPlaceholderText } = render(InjectablePicker, { props: props() })
+    const input = getByPlaceholderText('Search injectables…')
+    await fireEvent.keyDown(input, { key: 'ArrowDown' })
+    await fireEvent.keyDown(input, { key: 'ArrowDown' })
+    const selected = document.querySelectorAll('[data-injectable-id][data-selected="true"]')
+    expect(selected).toHaveLength(1)
+    expect(selected[0]?.getAttribute('data-injectable-id')).toBe('group:project')
   })
 
   it('keyboard nav keeps the list full-width; Space toggles the detail panel', async () => {
     const { getByPlaceholderText, queryByText } = render(InjectablePicker, { props: props() })
     const input = getByPlaceholderText('Search injectables…')
-    await fireEvent.keyDown(input, { key: 'ArrowDown' }) // group:snippet
-    await fireEvent.keyDown(input, { key: 'ArrowDown' }) // snippet:s1 (item)
+    await fireEvent.keyDown(input, { key: 'ArrowDown' })
     // Navigation does NOT auto-open the detail pane.
     expect(queryByText('Insert into prompt')).toBeNull()
     const row = document.querySelector('[data-injectable-id="snippet:s1"]') as HTMLElement

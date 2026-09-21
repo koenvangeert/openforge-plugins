@@ -27,6 +27,11 @@ const make = (over: Partial<Injectable>): Injectable => ({
   sourcePath: 'a',
   content: null,
   invocationText: '/a ',
+  pluginName: null,
+  insertable: true,
+  disabledReason: null,
+  compatibleProviderIds: [],
+  sourceAgent: null,
   ...over,
 })
 

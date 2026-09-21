@@ -28,7 +28,7 @@ export default defineFrontendPlugin({
         id: 'injectable',
         title: 'Start with injectable…',
         order: 10,
-        provide: ({ projectId }) => pickInjectable(openforge, projectId),
+        provide: ({ projectId, provider }) => pickInjectable(openforge, projectId, provider),
       }),
     )
   },

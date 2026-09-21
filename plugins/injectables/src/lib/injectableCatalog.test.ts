@@ -8,6 +8,7 @@ function makeApi(catalog: CommandInfo[], snippets: Snippet[] = []) {
   const listCatalog = vi.fn(async () => catalog)
   const invoke = vi.fn(async (method: string) => {
     if (method === METHOD.listSnippets) return snippets
+    if (method === METHOD.listLocalSkills) return []
     throw new Error(`Unexpected method invoked: ${method}`)
   })
   const whenReady = vi.fn(async () => undefined)
@@ -16,7 +17,7 @@ function makeApi(catalog: CommandInfo[], snippets: Snippet[] = []) {
 }
 
 const skill = (name: string): CommandInfo => ({
-  name, description: null, source: 'skill', agent: null, origin: 'project', triggerMode: 'auto+manual', sourceDir: '.claude', sourcePath: name, content: null,
+  name, description: null, source: 'skill', agent: null, origin: 'plugin', pluginName: 'mattpocock-skills', triggerMode: 'auto+manual', sourceDir: null, sourcePath: name, content: null,
 })
 
 const snippet = (over: Partial<Snippet> = {}): Snippet => ({
@@ -66,6 +67,7 @@ describe('loadInjectableCatalog', () => {
 
     await loadInjectableCatalog(api, null)
 
-    expect(calls).toEqual(['whenReady', 'invoke'])
+    expect(calls[0]).toBe('whenReady')
+    expect(calls.slice(1).every((call) => call === 'invoke')).toBe(true)
   })
 })

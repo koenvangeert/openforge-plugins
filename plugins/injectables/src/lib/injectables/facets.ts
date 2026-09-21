@@ -35,17 +35,17 @@ export function cycleSectionFilter(current: InjectableSection[], dir: 1 | -1): I
 }
 
 export const ORIGIN_LABELS: Record<InjectableOrigin, string> = {
-  personal: 'Personal',
+  personal: 'User',
   project: 'Project',
   plugin: 'Plugin',
-  builtin: 'Claude Code',
+  builtin: 'Bundled',
 }
 
 export const ORIGIN_DESCRIPTIONS: Record<InjectableOrigin, string> = {
   personal: 'Your own, in your home skills folders — across all your projects',
   project: 'Committed to this repo — shared with your team',
   plugin: 'From an installed plugin',
-  builtin: 'Ships with Claude Code itself — not a file you own',
+  builtin: 'Ships with the agent — not a file you own',
 }
 
 export const TRIGGER_LABELS: Record<InjectableTriggerMode, string> = {
@@ -53,7 +53,6 @@ export const TRIGGER_LABELS: Record<InjectableTriggerMode, string> = {
   'manual-only': 'manual only',
 }
 
-const ORIGIN_ORDER: InjectableOrigin[] = ['personal', 'project', 'plugin', 'builtin']
 const TRIGGER_ORDER: InjectableTriggerMode[] = ['auto+manual', 'manual-only']
 
 export function searchInjectables(items: Injectable[], query: string): Injectable[] {
@@ -89,23 +88,36 @@ export interface InjectableGroup {
   items: Injectable[]
 }
 
+export function pluginGroupKey(pluginName: string | null | undefined): string {
+  return `plugin:${pluginName ?? 'plugin'}`
+}
+
+export function pluginGroupLabel(pluginName: string | null | undefined): string {
+  return `Plugin: ${pluginName ?? 'plugin'}`
+}
+
 export function groupInjectables(items: Injectable[], by: InjectableGroupBy): InjectableGroup[] {
   const map = new Map<string, Injectable[]>()
   for (const item of items) {
-    // Snippets always form their own section, independent of the group-by axis.
-    const key =
-      item.kind === 'snippet' ? SNIPPET_SECTION_KEY : by === 'trigger' ? item.triggerMode : item.origin
+    let key: string
+    if (item.kind === 'snippet') key = SNIPPET_SECTION_KEY
+    else if (by === 'trigger') key = item.triggerMode
+    else if (item.origin === 'plugin') key = pluginGroupKey(item.pluginName)
+    else key = item.origin
     if (!map.has(key)) map.set(key, [])
     map.get(key)!.push(item)
   }
-  // Snippets lead in both modes, then the axis's canonical order.
-  const order: string[] = [SNIPPET_SECTION_KEY, ...(by === 'trigger' ? TRIGGER_ORDER : ORIGIN_ORDER)]
-  const label = (key: string): string =>
-    key === SNIPPET_SECTION_KEY
-      ? SNIPPET_SECTION_LABEL
-      : by === 'trigger'
-        ? TRIGGER_LABELS[key as InjectableTriggerMode]
-        : ORIGIN_LABELS[key as InjectableOrigin]
+  const pluginKeys = [...map.keys()].filter((key) => key.startsWith('plugin:')).sort()
+  const order: string[] =
+    by === 'trigger'
+      ? [SNIPPET_SECTION_KEY, ...TRIGGER_ORDER]
+      : [SNIPPET_SECTION_KEY, 'project', 'personal', ...pluginKeys, 'builtin']
+  const label = (key: string): string => {
+    if (key === SNIPPET_SECTION_KEY) return SNIPPET_SECTION_LABEL
+    if (by === 'trigger') return TRIGGER_LABELS[key as InjectableTriggerMode]
+    if (key.startsWith('plugin:')) return pluginGroupLabel(key.slice('plugin:'.length))
+    return ORIGIN_LABELS[key as InjectableOrigin]
+  }
   return order
     .filter((key) => map.has(key))
     .map((key) => ({ key, label: label(key), items: map.get(key)! }))

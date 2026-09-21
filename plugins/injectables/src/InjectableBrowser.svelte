@@ -1,7 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte'
   import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
-  import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
   import { useInjectableCatalog } from './lib/useInjectableCatalog.svelte'
   import {
@@ -12,6 +11,7 @@
     ORIGIN_LABELS,
     ORIGIN_DESCRIPTIONS,
     TRIGGER_LABELS,
+    SNIPPET_SECTION_KEY,
     SNIPPET_SECTION_LABEL,
     SECTION_ORDER,
     formatCharCount,
@@ -28,10 +28,12 @@
     navLeft,
     navRight,
     groupRowId,
+    pluginGroupKey,
     type TreeKeyResult,
     type BrowseMode,
     snippetVisibleIn,
   } from './lib/injectables'
+
   import { METHOD } from './lib/protocol'
   import Sparkles from '@lucide/svelte/icons/sparkles'
   import SquareTerminal from '@lucide/svelte/icons/square-terminal'
@@ -80,12 +82,13 @@
   }
   function groupBadge(key: string): string {
     if (key === 'snippet') return SNIPPET_BADGE
+    if (key.startsWith('plugin:')) return ORIGIN_BADGE.plugin
     return groupBy === 'origin' ? ORIGIN_BADGE[key as InjectableOrigin] : 'badge-ghost'
   }
   function groupDescription(key: string): string {
-    return key === 'snippet'
-      ? 'Saved text you reuse — stored by OpenForge'
-      : (ORIGIN_DESCRIPTIONS[key as InjectableOrigin] ?? '')
+    if (key === 'snippet') return 'Saved text you reuse — stored by OpenForge'
+    if (key.startsWith('plugin:')) return ORIGIN_DESCRIPTIONS.plugin
+    return ORIGIN_DESCRIPTIONS[key as InjectableOrigin] ?? ''
   }
 
   interface Props {
@@ -104,12 +107,15 @@
      */
     autoSelectFirst?: boolean
     /**
-     * What this surface is for. `insert` (the picker) shows only what is usable in
-     * this context: Claude-invokable skill dirs, and snippets scoped to the active
-     * project. `manage` (the rail view) shows everything that exists so it can be
-     * edited — every scanned skill dir, and every snippet whatever its scope.
+     * What this surface is for. `insert` (the picker) lists every local folder and
+     * greys out skills the current provider cannot use. `manage` (the rail view)
+     * shows everything that exists so it can be edited.
      */
     mode?: BrowseMode
+    /** Current AI provider at an insert point. Null on the project panel. */
+    provider?: string | null
+    /** Providers this OpenForge instance can start. Used by the project panel. */
+    installedProviders?: import('@openforge-app/plugin-sdk').InstalledAiProvider[]
   }
   let {
     api,
@@ -119,11 +125,17 @@
     onEscape = null,
     autoSelectFirst = false,
     mode = 'insert',
+    provider = null,
+    installedProviders = [],
   }: Props = $props()
 
-  const catalog = useInjectableCatalog(() => api, () => projectId, () => mode)
-  // Only worth labelling a row's directory when more than one can appear.
-  const showSourceDir = $derived(mode === 'manage')
+  const catalog = useInjectableCatalog(
+    () => api,
+    () => projectId,
+    () => mode,
+    () => provider,
+    () => installedProviders,
+  )
   // `manage` lists snippets that are not available in the active project, so those rows
   // are marked rather than hidden. Derived from the raw snippet records, which carry the
   // scope the Injectable view model does not. Empty when there is no project to be
@@ -143,12 +155,11 @@
   let selectedId = $state<string | null>(null)
   let detailOpen = $state(false)
   let contentView = $state<'md' | 'raw'>('md')
-  // Row descriptions wrap by default; toggled off (single line + ellipsis) via the
-  // header button or the `W` shortcut.
-  let wrapDescriptions = $state(true)
-  let collapsed = $state<Set<string>>(new Set())
+  // Snippets start open; every other category starts collapsed.
+  let expandedKeys = $state<Set<string>>(new Set([SNIPPET_SECTION_KEY]))
   let listEl = $state<HTMLElement | null>(null)
   let detailEl = $state<HTMLElement | null>(null)
+  let detailBodyEl = $state<HTMLElement | null>(null)
   let searchInputEl = $state<HTMLInputElement | null>(null)
 
   // Inline authoring (personal skills + snippets).
@@ -176,7 +187,7 @@
     selectedId = null
     detailOpen = false
     contentView = 'md'
-    wrapDescriptions = true
+    expandedKeys = new Set([SNIPPET_SECTION_KEY])
     editing = false
     creating = false
     confirmingDelete = false
@@ -188,10 +199,13 @@
   // parent-driven initial load can silently no-op. Explicit previous-value comparison
   // (not effect cleanup) so a re-run with an unchanged project does not refetch.
   let loadedProjectId: string | null | undefined = undefined
+  let loadedProvider: string | null | undefined = undefined
   $effect(() => {
     const pid = projectId
-    if (pid === loadedProjectId) return
+    const currentProvider = provider
+    if (pid === loadedProjectId && currentProvider === loadedProvider) return
     loadedProjectId = pid
+    loadedProvider = currentProvider
     void catalog.reload()
     void loadProjects()
   })
@@ -205,6 +219,9 @@
     autoSelectedFor = loadedProjectId
     selectedId = first.id
     detailOpen = true
+    const groupKey =
+      first.kind === 'snippet' ? SNIPPET_SECTION_KEY : first.origin === 'plugin' ? pluginGroupKey(first.pluginName) : first.origin
+    expandedKeys = new Set([...expandedKeys, groupKey])
   })
 
   const visible = $derived(
@@ -223,8 +240,23 @@
     }
     return groups
   })
+  const collapsed = $derived(
+    new Set(displayGroups.map((group) => group.key).filter((key) => !expandedKeys.has(key))),
+  )
+  $effect(() => {
+    if (!query.trim()) return
+    const next = new Set(expandedKeys)
+    let changed = false
+    for (const group of displayGroups) {
+      if (group.items.length > 0 && !next.has(group.key)) {
+        next.add(group.key)
+        changed = true
+      }
+    }
+    if (changed) expandedKeys = next
+  })
   // Keyboard rows in display order: a header per group, then its items when expanded.
-  // ↑/↓ step through all rows (headers + items); ←/→ collapse/expand groups.
+  // ↑/↓ move through names. → opens the skill panel; ← closes it.
   const navRows = $derived(flattenNavRows(displayGroups, collapsed))
   const navigableIds = $derived(navigableRowIds(navRows, collapsed))
   // The previewed item — a group-header row (`group:…`) resolves to null (no preview).
@@ -332,21 +364,19 @@
   }
 
   function toggleCollapse(key: string) {
-    const next = new Set(collapsed)
+    const next = new Set(expandedKeys)
     if (next.has(key)) next.delete(key)
     else next.add(key)
-    collapsed = next
+    expandedKeys = next
   }
 
-  // Click a row to preview it; click the already-open row again to close the preview.
   function onRowClick(id: string) {
-    if (detailOpen && selectedId === id && !creating) {
-      closeDetail()
-    } else {
-      creating = false
-      selectedId = id
-      detailOpen = true
-    }
+    creating = false
+    selectedId = id
+    detailOpen = true
+    void tick().then(() => {
+      listEl?.querySelector<HTMLElement>(`[data-injectable-id="${id}"]`)?.scrollIntoView?.({ block: 'nearest' })
+    })
   }
 
   function closeDetail() {
@@ -521,6 +551,26 @@
     listEl.querySelector<HTMLElement>(`[data-injectable-id="${id}"]`)?.focus()
   }
 
+  function focusDetailBody() {
+    detailBodyEl?.focus()
+  }
+
+  function detailPrimaryButton(): HTMLElement | null {
+    return (
+      detailEl?.querySelector<HTMLElement>('[data-testid="detail-primary-action"]') ??
+      detailEl?.querySelector<HTMLElement>('[data-testid="copy-injectable"]') ??
+      null
+    )
+  }
+
+  function focusDetailPrimary() {
+    detailPrimaryButton()?.focus()
+  }
+
+  function focusIn(el: HTMLElement | null): boolean {
+    return !!(el && document.activeElement && el.contains(document.activeElement))
+  }
+
   // Apply an ArrowLeft/ArrowRight tree action: collapse/expand a group and/or move the
   // keyboard cursor, then focus the resulting row once the DOM settles.
   function applyTreeResult(r: TreeKeyResult) {
@@ -572,12 +622,6 @@
       onEscape()
       return true
     }
-    // `W` toggles description wrap — but not while typing in the search box.
-    if ((e.key === 'w' || e.key === 'W') && !e.metaKey && !e.ctrlKey && !e.altKey && e.target !== searchInputEl) {
-      e.preventDefault()
-      wrapDescriptions = !wrapDescriptions
-      return true
-    }
     // One Tab from the search input jumps straight into the list — the filter/group
     // controls are tabindex=-1 (driven by ⌘1/⌘2 + mouse), so the list is one Tab away.
     if (e.key === 'Tab' && !e.shiftKey && e.target === searchInputEl && navigableIds.length > 0) {
@@ -588,56 +632,77 @@
     }
     // Tab from a list row moves focus into the detail panel; Shift+Tab returns to the row.
     const activeEl = document.activeElement
-    if (
-      e.key === 'Tab' &&
-      !e.shiftKey &&
-      detailEl &&
-      listEl &&
-      activeEl &&
-      listEl.contains(activeEl)
-    ) {
+    if (e.key === 'Tab' && !e.shiftKey && detailOpen && focusIn(listEl)) {
       e.preventDefault()
-      const target = detailEl.querySelector<HTMLElement>(
-        'button:not([tabindex="-1"]), [tabindex="0"], input, textarea, [href]',
-      )
-      ;(target ?? detailEl).focus()
+      focusDetailBody()
       return true
     }
-    if (
-      e.key === 'Tab' &&
-      e.shiftKey &&
-      detailEl &&
-      activeEl &&
-      detailEl.contains(activeEl)
-    ) {
+    if (e.key === 'Tab' && !e.shiftKey && focusIn(detailEl) && activeEl !== detailPrimaryButton()) {
+      e.preventDefault()
+      focusDetailPrimary()
+      return true
+    }
+    if (e.key === 'Tab' && e.shiftKey && activeEl === detailPrimaryButton()) {
+      e.preventDefault()
+      focusDetailBody()
+      return true
+    }
+    if (e.key === 'Tab' && e.shiftKey && focusIn(detailEl)) {
       e.preventDefault()
       focusRow(selectedId)
       return true
     }
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      if (focusIn(detailBodyEl) || focusIn(detailEl)) {
+        e.preventDefault()
+        detailBodyEl?.scrollBy({ top: e.key === 'ArrowDown' ? 80 : -80 })
+        return true
+      }
       if (navigableIds.length === 0) return
       e.preventDefault()
       selectedId = stepSelection(navigableIds, selectedId, e.key === 'ArrowDown' ? 1 : -1)
-      // Navigation keeps the list at full width (descriptions stay readable); Space toggles
-      // the detail pane. Re-focus the row after any pending DOM settle.
       void tick().then(() => focusRow(selectedId))
       return true
     }
-    // Space toggles the detail (main content) pane for the current row, without
-    // squeezing the list during navigation. Only when a list row holds focus.
-    if ((e.key === ' ' || e.code === 'Space') && listEl && activeEl && listEl.contains(activeEl)) {
+    if (
+      (e.key === ' ' || e.code === 'Space') &&
+      listEl &&
+      ((activeEl && listEl.contains(activeEl)) || (e.target instanceof Node && listEl.contains(e.target)))
+    ) {
       e.preventDefault()
       detailOpen = !detailOpen
-      void tick().then(() => focusRow(selectedId))
+      void tick().then(() => {
+        if (detailOpen) focusDetailBody()
+        else focusRow(selectedId)
+      })
       return true
     }
     if (e.key === 'ArrowRight') {
       e.preventDefault()
+      if (activeEl === detailPrimaryButton()) return true
+      if (focusIn(detailEl)) {
+        focusDetailPrimary()
+        return true
+      }
+      if (selected) {
+        detailOpen = true
+        void tick().then(() => focusDetailBody())
+        return true
+      }
       applyTreeResult(navRight(navRows, selectedId, collapsed))
       return true
     }
     if (e.key === 'ArrowLeft') {
       e.preventDefault()
+      if (activeEl === detailPrimaryButton()) {
+        focusDetailBody()
+        return true
+      }
+      if (focusIn(detailEl) || (selected && detailOpen)) {
+        detailOpen = false
+        void tick().then(() => focusRow(selectedId))
+        return true
+      }
       applyTreeResult(navLeft(navRows, selectedId, collapsed))
       return true
     }
@@ -649,7 +714,7 @@
         toggleCollapse(selectedId.slice('group:'.length))
         return true
       }
-      if (selected && onActivate) {
+      if (selected && onActivate && selected.insertable) {
         e.preventDefault()
         onActivate(selected)
         return true
@@ -750,12 +815,13 @@
       <div class="flex w-full items-center gap-2 px-2 py-1.5">
         <button
           data-injectable-id={groupRowId(group.key)}
-          class="flex flex-1 items-center gap-2 rounded text-left"
-          class:ring-2={selectedId === groupRowId(group.key)}
-          class:ring-primary={selectedId === groupRowId(group.key)}
-          class:bg-base-200={selectedId === groupRowId(group.key)}
+          data-selected={selectedId === groupRowId(group.key) ? 'true' : undefined}
+          class="injectable-row flex flex-1 items-center gap-2 rounded text-left {selectedId === groupRowId(group.key) ? 'bg-base-200' : ''}"
           tabindex={selectedId === groupRowId(group.key) ? 0 : -1}
-          onclick={() => toggleCollapse(group.key)}
+          onclick={() => {
+            selectedId = groupRowId(group.key)
+            toggleCollapse(group.key)
+          }}
           type="button">
           <span class="w-4 shrink-0 text-center text-xs opacity-50">{collapsed.has(group.key) ? '▸' : '▾'}</span>
           <span class="text-xs font-bold uppercase tracking-wider">{group.label}</span>
@@ -778,46 +844,32 @@
             {#each group.items as item (item.id)}
               {@const Icon = KIND_ICON[item.kind]}
               {@const outOfProject = outOfProjectSnippetIds.has(item.id)}
+              {@const dimmed = outOfProject || !item.insertable || (mode === 'manage' && item.sourceDir != null && item.compatibleProviderIds.length === 0)}
               <button
                 data-injectable-id={item.id}
+                data-selected={selectedId === item.id ? 'true' : undefined}
                 data-out-of-project={outOfProject ? 'true' : undefined}
-                class="flex w-full flex-col gap-0.5 rounded-md py-2 pr-2 text-left hover:bg-base-200"
-                style="padding-left: 3rem{outOfProject ? '; opacity: 0.55' : ''}"
-                class:ring-2={selectedId === item.id}
-                class:ring-primary={selectedId === item.id}
-                class:bg-base-200={selectedId === item.id}
+                data-insertable={item.insertable ? undefined : 'false'}
+                class="injectable-row flex w-full items-center gap-2 rounded-md py-1 pr-2 text-left {selectedId === item.id ? 'bg-base-200' : ''}"
+                style="padding-left: 3rem{dimmed ? '; opacity: 0.55' : ''}"
                 tabindex={selectedId === item.id ? 0 : -1}
                 onclick={() => onRowClick(item.id)}
-                ondblclick={() => onActivate?.(item)}
+                ondblclick={() => { if (item.insertable) onActivate?.(item) }}
                 type="button">
-                <span class="flex items-center gap-2">
-                  <Icon size={14} class="shrink-0 {KIND_ICON_CLASS[item.kind]}" />
-                  <span class="text-sm font-semibold">
-                    {#if item.kind !== 'snippet'}<span class="opacity-40">/</span>{/if}{item.name}
-                  </span>
-                  {#if item.kind !== 'snippet'}
-                    <span class="shrink-0 text-xs leading-none" title={TRIGGER_LABELS[item.triggerMode]}>{TRIGGER_EMOJI[item.triggerMode]}</span>
-                  {/if}
-                  {#if outOfProject}
-                    <span
-                      class="badge badge-xs badge-ghost shrink-0"
-                      title="Not available in this project — still editable here; use “Available in” to add this project back"
-                      >Not in this project</span>
-                  {/if}
-                  {#if showSourceDir && item.sourceDir}
-                    <span
-                      class="badge badge-xs badge-ghost shrink-0 font-mono"
-                      title="Lives in {item.sourceDir}/skills">{item.sourceDir}</span>
-                  {/if}
-                  {#if item.content}
-                    <span class="ml-auto shrink-0 pl-2 text-xs tabular-nums opacity-45">{formatCharCount(item.content.length)}</span>
-                  {/if}
+                <Icon size={14} class="shrink-0 {KIND_ICON_CLASS[item.kind]}" />
+                <span class="truncate text-sm font-semibold">
+                  {#if item.kind !== 'snippet'}<span class="opacity-40">/</span>{/if}{item.name}
                 </span>
-                {#if item.description}
+                {#if outOfProject}
                   <span
-                    style="padding-left: 1.5rem"
-                    class="pr-1 text-xs leading-snug opacity-60 {wrapDescriptions ? '' : 'truncate'}"
-                    >{item.description}</span>
+                    class="badge badge-xs badge-ghost shrink-0"
+                    title="Not available in this project — still editable here; use “Available in” to add this project back"
+                    >Not in this project</span>
+                {/if}
+                {#if item.sourceAgent}
+                  <span
+                    class="badge badge-xs ml-auto shrink-0 {item.sourceAgent === 'Grok' ? 'badge-primary' : item.sourceAgent === 'Claude' ? 'badge-secondary' : 'badge-ghost'}"
+                    title={item.sourceDir ? `Lives in ${item.sourceDir}/skills` : item.sourceAgent}>{item.sourceAgent}</span>
                 {/if}
               </button>
             {/each}
@@ -836,8 +888,9 @@
   {/if}
 {/snippet}
 
+<div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
 <!-- Search + controls: one padded band, generous around it, tight (gap-3) inside -->
-<div class="flex flex-col gap-3 px-5 pt-4 pb-4">
+<div class="flex shrink-0 flex-col gap-3 px-5 pt-4 pb-4">
   <input
     bind:this={searchInputEl}
     class="input input-bordered w-full"
@@ -885,38 +938,25 @@
           type="button">Trigger</button>
       </div>
     </div>
-    <span class="h-4 w-px bg-base-300"></span>
-    <button
-      class="btn btn-xs"
-      class:btn-active={!wrapDescriptions}
-      tabindex={-1}
-      aria-pressed={!wrapDescriptions}
-      title="Toggle description wrap (W)"
-      onclick={() => (wrapDescriptions = !wrapDescriptions)}
-      type="button">{wrapDescriptions ? 'Wrap' : 'No wrap'}</button>
   </div>
 </div>
 
-<!-- Body: list + detail -->
-<div class="flex min-h-0 flex-1 border-t border-base-300">
-  {#if detailOpen}
-    <!-- Draggable divider between the list and the preview. -->
-    <ResizablePanel
-      storageKey="injectable-picker-list"
-      defaultWidth={420}
-      minWidth={280}
-      maxWidth={720}
-      side="left">
-      <div bind:this={listEl} class="h-full overflow-y-auto p-2">
-        {@render listBody()}
-      </div>
-    </ResizablePanel>
+<!-- Body: list + detail. The list node stays mounted so scroll position is kept. -->
+<div class="flex min-h-0 min-w-0 flex-1 overflow-hidden border-t border-base-300">
+  <div
+    class="flex min-h-0 flex-col overflow-hidden {detailOpen ? 'shrink-0' : 'min-w-0 flex-1'}"
+    style={detailOpen ? 'width: 28rem; flex: 0 0 28rem' : undefined}>
+    <div bind:this={listEl} class="min-h-0 flex-1 overflow-y-auto p-2">
+      {@render listBody()}
+    </div>
+  </div>
 
-    <div bind:this={detailEl} tabindex="-1" class="flex min-w-0 flex-1 flex-col border-l border-base-300">
+  {#if detailOpen}
+    <div bind:this={detailEl} tabindex="-1" class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-l border-base-300">
       {#if selected}
         {@const Icon = KIND_ICON[selected.kind]}
         <!-- Detail header: identity (left, primary) + actions (right) -->
-        <div class="flex items-start justify-between gap-4 border-b border-base-300 px-5 py-3">
+        <div class="flex shrink-0 items-start justify-between gap-4 border-b border-base-300 px-5 py-3">
           <div class="min-w-0">
             <div class="flex items-center gap-2">
               <Icon size={18} class="shrink-0 {KIND_ICON_CLASS[selected.kind]}" />
@@ -928,7 +968,10 @@
               {#if selected.kind === 'snippet'}
                 <span class="badge badge-sm {SNIPPET_BADGE}">Snippet</span>
               {:else}
-                <span class="badge badge-sm badge-outline {ORIGIN_BADGE[selected.origin]}">{ORIGIN_LABELS[selected.origin]}</span>
+                <span class="badge badge-sm badge-outline {ORIGIN_BADGE[selected.origin]}">{selected.origin === 'plugin' && selected.pluginName ? `Plugin: ${selected.pluginName}` : ORIGIN_LABELS[selected.origin]}</span>
+                {#if selected.sourceAgent}
+                  <span class="badge badge-sm {selected.sourceAgent === 'Grok' ? 'badge-primary' : selected.sourceAgent === 'Claude' ? 'badge-secondary' : 'badge-ghost'}">{selected.sourceAgent}</span>
+                {/if}
                 <span class="text-sm leading-none" title={TRIGGER_LABELS[selected.triggerMode]}>{TRIGGER_EMOJI[selected.triggerMode]}</span>
               {/if}
               {#if selected.content}
@@ -973,7 +1016,11 @@
         </div>
 
         <!-- Detail body -->
-        <div class="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-4">
+        <div
+          bind:this={detailBodyEl}
+          data-testid="detail-body"
+          tabindex="-1"
+          class="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-4 outline-none">
           {#if actionError}
             <p class="mb-3 text-sm text-error">{actionError}</p>
           {/if}
@@ -1015,14 +1062,14 @@
               {/if}
             {:else}
               <p class="mt-5 text-sm opacity-70">
-                Provided by Claude Code — no source file to read. Insert it with its command.
+                Provided by {selected.sourceAgent ?? 'the agent'} — no source file to read. Insert it with its command.
               </p>
             {/if}
           {/if}
         </div>
 
         <!-- Detail footer -->
-        <div class="flex items-center gap-3 border-t border-base-300 px-5 py-3">
+        <div class="flex shrink-0 items-center gap-3 border-t border-base-300 px-5 py-3">
           {#if editing}
             <button class="btn btn-primary btn-sm" disabled={saveDisabled} onclick={saveEditor} type="button">
               Save
@@ -1069,11 +1116,8 @@
         </div>
       {/if}
     </div>
-  {:else}
-    <div bind:this={listEl} class="flex-1 overflow-y-auto p-2">
-      {@render listBody()}
-    </div>
   {/if}
+</div>
 </div>
 
 {#if confirmingDelete && selected}
@@ -1114,3 +1158,12 @@
   </Modal>
   </div>
 {/if}
+
+<style>
+  :global(.injectable-row),
+  :global(.injectable-row:focus),
+  :global(.injectable-row:focus-visible) {
+    outline: none !important;
+    box-shadow: none !important;
+  }
+</style>

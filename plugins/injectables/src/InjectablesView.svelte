@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { InstalledAiProvider } from '@openforge-app/plugin-sdk'
   import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk/frontend'
   import PluginPageHeader from '@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte'
   import InjectableBrowser from './InjectableBrowser.svelte'
@@ -19,6 +20,15 @@
   let browser = $state<ReturnType<typeof InjectableBrowser> | null>(null)
   let copied = $state(false)
   let copyError = $state<string | null>(null)
+  let installedProviders = $state<InstalledAiProvider[]>([])
+
+  $effect(() => {
+    void api.commands.listInstalledProviders().then((providers) => {
+      installedProviders = providers
+    }).catch(() => {
+      installedProviders = []
+    })
+  })
 
   async function copySelected(selected: Injectable) {
     try {
@@ -36,7 +46,7 @@
 
 {#snippet detailFooter(selected: Injectable)}
   <button
-    data-testid="copy-injectable"
+    data-testid="detail-primary-action"
     class="btn btn-primary btn-sm"
     onclick={() => void copySelected(selected)}
     type="button">{copied ? 'Copied' : 'Copy'}</button>
@@ -70,6 +80,7 @@
       bind:this={browser}
       {api}
       {projectId}
+      {installedProviders}
       onActivate={null}
       onEscape={null}
       autoSelectFirst
