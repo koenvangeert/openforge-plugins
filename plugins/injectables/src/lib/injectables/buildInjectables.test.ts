@@ -42,16 +42,21 @@ describe('buildInjectables', () => {
     expect(out.find((i) => i.name === 'drop')?.disabledReason).toContain('.pi')
   })
 
-  it('labels .grok skills as Grok and .claude skills as Claude', () => {
+  it('keeps a project .claude skill insertable when the provider is Grok', () => {
     const out = buildInjectables({
+      commands: [],
       localSkills: [
         local({ name: 'g', sourceDir: '.grok', sourcePath: 'g' }),
-        local({ name: 'c', sourceDir: '.claude', sourcePath: 'c' }),
+        local({ name: 'c', origin: 'project', sourceDir: '.claude', sourcePath: 'c' }),
       ],
       provider: 'grok',
     })
     expect(out.find((item) => item.name === 'g')?.sourceAgent).toBe('Grok')
-    expect(out.find((item) => item.name === 'c')?.sourceAgent).toBe('Claude')
+    expect(out.find((item) => item.name === 'c')).toMatchObject({
+      origin: 'project',
+      sourceAgent: 'Claude',
+      insertable: true,
+    })
   })
 
   it('keeps a snippet insertable for every provider', () => {
