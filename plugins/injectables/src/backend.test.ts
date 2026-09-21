@@ -87,6 +87,10 @@ describe('injectables backend skill file operations', () => {
   it('lists local skills from every folder, including ones listCatalog would omit', async () => {
     const projectPath = await mkdtemp(join(tempRoot(), 'injectables-project-'))
     await createSkillFile(projectPath, '.grok/skills/only-grok/SKILL.md', '---\nname: only-grok\ndescription: Grok only\n---\n# Grok\n')
+    // A Grok project catalog only scans `.grok/skills`. Project skills that live in
+    // `.claude/skills` still have to come back from this scan, or the picker shows
+    // no Project group.
+    await createSkillFile(projectPath, '.claude/skills/repo-claude/SKILL.md', '---\nname: repo-claude\ndescription: Repo Claude\n---\n# Claude\n')
     await createSkillFile(mockedUserHome.path, '.claude/skills/user-claude/SKILL.md', '---\nname: user-claude\ndescription: User Claude\n---\n# Claude\n')
 
     const methods = await activateBackendWithProject(projectPath)
@@ -94,6 +98,7 @@ describe('injectables backend skill file operations', () => {
 
     expect(listed).toEqual(expect.arrayContaining([
       expect.objectContaining({ name: 'only-grok', sourceDir: '.grok', origin: 'project' }),
+      expect.objectContaining({ name: 'repo-claude', sourceDir: '.claude', origin: 'project' }),
       expect.objectContaining({ name: 'user-claude', sourceDir: '.claude', origin: 'personal' }),
     ]))
   })
