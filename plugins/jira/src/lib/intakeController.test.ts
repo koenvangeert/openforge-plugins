@@ -3,7 +3,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Task } from '@openforge-app/plugin-sdk/domain'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
-import { createMemoryPluginStorage } from '@openforge-app/plugin-sdk/testing'
+import { createMemoryPluginStorage, createMockFrontendOpenForgeApi } from '@openforge-app/plugin-sdk/testing'
 import type { SearchResult } from './jiraTypes'
 import {
   createAndStartIntakeTask,
@@ -39,16 +39,25 @@ function makeTask(id: string): Task {
   }
 }
 
+function makeTaskReads(tasks: Task[]) {
+  const host = createMockFrontendOpenForgeApi({ tasks })
+  return {
+    activeSpy: vi.fn(host.tasks.active),
+    completedSpy: vi.fn(host.tasks.completed),
+  }
+}
+
 function makeApi(
   invoke: (method: string, payload?: unknown) => Promise<unknown>,
   tasks: Task[] = [],
 ): {
   api: Api
   invokeSpy: ReturnType<typeof vi.fn>
-  listSpy: ReturnType<typeof vi.fn>
+  activeSpy: ReturnType<typeof vi.fn>
+  completedSpy: ReturnType<typeof vi.fn>
 } {
   const invokeSpy = vi.fn(invoke)
-  const listSpy = vi.fn(async () => tasks)
+  const { activeSpy, completedSpy } = makeTaskReads(tasks)
   return {
     api: {
       storage: createMemoryPluginStorage(),
@@ -58,10 +67,11 @@ function makeApi(
         onReady: () => ({ dispose: () => undefined }),
         invoke: invokeSpy as FrontendOpenForgeAPI['backend']['invoke'],
       },
-      tasks: { list: listSpy } as unknown as FrontendOpenForgeAPI['tasks'],
+      tasks: { active: activeSpy, completed: completedSpy } as unknown as FrontendOpenForgeAPI['tasks'],
     },
     invokeSpy,
-    listSpy,
+    activeSpy,
+    completedSpy,
   }
 }
 
@@ -73,9 +83,7 @@ const INTAKE_ISSUE = {
 
 function makeIntakeApi(tasks: Task[] = []) {
   const storage = createMemoryPluginStorage()
-  const listSpy = vi.fn(async ({ projectId }: { projectId?: string | null } = {}) => (
-    tasks.filter((task) => projectId == null || task.project_id === projectId)
-  ))
+  const { activeSpy, completedSpy } = makeTaskReads(tasks)
   const createSpy = vi.fn(async ({ initialPrompt, projectId }: { initialPrompt: string; projectId: string }) => (
     makeTaskWithProject(`T-${tasks.length + 1}`, projectId, initialPrompt)
   ))
@@ -93,12 +101,13 @@ function makeIntakeApi(tasks: Task[] = []) {
       invoke: vi.fn() as FrontendOpenForgeAPI['backend']['invoke'],
     },
     tasks: {
-      list: listSpy,
+      active: activeSpy,
+      completed: completedSpy,
       create: createSpy,
       startImplementation: startSpy,
     } as unknown as FrontendOpenForgeAPI['tasks'],
   }
-  return { api, listSpy, createSpy, startSpy }
+  return { api, activeSpy, completedSpy, createSpy, startSpy }
 }
 
 function makeTaskWithProject(id: string, projectId: string, initialPrompt = ''): Task {
@@ -108,14 +117,15 @@ function makeTaskWithProject(id: string, projectId: string, initialPrompt = ''):
 describe('deriveIssueLinkStates', () => {
   it('summarizes task-scoped Issue Links from the active Project without storing a sync model', async () => {
     const tasks = [makeTask('T-1'), makeTask('T-2'), makeTask('T-3'), makeTask('T-4')]
-    const { api, listSpy } = makeApi(async () => undefined, tasks)
+    const { api, activeSpy, completedSpy } = makeApi(async () => undefined, tasks)
     await api.storage.task('T-1').set(TASK_KEY.link, { key: 'PROJ-1' })
     await api.storage.task('T-2').set(TASK_KEY.link, { key: 'PROJ-1' })
     await api.storage.task('T-3').set(TASK_KEY.link, { key: 'PROJ-2' })
 
     const result = await deriveIssueLinkStates(api, 'P-1', ['PROJ-1', 'PROJ-2', 'PROJ-3'])
 
-    expect(listSpy).toHaveBeenCalledWith({ projectId: 'P-1', includeDone: true })
+    expect(activeSpy).toHaveBeenCalledWith('P-1')
+    expect(completedSpy).toHaveBeenCalledWith('P-1', { cursor: null })
     expect(result).toEqual({
       'PROJ-1': {
         issueKey: 'PROJ-1',
@@ -161,6 +171,18 @@ describe('deriveIssueLinkStates', () => {
       { id: 'T-active', title: 'T-active', status: 'doing', updatedAt: 100 },
       { id: 'T-done', title: 'T-done', status: 'done', updatedAt: 300 },
     ])
+  })
+
+  it('finds a linked done Task beyond the first completed page', async () => {
+    const done = Array.from({ length: 60 }, (_, index): Task => (
+      { ...makeTask(`T-${index}`), status: 'done', updated_at: index }
+    ))
+    const { api } = makeApi(async () => undefined, done)
+    await api.storage.task('T-0').set(TASK_KEY.link, { key: 'PROJ-1' })
+
+    const result = await deriveIssueLinkStates(api, 'P-1', ['PROJ-1'])
+
+    expect(result['PROJ-1'].tasks.map((task) => task.id)).toEqual(['T-0'])
   })
 
   it('keys the map by normalized Issue Key regardless of requested key casing', async () => {
@@ -228,7 +250,7 @@ describe('upsertLinkedTask', () => {
 
 describe('Issue Intake orchestration', () => {
   it('creates a linked backlog Task in the active Project without starting it', async () => {
-    const { api, listSpy, createSpy, startSpy } = makeIntakeApi()
+    const { api, activeSpy, completedSpy, createSpy, startSpy } = makeIntakeApi()
 
     const result = await createIntakeTask(api, { projectId: 'P-active', issue: INTAKE_ISSUE })
 
@@ -238,7 +260,8 @@ describe('Issue Intake orchestration', () => {
       issueKey: 'PROJ-7',
       task: { id: 'T-1', status: 'backlog', project_id: 'P-active' },
     })
-    expect(listSpy).toHaveBeenCalledWith({ projectId: 'P-active', includeDone: true })
+    expect(activeSpy).toHaveBeenCalledWith('P-active')
+    expect(completedSpy).toHaveBeenCalledWith('P-active', { cursor: null })
     expect(createSpy).toHaveBeenCalledWith({
       projectId: 'P-active',
       initialPrompt: 'PROJ-7: Fix Issue Intake\n\n<p>Keep the <strong>Jira description</strong>.</p>',

@@ -1,5 +1,5 @@
 import type { ImplementationRun } from '@openforge-app/plugin-sdk'
-import type { BoardStatus, Task } from '@openforge-app/plugin-sdk/domain'
+import type { BoardStatus, Task, TaskSummary } from '@openforge-app/plugin-sdk/domain'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import { sanitizeHtml } from '@openforge-app/plugin-sdk/sanitize'
 import { readIntakeTemplate, renderIntakeTemplate } from './intakeTemplate'
@@ -167,9 +167,9 @@ export async function deriveIssueLinkStates(
   for (const issueKey of keys) {
     states[issueKey] = { issueKey, tasks: [] }
   }
-  // includeDone: a completed Task keeps its Issue Link, so it still counts here —
+  // Completed Tasks keep their Issue Link, so they still count here —
   // for both the linked-Tasks display and the duplicate-intake guard.
-  const tasks = await api.tasks.list({ projectId, includeDone: true })
+  const tasks = await listProjectTasks(api, projectId)
   const links = await Promise.all(tasks.map(async (task) => {
     const linkedKey = await readLinkedKey(api, task.id)
     return { task, issueKey: linkedKey ? normalizeIssueKey(linkedKey) : null }
@@ -177,12 +177,25 @@ export async function deriveIssueLinkStates(
 
   for (const link of links) {
     if (!link.issueKey || !(link.issueKey in states)) continue
-    states[link.issueKey].tasks.push(toLinkedTaskSummary(link.task))
+    const { id, title, status, updatedAt } = link.task
+    states[link.issueKey].tasks.push({ id, title, status, updatedAt })
   }
   for (const issueKey of keys) {
     states[issueKey].tasks.sort(byActiveThenRecent)
   }
   return states
+}
+
+async function listProjectTasks(api: IssueIntakeApi, projectId: string): Promise<TaskSummary[]> {
+  const { tasks } = await api.tasks.active(projectId)
+  const all: TaskSummary[] = [...tasks]
+  let cursor: string | null = null
+  do {
+    const page = await api.tasks.completed(projectId, { cursor })
+    all.push(...page.tasks)
+    cursor = page.nextCursor
+  } while (cursor)
+  return all
 }
 
 function duplicateConfirmation(

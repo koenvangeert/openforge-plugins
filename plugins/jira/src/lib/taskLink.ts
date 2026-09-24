@@ -2,16 +2,15 @@
 // non-authoritative auto-suggestion, and loading an issue through the backend.
 // The renderer never calls Jira directly — it goes via api.backend.invoke.
 
-import type { JsonValue } from '@openforge-app/plugin-sdk'
+import type { JsonValue, TaskDetail } from '@openforge-app/plugin-sdk'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import { sanitizeHtml } from '@openforge-app/plugin-sdk/sanitize'
 import { extractIssueKeyHint } from './issueKey'
 import type { IssueResult, JiraIssue } from './jiraTypes'
 import { invokeJiraBackend, TASK_KEY } from './protocol'
 
-type Api = Pick<FrontendOpenForgeAPI, 'storage' | 'backend' | 'tasks'>
+type Api = Pick<FrontendOpenForgeAPI, 'storage' | 'backend'>
 type StorageApi = Pick<FrontendOpenForgeAPI, 'storage'>
-type TasksApi = Pick<FrontendOpenForgeAPI, 'tasks'>
 
 export interface IssueSnapshot {
   issue: JiraIssue
@@ -54,18 +53,11 @@ export async function clearLink(api: StorageApi, taskId: string): Promise<void> 
 }
 
 /**
- * Scan the task's own text (initial_prompt + title) for a key-shaped hint.
+ * Scan the task's own text (prompt + title) for a key-shaped hint.
  * Non-authoritative — the caller offers it as a pre-fill the user confirms.
- * Returns null if the task can't be read or no hint is present.
  */
-export async function suggestIssueKey(api: TasksApi, taskId: string): Promise<string | null> {
-  try {
-    const task = await api.tasks.get(taskId)
-    if (!task) return null
-    return extractIssueKeyHint(task.initial_prompt, task.title)
-  } catch {
-    return null
-  }
+export function suggestIssueKey(task: Pick<TaskDetail, 'prompt' | 'title'>): string | null {
+  return extractIssueKeyHint(task.prompt, task.title)
 }
 
 /**

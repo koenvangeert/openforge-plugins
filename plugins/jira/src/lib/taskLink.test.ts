@@ -4,7 +4,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { JsonValue } from '@openforge-app/plugin-sdk'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
-import type { Task } from '@openforge-app/plugin-sdk/domain'
 import { createMemoryPluginStorage } from '@openforge-app/plugin-sdk/testing'
 import type { IssueResult, JiraIssue } from './jiraTypes'
 import {
@@ -18,29 +17,7 @@ import {
 } from './taskLink'
 import { TASK_KEY } from './protocol'
 
-type Api = Pick<FrontendOpenForgeAPI, 'storage' | 'backend' | 'tasks'>
-
-function makeTask(overrides: Partial<Task>): Task {
-  return {
-    id: 'KVG-1444',
-    initial_prompt: '',
-    status: 'doing',
-    prompt: null,
-    title: null,
-    title_source: null,
-    title_generated_at: null,
-    agent: null,
-    permission_mode: null,
-    worktree_source: null,
-    worktree_branch: null,
-    source_ticket_url: null,
-    depends_on: [],
-    project_id: 'P-1',
-    created_at: 0,
-    updated_at: 0,
-    ...overrides,
-  }
-}
+type Api = Pick<FrontendOpenForgeAPI, 'storage' | 'backend'>
 
 function makeIssue(overrides: Partial<JiraIssue> = {}): JiraIssue {
   return {
@@ -57,7 +34,7 @@ function makeIssue(overrides: Partial<JiraIssue> = {}): JiraIssue {
   }
 }
 
-function makeApi(options: { invoke?: (method: string, payload?: unknown) => Promise<unknown>; task?: Task | Error } = {}): Api {
+function makeApi(options: { invoke?: (method: string, payload?: unknown) => Promise<unknown> } = {}): Api {
   const storage = createMemoryPluginStorage()
   return {
     storage,
@@ -67,13 +44,6 @@ function makeApi(options: { invoke?: (method: string, payload?: unknown) => Prom
       onReady: () => ({ dispose: () => undefined }),
       invoke: (async (method: string, payload?: unknown) => options.invoke?.(method, payload)) as FrontendOpenForgeAPI['backend']['invoke'],
     },
-    tasks: {
-      get: async () => {
-        if (options.task instanceof Error) throw options.task
-        if (!options.task) throw new Error('no task configured')
-        return options.task
-      },
-    } as unknown as FrontendOpenForgeAPI['tasks'],
   }
 }
 
@@ -115,24 +85,16 @@ describe('link storage', () => {
 })
 
 describe('suggestIssueKey', () => {
-  it('scans the task text for a non-authoritative hint', async () => {
-    const api = makeApi({ task: makeTask({ initial_prompt: 'Fix the login bug tracked in PROJ-77' }) })
-    expect(await suggestIssueKey(api, TASK_ID)).toBe('PROJ-77')
+  it('scans the task text for a non-authoritative hint', () => {
+    expect(suggestIssueKey({ prompt: 'Fix the login bug tracked in PROJ-77', title: 'Login bug' })).toBe('PROJ-77')
   })
 
-  it('falls back to the title when the prompt has no key', async () => {
-    const api = makeApi({ task: makeTask({ initial_prompt: 'no key', title: 'linked to ABC-3' }) })
-    expect(await suggestIssueKey(api, TASK_ID)).toBe('ABC-3')
+  it('falls back to the title when the prompt has no key', () => {
+    expect(suggestIssueKey({ prompt: 'no key', title: 'linked to ABC-3' })).toBe('ABC-3')
   })
 
-  it('returns null when the task cannot be read', async () => {
-    const api = makeApi({ task: new Error('not found') })
-    expect(await suggestIssueKey(api, TASK_ID)).toBeNull()
-  })
-
-  it('returns null when no key is present', async () => {
-    const api = makeApi({ task: makeTask({ initial_prompt: 'nothing to see', title: 'still nothing' }) })
-    expect(await suggestIssueKey(api, TASK_ID)).toBeNull()
+  it('returns null when no key is present', () => {
+    expect(suggestIssueKey({ prompt: 'nothing to see', title: 'still nothing' })).toBeNull()
   })
 })
 

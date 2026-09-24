@@ -28,7 +28,7 @@
 
   type LoadAttempt = { taskId: string; loud: boolean; generation: number; isCurrent: () => boolean }
 
-  let { api, context, taskId }: PluginTaskUISectionProps = $props()
+  let { api, context, taskId, task }: PluginTaskUISectionProps = $props()
 
   let initialized = $state(false)
   let linkedKey = $state<string | null>(null)
@@ -141,11 +141,9 @@
     return detail ? `${action}: ${detail}` : action
   }
 
-  async function offerSuggestion(scope: TaskScope) {
-    const hint = await suggestIssueKey(api, scope.taskId)
-    if (!scope.isCurrent() || linkedKey) return
-    suggestion = hint
-    if (hint) inputKey = hint
+  function offerSuggestion() {
+    suggestion = suggestIssueKey(task)
+    if (suggestion) inputKey = suggestion
   }
 
   async function link() {
@@ -187,7 +185,7 @@
       issue = null
       refreshedAt = null
       inputKey = ''
-      await offerSuggestion(scope)
+      offerSuggestion()
     } catch (cause) {
       if (scope.isCurrent()) error = unexpectedMessage(cause, 'Could not unlink the Jira Issue')
     } finally {
@@ -229,7 +227,7 @@
       linkedKey = key
       if (!key) {
         initialized = true
-        await offerSuggestion(scope)
+        offerSuggestion()
         return
       }
       const { snapshot, needsJiraRead } = await readIssueSnapshot(api, scope.taskId, key)

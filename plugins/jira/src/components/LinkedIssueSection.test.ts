@@ -3,7 +3,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import type { JsonValue } from '@openforge-app/plugin-sdk'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
-import type { Task, TaskDetail } from '@openforge-app/plugin-sdk/domain'
+import type { TaskDetail } from '@openforge-app/plugin-sdk/domain'
 import { clearCollapsedSections } from '@openforge-app/plugin-sdk/collapsibleSectionState'
 import { createOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -13,29 +13,7 @@ import LinkedIssueSection from './LinkedIssueSection.svelte'
 
 const TASK_ID = 'KVG-1495'
 
-function makeTask(overrides: Partial<Task> = {}): Task {
-  return {
-    id: TASK_ID,
-    initial_prompt: '',
-    status: 'doing',
-    prompt: null,
-    title: null,
-    title_source: null,
-    title_generated_at: null,
-    agent: null,
-    permission_mode: null,
-    worktree_source: null,
-    worktree_branch: null,
-    source_ticket_url: null,
-    depends_on: [],
-    project_id: 'P-1',
-    created_at: 0,
-    updated_at: 0,
-    ...overrides,
-  }
-}
-
-function makeTaskDetail(taskId: string): TaskDetail {
+function makeTaskDetail(taskId: string, prompt = ''): TaskDetail {
   return {
     id: taskId,
     status: 'doing',
@@ -47,7 +25,7 @@ function makeTaskDetail(taskId: string): TaskDetail {
     promptPreview: '',
     labels: [],
     sourceTicketUrl: null,
-    prompt: '',
+    prompt,
     agent: null,
     permissionMode: null,
     worktreeSource: null,
@@ -72,7 +50,7 @@ function makeIssue(overrides: Partial<JiraIssue> = {}): JiraIssue {
   }
 }
 
-function makeHarness(options: { task?: Task; results?: IssueResult[]; respond?: () => Promise<IssueResult> } = {}) {
+function makeHarness(options: { results?: IssueResult[]; respond?: () => Promise<IssueResult> } = {}) {
   const registry = createOpenForgeRegistryFake({ pluginId: 'dev.kvg.jira', projectId: 'P-1' })
   const results = [...(options.results ?? [{ ok: true, issue: makeIssue() }])]
   const invoke = vi.fn(async () =>
@@ -87,10 +65,6 @@ function makeHarness(options: { task?: Task; results?: IssueResult[]; respond?: 
       whenReady: async () => undefined,
       onReady: () => ({ dispose: () => undefined }),
       invoke: invoke as FrontendOpenForgeAPI['backend']['invoke'],
-    },
-    tasks: {
-      ...registry.frontendApi.tasks,
-      get: async () => options.task ?? makeTask(),
     },
     system: { openUrl, writeClipboardText },
   }
@@ -133,13 +107,13 @@ function snapshotReads(reads: string[]): string[] {
   return reads.filter((read) => read.endsWith(`:${TASK_KEY.snapshot}`))
 }
 
-function renderSection(api: FrontendOpenForgeAPI, taskId = TASK_ID) {
+function renderSection(api: FrontendOpenForgeAPI, taskId = TASK_ID, prompt = '') {
   return render(LinkedIssueSection, {
     props: {
       api,
       context: api.context.getSnapshot(),
       taskId,
-      task: makeTaskDetail(taskId),
+      task: makeTaskDetail(taskId, prompt),
       projectId: 'P-1',
       taskActionPending: false,
     },
@@ -184,11 +158,9 @@ describe('LinkedIssueSection', () => {
   })
 
   it('offers a Task-text key hint but links it only after user confirmation', async () => {
-    const { api, invoke, registry } = makeHarness({
-      task: makeTask({ initial_prompt: 'Investigate the behavior described in PROJ-7.' }),
-    })
+    const { api, invoke, registry } = makeHarness()
 
-    renderSection(api)
+    renderSection(api, TASK_ID, 'Investigate the behavior described in PROJ-7.')
 
     const input = await screen.findByLabelText('Issue Key') as HTMLInputElement
     await waitFor(() => expect(input.value).toBe('PROJ-7'))
@@ -537,14 +509,11 @@ describe('LinkedIssueSection', () => {
     expect(invoke).toHaveBeenCalledTimes(1)
   })
   it('keeps an unlinked Task painted through host re-renders of the same Task', async () => {
-    const get = vi.fn(async () => makeTask({ initial_prompt: 'Investigate PROJ-7.' }))
-    const { api: base } = makeHarness()
-    const api: FrontendOpenForgeAPI = { ...base, tasks: { ...base.tasks, get } }
+    const { api } = makeHarness()
 
-    const view = renderSection(api)
+    const view = renderSection(api, TASK_ID, 'Investigate PROJ-7.')
     const input = await screen.findByLabelText('Issue Key') as HTMLInputElement
     await waitFor(() => expect(input.value).toBe('PROJ-7'))
-    expect(get).toHaveBeenCalledTimes(1)
 
     // The host hands over a fresh context object on unrelated store ticks, and
     // an unlinked Task has nothing cached to repaint from: a reload here is the
@@ -561,7 +530,6 @@ describe('LinkedIssueSection', () => {
     observer.disconnect()
 
     expect(repaints).toEqual([])
-    expect(get).toHaveBeenCalledTimes(1)
     expect(input.isConnected).toBe(true)
     expect(input.value).toBe('PROJ-7')
     expect(screen.queryByText('Loading Issue Link…')).toBeNull()

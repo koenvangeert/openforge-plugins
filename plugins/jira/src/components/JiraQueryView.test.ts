@@ -2,8 +2,8 @@
 
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
-import type { Task } from '@openforge-app/plugin-sdk/domain'
-import { createOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
+import type { ActiveTasks, Task } from '@openforge-app/plugin-sdk/domain'
+import { createMockFrontendOpenForgeApi, createOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
 import { describe, expect, it, vi } from 'vitest'
 import { HOST_EVENT, METHOD, PROJECT_KEY, REFRESH_EVENT } from '../lib/protocol'
 import { DEFAULT_INTAKE_TEMPLATE } from '../lib/intakeTemplate'
@@ -293,7 +293,9 @@ describe('JiraQueryView', () => {
 
     const statusHeader = screen.getByRole('columnheader', { name: /Status/ })
     expect(statusHeader.getAttribute('aria-sort')).toBe('none')
-    await fireEvent.click(screen.getByRole('button', { name: 'Sort by status ascending' }))
+    const sortAscending = screen.getByRole('button', { name: 'Sort by status ascending' }) as HTMLButtonElement
+    await waitFor(() => expect(sortAscending.disabled).toBe(false))
+    await fireEvent.click(sortAscending)
 
     await waitFor(() => expect(invoke).toHaveBeenLastCalledWith(METHOD.search, {
       jql: 'project = KVG ORDER BY status ASC, updated DESC',
@@ -467,7 +469,11 @@ describe('JiraQueryView', () => {
   })
 
   it('requires explicit duplicate confirmation before Create and Start', async () => {
-    const registry = createOpenForgeRegistryFake({ pluginId: 'dev.kvg.jira', projectId: 'P-1' })
+    const registry = createOpenForgeRegistryFake({
+      pluginId: 'dev.kvg.jira',
+      projectId: 'P-1',
+      tasks: [openForgeTask('existing-task')],
+    })
     await registry.storage.task('existing-task').set('link', { key: 'PROJ-7' })
     const invoke = vi.fn(async () => ({
       ok: true,
@@ -481,10 +487,6 @@ describe('JiraQueryView', () => {
         state: 'ready',
         whenReady: async () => undefined,
         invoke: invoke as FrontendOpenForgeAPI['backend']['invoke'],
-      },
-      tasks: {
-        ...registry.frontendApi.tasks,
-        list: async () => [openForgeTask('existing-task')],
       },
     }
     render(JiraQueryView, { props: { api, context: api.context.getSnapshot() } })
@@ -855,11 +857,12 @@ describe('JiraQueryView', () => {
   it('does not let a stale Issue Link derivation overwrite a newer refresh', async () => {
     const registry = createOpenForgeRegistryFake({ pluginId: 'dev.kvg.jira', projectId: 'P-1' })
     await registry.storage.task('old-task').set('link', { key: 'PROJ-1' })
-    let resolveFirstList!: (tasks: Task[]) => void
-    const firstList = new Promise<Task[]>((resolve) => { resolveFirstList = resolve })
-    const list = vi.fn()
-      .mockImplementationOnce(() => firstList)
-      .mockResolvedValueOnce([])
+    const staleTasks = await createMockFrontendOpenForgeApi({ tasks: [openForgeTask('old-task')] }).tasks.active('P-1')
+    let resolveFirstActive!: (tasks: ActiveTasks) => void
+    const firstActive = new Promise<ActiveTasks>((resolve) => { resolveFirstActive = resolve })
+    const active = vi.fn()
+      .mockImplementationOnce(() => firstActive)
+      .mockResolvedValueOnce({ tasks: [], related: [] })
     const invoke = vi.fn(async () => ({
       ok: true,
       issues: [jiraIssue('PROJ-1', 'Refresh link state')],
@@ -873,15 +876,15 @@ describe('JiraQueryView', () => {
         whenReady: async () => undefined,
         invoke: invoke as FrontendOpenForgeAPI['backend']['invoke'],
       },
-      tasks: { ...registry.frontendApi.tasks, list },
+      tasks: { ...registry.frontendApi.tasks, active },
     }
     render(JiraQueryView, { props: { api, context: api.context.getSnapshot() } })
-    await waitFor(() => expect(list).toHaveBeenCalledOnce())
+    await waitFor(() => expect(active).toHaveBeenCalledOnce())
 
     await api.events.emit(REFRESH_EVENT, null)
     await screen.findByRole('row', { name: /PROJ-1.*Refresh link state/ })
     expect(screen.getByText('Unlinked')).toBeTruthy()
-    resolveFirstList([openForgeTask('old-task')])
+    resolveFirstActive(staleTasks)
     await new Promise((resolve) => setTimeout(resolve, 0))
 
     expect(screen.getByText('Unlinked')).toBeTruthy()
@@ -889,7 +892,11 @@ describe('JiraQueryView', () => {
   })
 
   it('opens the single linked Task from its title in the issue table', async () => {
-    const registry = createOpenForgeRegistryFake({ pluginId: 'dev.kvg.jira', projectId: 'P-1' })
+    const registry = createOpenForgeRegistryFake({
+      pluginId: 'dev.kvg.jira',
+      projectId: 'P-1',
+      tasks: [{ ...openForgeTask('only-task'), initial_prompt: 'PROJ-1: Do the thing' }],
+    })
     await registry.storage.task('only-task').set('link', { key: 'PROJ-1' })
     const invoke = vi.fn(async () => ({
       ok: true,
@@ -904,10 +911,6 @@ describe('JiraQueryView', () => {
         whenReady: async () => undefined,
         invoke: invoke as FrontendOpenForgeAPI['backend']['invoke'],
       },
-      tasks: {
-        ...registry.frontendApi.tasks,
-        list: async () => [{ ...openForgeTask('only-task'), initial_prompt: 'PROJ-1: Do the thing' }],
-      },
     }
     render(JiraQueryView, { props: { api, context: api.context.getSnapshot() } })
 
@@ -919,7 +922,14 @@ describe('JiraQueryView', () => {
   })
 
   it('opens the most recently updated linked Task from the table badge without selecting the row', async () => {
-    const registry = createOpenForgeRegistryFake({ pluginId: 'dev.kvg.jira', projectId: 'P-1' })
+    const registry = createOpenForgeRegistryFake({
+      pluginId: 'dev.kvg.jira',
+      projectId: 'P-1',
+      tasks: [
+          { ...openForgeTask('task-early'), updated_at: 100 },
+          { ...openForgeTask('task-late'), updated_at: 200 },
+        ],
+    })
     await registry.storage.task('task-early').set('link', { key: 'PROJ-2' })
     await registry.storage.task('task-late').set('link', { key: 'PROJ-2' })
     const invoke = vi.fn(async () => ({
@@ -934,13 +944,6 @@ describe('JiraQueryView', () => {
         state: 'ready',
         whenReady: async () => undefined,
         invoke: invoke as FrontendOpenForgeAPI['backend']['invoke'],
-      },
-      tasks: {
-        ...registry.frontendApi.tasks,
-        list: async () => [
-          { ...openForgeTask('task-early'), updated_at: 100 },
-          { ...openForgeTask('task-late'), updated_at: 200 },
-        ],
       },
     }
     render(JiraQueryView, { props: { api, context: api.context.getSnapshot() } })
@@ -956,7 +959,14 @@ describe('JiraQueryView', () => {
   })
 
   it('lists every linked Task in the details panel and opens each on click', async () => {
-    const registry = createOpenForgeRegistryFake({ pluginId: 'dev.kvg.jira', projectId: 'P-1' })
+    const registry = createOpenForgeRegistryFake({
+      pluginId: 'dev.kvg.jira',
+      projectId: 'P-1',
+      tasks: [
+          { ...openForgeTask('task-early'), updated_at: 100, initial_prompt: 'PROJ-2: Older work' },
+          { ...openForgeTask('task-late'), updated_at: 200, initial_prompt: 'PROJ-2: Newer work' },
+        ],
+    })
     await registry.storage.task('task-early').set('link', { key: 'PROJ-2' })
     await registry.storage.task('task-late').set('link', { key: 'PROJ-2' })
     const invoke = vi.fn(async () => ({
@@ -971,13 +981,6 @@ describe('JiraQueryView', () => {
         state: 'ready',
         whenReady: async () => undefined,
         invoke: invoke as FrontendOpenForgeAPI['backend']['invoke'],
-      },
-      tasks: {
-        ...registry.frontendApi.tasks,
-        list: async () => [
-          { ...openForgeTask('task-early'), updated_at: 100, initial_prompt: 'PROJ-2: Older work' },
-          { ...openForgeTask('task-late'), updated_at: 200, initial_prompt: 'PROJ-2: Newer work' },
-        ],
       },
     }
     render(JiraQueryView, { props: { api, context: api.context.getSnapshot() } })
