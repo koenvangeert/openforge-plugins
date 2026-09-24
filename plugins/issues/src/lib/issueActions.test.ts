@@ -416,7 +416,7 @@ describe('issue actions', () => {
       projectId: 'P-1',
       storage,
     })
-    registry.frontendApi.tasks.list = async () => {
+    registry.frontendApi.tasks.active = async () => {
       throw new Error('task list unavailable')
     }
 

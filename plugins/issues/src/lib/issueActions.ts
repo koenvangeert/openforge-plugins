@@ -130,7 +130,7 @@ async function loadLiveTaskIds(
   projectId: string,
 ): Promise<Set<string> | null> {
   try {
-    const tasks = await api.tasks.list({ projectId })
+    const { tasks } = await api.tasks.active(projectId)
     return new Set(tasks.map((task) => task.id))
   } catch {
     return null
