@@ -60,15 +60,11 @@ async function makeHarness(notes: string) {
     pluginId: 'com.openforge.handoff-notes-workflow',
     projectId: PROJECT_ID,
     taskId: TASK_ID,
+    tasks: [makeTask()],
   })
   await registry.storage.task(TASK_ID).set(HANDOFF_NOTES_STORAGE_KEY, notes)
 
-  const api: FrontendOpenForgeAPI = {
-    ...registry.frontendApi,
-    tasks: { ...registry.frontendApi.tasks, get: async () => makeTask() },
-  }
-
-  return { api }
+  return { api: registry.frontendApi }
 }
 
 /** Let the in-flight load finish so an absent repaint means absent, not late. */
@@ -136,13 +132,13 @@ describe('HandoffNotesTaskSection', () => {
 
   it('keeps the notes painted through host re-renders of the same Task', async () => {
     const { api: base } = await makeHarness('Ready to hand off.')
-    const get = vi.fn(async () => makeTask())
-    const api: FrontendOpenForgeAPI = { ...base, tasks: { ...base.tasks, get } }
+    const detail = vi.fn(base.tasks.detail)
+    const api: FrontendOpenForgeAPI = { ...base, tasks: { ...base.tasks, detail } }
 
     const view = renderSection(api)
     expect(await screen.findByText('Ready to hand off.')).toBeTruthy()
     await settled()
-    expect(get).toHaveBeenCalledTimes(1)
+    expect(detail).toHaveBeenCalledTimes(1)
 
     const content = view.container.querySelector('[id^="info-section-"]') as HTMLElement
     const repaints: string[] = []
@@ -162,7 +158,7 @@ describe('HandoffNotesTaskSection', () => {
     observer.disconnect()
 
     expect(repaints).toEqual([])
-    expect(get).toHaveBeenCalledTimes(1)
+    expect(detail).toHaveBeenCalledTimes(1)
     expect(screen.getByText('Ready to hand off.')).toBeTruthy()
     expect(screen.queryByText('Loading Handoff Notes…')).toBeNull()
   })

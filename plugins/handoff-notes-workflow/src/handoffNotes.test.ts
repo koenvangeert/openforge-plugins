@@ -15,15 +15,18 @@ function task(overrides: Partial<Task> = {}): Task {
     initial_prompt: 'Build the task viewer',
     prompt: null,
     status: 'doing',
+    title: null,
+    depends_on: [],
     project_id: 'P-8',
+    created_at: 0,
+    updated_at: 0,
     ...overrides,
   } as Task
 }
 
 describe('Handoff Notes task storage', () => {
   it('loads notes from task-scoped plugin storage', async () => {
-    const registry = createOpenForgeRegistryFake({ projectId: 'P-8', taskId: 'KVG-1808' })
-    registry.frontendApi.tasks.get = vi.fn(async () => task())
+    const registry = createOpenForgeRegistryFake({ projectId: 'P-8', taskId: 'KVG-1808', tasks: [task()] })
     await registry.frontendApi.storage.task('KVG-1808').set(
       HANDOFF_NOTES_STORAGE_KEY,
       '## What is built\n- Agent-maintained notes',
@@ -41,8 +44,7 @@ describe('Handoff Notes task storage', () => {
   })
 
   it('returns empty notes when the agent has not contributed them yet', async () => {
-    const registry = createOpenForgeRegistryFake({ projectId: 'P-8', taskId: 'KVG-1808' })
-    registry.frontendApi.tasks.get = vi.fn(async () => task())
+    const registry = createOpenForgeRegistryFake({ projectId: 'P-8', taskId: 'KVG-1808', tasks: [task()] })
 
     await expect(loadHandoffNotes(registry.frontendApi, 'KVG-1808', 'P-8')).resolves.toEqual({
       status: 'ready',
@@ -51,9 +53,8 @@ describe('Handoff Notes task storage', () => {
   })
 
   it('loads both read-only Task views without reading project template settings', async () => {
-    const registry = createOpenForgeRegistryFake({ projectId: 'P-8', taskId: 'KVG-1808' })
+    const registry = createOpenForgeRegistryFake({ projectId: 'P-8', taskId: 'KVG-1808', tasks: [task()] })
     const listStartPromptContributions = vi.fn(async () => [])
-    registry.frontendApi.tasks.get = vi.fn(async () => task())
     registry.frontendApi.tasks.listStartPromptContributions = listStartPromptContributions
     await registry.frontendApi.storage.task('KVG-1808').set(
       HANDOFF_NOTES_STORAGE_KEY,
@@ -74,21 +75,22 @@ describe('Handoff Notes task storage', () => {
   })
 
   it('reports unavailable project context without reading task storage', async () => {
-    const registry = createOpenForgeRegistryFake({ projectId: null, taskId: 'KVG-1808' })
-    const getTask = vi.fn(async () => task())
-    registry.frontendApi.tasks.get = getTask
+    const registry = createOpenForgeRegistryFake({ projectId: null, taskId: 'KVG-1808', tasks: [task()] })
 
     await expect(loadHandoffNotes(registry.frontendApi, 'KVG-1808', null)).resolves.toEqual({
       status: 'unavailable',
       message: 'Open this task in an enabled project to view its Handoff Notes.',
     })
-    expect(getTask).not.toHaveBeenCalled()
+    expect(registry.calls.taskDetailRequests).toEqual([])
     expect(registry.calls.storageGets).toEqual([])
   })
 
   it('rejects a missing task or a task from another project', async () => {
-    const registry = createOpenForgeRegistryFake({ projectId: 'P-8', taskId: 'KVG-1808' })
-    registry.frontendApi.tasks.get = vi.fn(async () => task({ project_id: 'P-9' }))
+    const registry = createOpenForgeRegistryFake({
+      projectId: 'P-8',
+      taskId: 'KVG-1808',
+      tasks: [task({ project_id: 'P-9' })],
+    })
 
     await expect(loadHandoffNotes(registry.frontendApi, 'KVG-1808', 'P-8'))
       .rejects.toThrow('Task KVG-1808 is no longer available in this project.')

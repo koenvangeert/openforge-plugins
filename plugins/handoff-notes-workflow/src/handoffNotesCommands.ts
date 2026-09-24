@@ -100,7 +100,7 @@ export async function updateHandoffNotes(
   }
 
   const taskId = resolveTaskId(api, invocation)
-  const projectId = await resolveProjectId(api, taskId, invocation)
+  const projectId = resolveProjectId(api, invocation)
   const settings = await loadHandoffNotesSettings(api.tasks, projectId)
   const notes = await saveStoredHandoffNotes(api.storage, taskId, input.notes)
   const validation = validateHandoffNotes(notes, settings.template)
@@ -126,16 +126,13 @@ function resolveTaskId(
   return taskId
 }
 
-async function resolveProjectId(
+function resolveProjectId(
   api: BackendOpenForgeAPI,
-  taskId: string,
   invocation: PluginCommandInvocationContext,
-): Promise<string> {
+): string {
   const projectId = invocation?.projectId ?? api.context.getSnapshot().projectId ?? null
-  if (projectId) return projectId
-
-  const task = await api.tasks.get(taskId)
-  if (task?.project_id) return task.project_id
-
-  throw new Error('Handoff Notes commands require OpenForge Project context.')
+  if (!projectId) {
+    throw new Error('Handoff Notes commands require OpenForge Project context.')
+  }
+  return projectId
 }

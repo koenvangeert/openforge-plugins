@@ -23,12 +23,12 @@ export async function loadHandoffNotes(
     }
   }
 
-  const [task, notes] = await Promise.all([
-    api.tasks.get(taskId),
+  const [read, notes] = await Promise.all([
+    api.tasks.detail(projectId, taskId),
     loadStoredHandoffNotes(api.storage, taskId),
   ])
 
-  if (!task || task.project_id !== projectId) {
+  if (!read) {
     throw new Error(`Task ${taskId} is no longer available in this project.`)
   }
 
