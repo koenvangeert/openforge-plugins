@@ -14,6 +14,12 @@ const ATTRIBUTION_TTL_MS = 30_000
 const CLAUDE_CODE_PROVIDER = 'claude-code'
 const SESSION_PAGE_SIZE = 250
 
+interface ProjectTask {
+  id: string
+  title: string
+  projectId: string
+}
+
 export interface SpendServiceDependencies {
   userData: {
     readTextFile(request: { path: string }): Promise<string>
@@ -22,9 +28,11 @@ export interface SpendServiceDependencies {
   external: TranscriptFileSystem
   projects: { list(): Promise<Array<{ id: string; name: string; path: string }>> }
   tasks: {
-    list(request?: { projectId?: string | null; includeDone?: boolean }): Promise<
-      Array<{ id: string; title: string | null; initial_prompt: string; project_id: string | null }>
-    >
+    active(projectId: string): Promise<{ tasks: ProjectTask[] }>
+    completed(
+      projectId: string,
+      query: { cursor: string | null },
+    ): Promise<{ tasks: ProjectTask[]; nextCursor: string | null }>
     getWorkspace(taskId: string): Promise<{ workspace_path: string; project_id: string } | null>
   }
   agentSessions: {
@@ -49,10 +57,8 @@ export interface SpendService {
   getTaskSpend(taskId: string): Promise<TaskSpendData>
 }
 
-function taskTitle(task: { title: string | null; initial_prompt: string }): string {
-  const explicit = task.title?.trim()
-  if (explicit) return explicit
-  const firstLine = task.initial_prompt.split('\n', 1)[0]!.trim()
+function taskTitle(title: string): string {
+  const firstLine = title.split('\n', 1)[0]!.trim()
   if (firstLine.length === 0) return 'Untitled task'
   return firstLine.length > 80 ? `${firstLine.slice(0, 79)}…` : firstLine
 }
@@ -112,9 +118,21 @@ export function createSpendService(dependencies: SpendServiceDependencies): Spen
     return sessions
   }
 
+  async function loadProjectTasks(projectId: string): Promise<ProjectTask[]> {
+    const { tasks } = await dependencies.tasks.active(projectId)
+    const all = [...tasks]
+    let cursor: string | null = null
+    do {
+      const page = await dependencies.tasks.completed(projectId, { cursor })
+      all.push(...page.tasks)
+      cursor = page.nextCursor
+    } while (cursor)
+    return all
+  }
+
   async function loadAttributionMap(index: SpendIndex): Promise<AttributionMap> {
     const projects = await dependencies.projects.list()
-    const tasks = await dependencies.tasks.list()
+    const tasks = (await Promise.all(projects.map((project) => loadProjectTasks(project.id)))).flat()
     const sessions = await loadSessions(index)
     const resolved = await Promise.all(
       tasks.map(async (task) => {
@@ -123,8 +141,8 @@ export function createSpendService(dependencies: SpendServiceDependencies): Spen
           if (!workspace?.workspace_path) return null
           return {
             id: task.id,
-            title: taskTitle(task),
-            projectId: task.project_id ?? workspace.project_id,
+            title: taskTitle(task.title),
+            projectId: task.projectId,
             workspacePath: workspace.workspace_path,
           }
         } catch {

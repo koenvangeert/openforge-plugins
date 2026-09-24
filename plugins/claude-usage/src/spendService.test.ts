@@ -58,9 +58,8 @@ function harness(overrides: Partial<SpendServiceDependencies> = {}) {
     external: fakeExternal({ [TRANSCRIPT]: usageLine('msg_1', 1_000_000, '/worktrees/KVG-1') }),
     projects: { list: vi.fn(async () => [{ id: 'P-1', name: 'frontend', path: '/code/frontend' }]) },
     tasks: {
-      list: vi.fn(async () => [
-        { id: 'T-1', title: 'Fix the panel', initial_prompt: 'ignored', project_id: 'P-1' },
-      ]),
+      active: vi.fn(async () => ({ tasks: [{ id: 'T-1', title: 'Fix the panel', projectId: 'P-1' }] })),
+      completed: vi.fn(async () => ({ tasks: [], nextCursor: null })),
       getWorkspace: vi.fn(async () => ({ workspace_path: '/worktrees/KVG-1', project_id: 'P-1' })),
     },
     agentSessions: { list: vi.fn(async () => sessionPage([{ providerSessionId: SESSION, taskId: 'T-1' }])) },
@@ -115,18 +114,23 @@ describe('createSpendService', () => {
     expect((await reopened.service.getDashboard()).totals.allTime.total).toBe(25)
   })
 
-  it('falls back to the task prompt when a task has no explicit title', async () => {
+  it('attributes spend to a completed task beyond the first completed page', async () => {
+    const completed = vi.fn(async (_projectId: string, { cursor }: { cursor: string | null }) => (
+      cursor === null
+        ? { tasks: [], nextCursor: 'page-2' }
+        : { tasks: [{ id: 'T-1', title: 'Shipped panel fix', projectId: 'P-1' }], nextCursor: null }
+    ))
     const { service } = harness({
       tasks: {
-        list: vi.fn(async () => [
-          { id: 'T-1', title: null, initial_prompt: 'Stop the panel flashing\nmore detail', project_id: 'P-1' },
-        ]),
+        active: vi.fn(async () => ({ tasks: [] })),
+        completed,
         getWorkspace: vi.fn(async () => ({ workspace_path: '/worktrees/KVG-1', project_id: 'P-1' })),
       },
     })
     await service.refresh()
 
-    expect((await service.getDashboard()).byTask[0]!.label).toBe('Stop the panel flashing')
+    expect((await service.getDashboard()).byTask[0]!.label).toBe('Shipped panel fix')
+    expect(completed).toHaveBeenCalledWith('P-1', { cursor: 'page-2' })
   })
 
   it('still reports totals when attribution cannot be resolved', async () => {
