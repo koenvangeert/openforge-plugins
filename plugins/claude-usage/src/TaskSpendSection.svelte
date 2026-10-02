@@ -36,24 +36,20 @@
   })
 </script>
 
-<!--
-  Header geometry and inset are the host's own info-section contract, copied
-  class for class so this row lines up with Details and Dependencies.
--->
-<section
-  data-task-info-card="claude-usage"
-  data-card-sizing="natural"
-  class="shrink-0 overflow-hidden rounded-lg border border-base-300/70 bg-base-100 [--section-inset:0.75rem] [--section-caret-column:1.25rem]"
-  aria-label="Claude usage"
->
-  <div class="flex items-center gap-2 px-[var(--section-inset)] py-2 text-sm">
-    <!-- Holds the caret column the collapsible sections occupy, so this row's icon
-         lines up with theirs instead of sitting one column to the left. -->
-    <span class="w-3 shrink-0" aria-hidden="true"></span>
-    <span class="flex shrink-0 items-center text-base-content/50" aria-hidden="true">
-      <ChartColumnBig size={14} />
-    </span>
-    <span class="min-w-0 flex-1 truncate font-semibold text-base-content">Claude usage</span>
-    <span class="shrink-0 tabular-nums text-base-content">{amount}</span>
+<section data-task-info-card="claude-usage" data-card-sizing="natural" data-card-layout="row" aria-label="Claude usage">
+  <div class="row">
+    <span class="caret-column" aria-hidden="true"></span>
+    <span class="icon" aria-hidden="true"><ChartColumnBig size={14} /></span>
+    <h3>Claude usage</h3>
+    <span class="amount">{amount}</span>
   </div>
 </section>
+
+<style>
+  section { --section-inset: .75rem; flex-shrink: 0; overflow: hidden; padding: var(--of-space4) var(--section-inset); border: var(--of-border-width) solid color-mix(in oklab, var(--of-border) 70%, transparent); border-radius: var(--of-radius-control); background: var(--of-surface); }
+  .row { display: flex; align-items: center; gap: var(--of-space4); font-size: var(--of-text-md); line-height: 1.25rem; color: var(--of-text); }
+  .caret-column { width: .75rem; flex-shrink: 0; }
+  .icon { display: flex; flex-shrink: 0; align-items: center; color: color-mix(in oklab, var(--of-text) 50%, transparent); }
+  h3 { margin: 0; min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: inherit; font-weight: 600; }
+  .amount { flex-shrink: 0; font-variant-numeric: tabular-nums; }
+</style>

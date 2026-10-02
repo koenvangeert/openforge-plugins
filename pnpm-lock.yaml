@@ -85,8 +85,8 @@ importers:
         specifier: ^1.25.0
         version: 1.25.0(svelte@5.57.0)
       '@openforge-app/plugin-sdk':
-        specifier: ^0.3.2
-        version: 0.3.2(svelte@5.57.0)
+        specifier: link:../../../openforge/packages/plugin-sdk
+        version: link:../../../openforge/packages/plugin-sdk
     devDependencies:
       '@sveltejs/vite-plugin-svelte':
         specifier: 'catalog:'
@@ -196,8 +196,8 @@ importers:
         specifier: ^1.25.0
         version: 1.25.0(svelte@5.57.0)
       '@openforge-app/plugin-sdk':
-        specifier: ^0.3.2
-        version: 0.3.2(svelte@5.57.0)
+        specifier: link:../../../openforge/packages/plugin-sdk
+        version: link:../../../openforge/packages/plugin-sdk
     devDependencies:
       '@sveltejs/vite-plugin-svelte':
         specifier: 'catalog:'

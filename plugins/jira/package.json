@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@lucide/svelte": "^1.25.0",
-    "@openforge-app/plugin-sdk": "^0.3.2"
+    "@openforge-app/plugin-sdk": "link:../../../openforge/packages/plugin-sdk"
   },
   "peerDependencies": {
     "svelte": "^5.0.0"
@@ -32,6 +32,7 @@
     "description": "Discover Jira Cloud issues and create linked OpenForge tasks",
     "icon": "file-text",
     "frontend": "./dist/frontend.js",
+    "frontendStyles": ["./dist/plugin-jira.css"],
     "backend": "./dist/backend.js",
     "requires": [
       "backend",

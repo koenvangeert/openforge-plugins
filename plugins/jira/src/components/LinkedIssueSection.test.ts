@@ -22,6 +22,7 @@ function makeTaskDetail(taskId: string, prompt = ''): TaskDetail {
     dependsOn: [],
     createdAt: 0,
     updatedAt: 0,
+    completedAt: null,
     promptPreview: '',
     labels: [],
     sourceTicketUrl: null,
