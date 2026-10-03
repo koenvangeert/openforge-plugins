@@ -9,12 +9,14 @@
   import CreateDialog from './CreateDialog.svelte'
   import ColumnSettingsModal from './ColumnSettingsModal.svelte'
   import SearchInput from './SearchInput.svelte'
+  import TaskAssociationFilter from './TaskAssociationFilter.svelte'
   import ValueFilter from './ValueFilter.svelte'
   import { useIssuesBoard } from './useIssuesBoard.svelte'
   import { useIssuesColumnSettings } from './useIssuesColumnSettings.svelte'
   import { useIssuesCreateDialog } from './useIssuesCreateDialog.svelte'
   import { useIssuesDrawer } from './useIssuesDrawer.svelte'
   import { useIssuesSearch } from './useIssuesSearch.svelte'
+  import { useIssuesTaskFilter } from './useIssuesTaskFilter.svelte'
   import { useIssuesValueFilter } from './useIssuesValueFilter.svelte'
   import { isSearchFocusKey, isTypingTarget } from '../lib/searchHotkey'
 
@@ -32,12 +34,12 @@
   // `api` is stable for the plugin view lifetime; capture it once in the controller.
   // svelte-ignore state_referenced_locally
   const issues = useIssuesBoard(api)
-  // The drawer and search hooks both read the unfiltered board: the drawer so paging
-  // through a clicked column's queue is unaffected by later query changes, search so
-  // it always has the full set to filter from.
+  // The drawer reads the full board so paging through a clicked column stays on the
+  // queue captured at click time. Search runs inside the task filter, then value
+  // filter runs inside search.
   const drawer = useIssuesDrawer(() => issues.board)
-  const search = useIssuesSearch(() => issues.board)
-  // Value filter reads the search-filtered board and filters by selected values
+  const taskFilter = useIssuesTaskFilter(() => issues.board)
+  const search = useIssuesSearch(() => taskFilter.board)
   const valueFilter = useIssuesValueFilter(() => search.board)
   // svelte-ignore state_referenced_locally
   const createDialog = useIssuesCreateDialog(api, issues)
@@ -54,6 +56,7 @@
       createDialog.close()
       columnSettings.close()
       search.clear()
+      taskFilter.clear()
       valueFilter.clear()
     }
   })
@@ -172,6 +175,13 @@
     {/snippet}
   </PluginPageHeader>
 
+  {#if issues.board}
+    <div class="flex items-center gap-2 shrink-0 border-b border-base-300 px-4 py-2 sm:px-6">
+      <span class="text-xs font-medium uppercase tracking-wide text-base-content/45">OpenForge task</span>
+      <TaskAssociationFilter mode={taskFilter.mode} onChange={taskFilter.setMode} />
+    </div>
+  {/if}
+
   <div class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
     <PluginViewState
       loading={issues.isLoading && !issues.board}
@@ -182,7 +192,16 @@
       emptyTitle="Select a project to view its issues."
     >
       {#if issues.board}
-        {#if search.active && search.matchCount === 0}
+        {#if taskFilter.isEmpty}
+          <div class="flex flex-col items-center justify-center h-full gap-3 text-center px-4">
+            <p class="text-sm text-base-content/60 m-0">
+              {taskFilter.mode === 'without'
+                ? 'Every issue already has an OpenForge task.'
+                : 'No issue has an OpenForge task.'}
+            </p>
+            <button class="btn btn-sm" onclick={taskFilter.clear}>Show all</button>
+          </div>
+        {:else if search.active && search.matchCount === 0}
           <div class="flex flex-col items-center justify-center h-full gap-3 text-center px-4">
             <p class="text-sm text-base-content/60 m-0">No issues match "{search.query}".</p>
             <button class="btn btn-sm" onclick={search.clear}>Clear</button>
