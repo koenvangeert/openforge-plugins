@@ -37,6 +37,7 @@ function props(onAddCard = vi.fn()) {
     onStart: vi.fn(),
     onAddCard,
     onMoveCard: vi.fn(),
+    onToggleCollapsed: vi.fn(),
   }
 }
 
@@ -154,6 +155,84 @@ describe('Board drag and drop', () => {
     const cardWrapper = screen.getByText('Fix the thing').closest('[draggable]') as HTMLElement
 
     expect(cardWrapper.getAttribute('draggable')).toBe('false')
+  })
+})
+
+describe('Board column collapse', () => {
+  const childCard: BoardCard = { ...bugCard, issueNumber: 2, title: 'Child thing', parentIssueNumber: 1 }
+  const columnsWithTree: BoardColumn[] = [
+    { label: 'bug', isOther: false, title: 'bug', color: null, cards: [{ ...bugCard, subIssues: [childCard] }] },
+    { label: '', isOther: true, title: 'No label / Other', color: null, cards: [] },
+  ]
+
+  it('asks to collapse an expanded column', async () => {
+    const onToggleCollapsed = vi.fn()
+    render(Board, { props: { ...props(), columns: columnsWithCard, onToggleCollapsed } })
+
+    const toggle = screen.getByRole('button', { name: 'Collapse bug' })
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    await fireEvent.click(toggle)
+
+    expect(onToggleCollapsed).toHaveBeenCalledWith('bug')
+  })
+
+  it('shows only the header and the issue count of a collapsed column', async () => {
+    const onToggleCollapsed = vi.fn()
+    const { container } = render(Board, {
+      props: { ...props(), columns: columnsWithTree, collapsedLabels: new Set(['bug']), onToggleCollapsed },
+    })
+
+    expect(screen.queryByText('Fix the thing')).toBeNull()
+    const bugColumn = container.querySelectorAll('.issues-column')[0] as HTMLElement
+    expect(bugColumn.children).toHaveLength(1)
+    expect(screen.getByTitle('2 issues').textContent).toBe('2')
+    // The other column stays open.
+    expect(screen.getByText('No issues')).toBeTruthy()
+
+    const toggle = screen.getByRole('button', { name: 'Expand bug' })
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    await fireEvent.click(toggle)
+    expect(onToggleCollapsed).toHaveBeenCalledWith('bug')
+  })
+
+  it('collapses the Other column by its empty label', () => {
+    render(Board, { props: { ...props(), columns: columnsWithCard, collapsedLabels: new Set(['']) } })
+
+    expect(screen.getByRole('button', { name: 'Expand No label / Other' })).toBeTruthy()
+    expect(screen.queryByText('No issues')).toBeNull()
+    expect(screen.getByText('Fix the thing')).toBeTruthy()
+  })
+
+  it('counts only filter results, not cards kept as context', () => {
+    render(Board, {
+      props: {
+        ...props(),
+        columns: columnsWithTree,
+        collapsedLabels: new Set(['bug']),
+        isResult: (card: BoardCard) => card.issueNumber === 2,
+      },
+    })
+
+    expect(screen.getByTitle('1 issue').textContent).toBe('1')
+  })
+
+  it('moves a card dropped on the header of a collapsed column', async () => {
+    const onMoveCard = vi.fn()
+    const { container } = render(Board, {
+      props: { ...props(), columns: columnsWithCard, collapsedLabels: new Set(['']), onMoveCard },
+    })
+
+    const cardWrapper = screen.getByText('Fix the thing').closest('[draggable]') as HTMLElement
+    const otherHeader = container.querySelectorAll('.issues-column')[1].children[0] as HTMLElement
+
+    const dt = fakeDataTransfer()
+    await fireEvent(cardWrapper, dragEvent('dragstart', dt))
+    await fireEvent(otherHeader, dragEvent('dragover', dt))
+    expect(otherHeader.className).toContain('outline-primary')
+    await fireEvent(otherHeader, dragEvent('drop', dt))
+
+    expect(onMoveCard).toHaveBeenCalledWith(1, 'bug', '')
+    expect(otherHeader.className).not.toContain('outline-primary')
   })
 })
 
