@@ -12,6 +12,7 @@
   import TaskAssociationFilter from './TaskAssociationFilter.svelte'
   import ValueFilter from './ValueFilter.svelte'
   import { useIssuesBoard } from './useIssuesBoard.svelte'
+  import { useIssuesCollapsedColumns } from './useIssuesCollapsedColumns.svelte'
   import { useIssuesColumnSettings } from './useIssuesColumnSettings.svelte'
   import { useIssuesCreateDialog } from './useIssuesCreateDialog.svelte'
   import { useIssuesDrawer } from './useIssuesDrawer.svelte'
@@ -19,6 +20,7 @@
   import { useIssuesTaskFilter } from './useIssuesTaskFilter.svelte'
   import { useIssuesValueFilter } from './useIssuesValueFilter.svelte'
   import { isSearchFocusKey, isTypingTarget } from '../lib/searchHotkey'
+  import { isFilterResult } from '../lib/search'
 
   interface Props {
     api: FrontendOpenForgeAPI
@@ -44,6 +46,8 @@
   // svelte-ignore state_referenced_locally
   const createDialog = useIssuesCreateDialog(api, issues)
   const columnSettings = useIssuesColumnSettings(issues)
+  // svelte-ignore state_referenced_locally
+  const collapsedColumns = useIssuesCollapsedColumns(api)
 
   let searchInputEl = $state<HTMLInputElement | null>(null)
 
@@ -58,6 +62,7 @@
       search.clear()
       taskFilter.clear()
       valueFilter.clear()
+      void collapsedColumns.activateProject(pid)
     }
   })
 
@@ -217,6 +222,9 @@
             repo={issues.repoSlug}
             busy={issues.busy}
             terms={search.terms}
+            collapsedLabels={collapsedColumns.collapsedLabels}
+            onToggleCollapsed={collapsedColumns.toggle}
+            isResult={(card) => isFilterResult(card, search.terms, valueFilter.selectedValues)}
             onCardClick={drawer.openFrom}
             onOpenUrl={openUrl}
             onOpenTask={openTask}

@@ -1,8 +1,7 @@
 <script lang="ts">
-  import { Plus } from '@lucide/svelte'
+  import { ChevronRight, Plus } from '@lucide/svelte'
   import type { BoardCard, BoardColumn } from '../lib/board'
-  import type { SearchTerms } from '../lib/search'
-  import { flattenCards } from '../lib/board'
+  import { countColumnResults, type SearchTerms } from '../lib/search'
   import Card from './Card.svelte'
   import ColorPicker from './ColorPicker.svelte'
 
@@ -22,6 +21,15 @@
     onMoveCard: (issueNumber: number, fromLabel: string, toLabel: string) => void
     /** Active search terms, forwarded to each Card for highlighting. */
     terms?: SearchTerms
+    /** Labels of the columns that show only their header. */
+    collapsedLabels?: ReadonlySet<string>
+    onToggleCollapsed: (label: string) => void
+    /**
+     * Whether a card is a filter result, not only context around one. A column's count
+     * includes only these cards, so it shows the filtered total while the column is
+     * collapsed.
+     */
+    isResult?: (card: BoardCard) => boolean
   }
 
   let {
@@ -38,6 +46,9 @@
     onAddCard,
     onMoveCard,
     terms = [],
+    collapsedLabels = new Set<string>(),
+    onToggleCollapsed,
+    isResult = () => true,
   }: Props = $props()
 
   let openColorLabel = $state<string | null>(null)
@@ -69,6 +80,10 @@
   // being dragged over it — the source column never lights up as its own target.
   function dropTargetClass(label: string): string {
     return dragOverLabel === label ? 'outline-2 outline-dashed outline-primary bg-primary/10' : ''
+  }
+
+  function issueCountLabel(count: number): string {
+    return count === 1 ? '1 issue' : `${count} issues`
   }
 
   function pickColor(label: string, color: string) {
@@ -134,11 +149,34 @@
 
 <div class="issues-board p-4">
   {#each columns as column (column.label || 'other')}
+    {@const collapsed = collapsedLabels.has(column.label)}
+    {@const count = countColumnResults(column.cards, isResult)}
+    <!-- The whole column is the drop target for a dragged card, so a collapsed column
+         takes a drop on its header. There's no native ARIA role for this, mirroring the
+         same tradeoff Card.svelte makes for its pointer-only click target. -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       class="issues-column flex-col rounded-box border border-base-300 bg-base-200"
       style={columnTint(column.color)}
+      ondragover={(e) => handleDragOver(e, column)}
+      ondragleave={() => handleDragLeave(column)}
+      ondrop={(e) => handleDrop(e, column)}
     >
-      <div class="flex items-center gap-2 px-3 py-2 border-b border-base-300/60">
+      <div
+        class="flex items-center gap-2 py-2 pl-1.5 pr-3 transition-colors {collapsed
+          ? `rounded-box ${dropTargetClass(column.label)}`
+          : 'border-b border-base-300/60'}"
+      >
+        <button
+          type="button"
+          class="btn btn-ghost btn-xs btn-square shrink-0"
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? `Expand ${column.title}` : `Collapse ${column.title}`}
+          title={collapsed ? `Expand "${column.title}"` : `Collapse "${column.title}"`}
+          onclick={() => onToggleCollapsed(column.label)}
+        >
+          <ChevronRight size={14} class="transition-transform {collapsed ? '' : 'rotate-90'}" />
+        </button>
         {#if !column.isOther}
           <span class="relative inline-flex shrink-0">
             <button
@@ -162,7 +200,7 @@
           </span>
         {/if}
         <span class="text-sm font-semibold text-base-content truncate">{column.title}</span>
-        <span class="badge badge-ghost badge-sm ml-auto shrink-0">{flattenCards(column.cards).length}</span>
+        <span class="badge badge-ghost badge-sm ml-auto shrink-0" title={issueCountLabel(count)}>{count}</span>
         <button
           type="button"
           class="btn btn-ghost btn-xs btn-square shrink-0"
@@ -174,48 +212,44 @@
           <Plus size={14} />
         </button>
       </div>
-      <!-- Drop target for a dragged card; there's no native ARIA role for this, mirroring
-           the same tradeoff Card.svelte makes for its pointer-only click target. -->
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div
-        class="flex flex-col gap-2 p-2 overflow-y-auto rounded-box transition-colors {dropTargetClass(
-          column.label,
-        )}"
-        ondragover={(e) => handleDragOver(e, column)}
-        ondragleave={() => handleDragLeave(column)}
-        ondrop={(e) => handleDrop(e, column)}
-      >
-        {#each column.cards as card (card.issueNumber)}
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div
-            draggable={!busy}
-            class="issue-group cursor-grab active:cursor-grabbing"
-            class:opacity-40={draggedCard?.issueNumber === card.issueNumber}
-            ondragstart={(e) => handleDragStart(e, card, column)}
-            ondragend={handleDragEnd}
-          >
-            <Card
-              {card}
-              {repo}
-              {terms}
-              {busy}
-              expanded={isExpanded(card.issueNumber)}
-              {isExpanded}
-              onToggleExpand={toggleExpanded}
-              onOpen={() => onCardClick(card, column)}
-              onOpenChild={(child) => onCardClick(child, column)}
-              {onOpenUrl}
-              {onOpenTask}
-              {onCopyLink}
-              {onSetValue}
-              onStart={() => onStart(card)}
-            />
-          </div>
-        {/each}
-        {#if column.cards.length === 0}
-          <p class="text-xs text-base-content/40 text-center py-4 m-0">No issues</p>
-        {/if}
-      </div>
+      {#if !collapsed}
+        <div
+          class="flex flex-col gap-2 p-2 overflow-y-auto rounded-box transition-colors {dropTargetClass(
+            column.label,
+          )}"
+        >
+          {#each column.cards as card (card.issueNumber)}
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div
+              draggable={!busy}
+              class="issue-group cursor-grab active:cursor-grabbing"
+              class:opacity-40={draggedCard?.issueNumber === card.issueNumber}
+              ondragstart={(e) => handleDragStart(e, card, column)}
+              ondragend={handleDragEnd}
+            >
+              <Card
+                {card}
+                {repo}
+                {terms}
+                {busy}
+                expanded={isExpanded(card.issueNumber)}
+                {isExpanded}
+                onToggleExpand={toggleExpanded}
+                onOpen={() => onCardClick(card, column)}
+                onOpenChild={(child) => onCardClick(child, column)}
+                {onOpenUrl}
+                {onOpenTask}
+                {onCopyLink}
+                {onSetValue}
+                onStart={() => onStart(card)}
+              />
+            </div>
+          {/each}
+          {#if column.cards.length === 0}
+            <p class="text-xs text-base-content/40 text-center py-4 m-0">No issues</p>
+          {/if}
+        </div>
+      {/if}
     </div>
   {/each}
 </div>
