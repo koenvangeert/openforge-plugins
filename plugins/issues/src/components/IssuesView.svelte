@@ -6,6 +6,7 @@
   import PluginViewState from '@openforge-app/plugin-sdk/ui/PluginViewState.svelte'
   import Board from './Board.svelte'
   import CardDrawer from './CardDrawer.svelte'
+  import DependencyFilter from './DependencyFilter.svelte'
   import CreateDialog from './CreateDialog.svelte'
   import ColumnSettingsModal from './ColumnSettingsModal.svelte'
   import SearchInput from './SearchInput.svelte'
@@ -16,6 +17,7 @@
   import { useIssuesColumnSettings } from './useIssuesColumnSettings.svelte'
   import { useIssuesCreateDialog } from './useIssuesCreateDialog.svelte'
   import { useIssuesDrawer } from './useIssuesDrawer.svelte'
+  import { useIssuesDependencyFilter } from './useIssuesDependencyFilter.svelte'
   import { useIssuesSearch } from './useIssuesSearch.svelte'
   import { useIssuesTaskFilter } from './useIssuesTaskFilter.svelte'
   import { useIssuesValueFilter } from './useIssuesValueFilter.svelte'
@@ -37,11 +39,12 @@
   // svelte-ignore state_referenced_locally
   const issues = useIssuesBoard(api)
   // The drawer reads the full board so paging through a clicked column stays on the
-  // queue captured at click time. Search runs inside the task filter, then value
-  // filter runs inside search.
+  // queue captured at click time. Task filter, then dependency filter, then search,
+  // then value filter. Each step sees the board the previous step produced.
   const drawer = useIssuesDrawer(() => issues.board)
   const taskFilter = useIssuesTaskFilter(() => issues.board)
-  const search = useIssuesSearch(() => taskFilter.board)
+  const dependencyFilter = useIssuesDependencyFilter(() => taskFilter.board)
+  const search = useIssuesSearch(() => dependencyFilter.board)
   const valueFilter = useIssuesValueFilter(() => search.board)
   // svelte-ignore state_referenced_locally
   const createDialog = useIssuesCreateDialog(api, issues)
@@ -61,6 +64,7 @@
       columnSettings.close()
       search.clear()
       taskFilter.clear()
+      dependencyFilter.clear()
       valueFilter.clear()
       void collapsedColumns.activateProject(pid)
     }
@@ -181,9 +185,11 @@
   </PluginPageHeader>
 
   {#if issues.board}
-    <div class="flex items-center gap-2 shrink-0 border-b border-base-300 px-4 py-2 sm:px-6">
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-2 shrink-0 border-b border-base-300 px-4 py-2 sm:px-6">
       <span class="text-xs font-medium uppercase tracking-wide text-base-content/45">OpenForge task</span>
       <TaskAssociationFilter mode={taskFilter.mode} onChange={taskFilter.setMode} />
+      <span class="text-xs font-medium uppercase tracking-wide text-base-content/45">Dependencies</span>
+      <DependencyFilter mode={dependencyFilter.mode} onChange={dependencyFilter.setMode} />
     </div>
   {/if}
 
@@ -205,6 +211,17 @@
                 : 'No issue has an OpenForge task.'}
             </p>
             <button class="btn btn-sm" onclick={taskFilter.clear}>Show all</button>
+          </div>
+        {:else if dependencyFilter.isEmpty}
+          <div class="flex flex-col items-center justify-center h-full gap-3 text-center px-4">
+            <p class="text-sm text-base-content/60 m-0">
+              {dependencyFilter.mode === 'blocked'
+                ? 'No issue is blocked by another issue.'
+                : dependencyFilter.mode === 'blocking'
+                  ? 'No issue blocks another issue.'
+                  : 'Every issue is blocked by another issue.'}
+            </p>
+            <button class="btn btn-sm" onclick={dependencyFilter.clear}>Show all</button>
           </div>
         {:else if search.active && search.matchCount === 0}
           <div class="flex flex-col items-center justify-center h-full gap-3 text-center px-4">

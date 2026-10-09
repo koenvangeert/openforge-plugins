@@ -372,3 +372,80 @@ describe('Board sub-issues', () => {
     expect(screen.getByRole('button', { name: 'Issue #506: item a' })).toBeTruthy()
   })
 })
+
+describe('Board dependency arrows', () => {
+  function box(left: number, top: number, width: number, height: number): DOMRect {
+    return {
+      x: left,
+      y: top,
+      left,
+      top,
+      width,
+      height,
+      right: left + width,
+      bottom: top + height,
+      toJSON: () => ({}),
+    } as DOMRect
+  }
+
+  it('draws a rounded arrow from the blocking issue to the blocked issue', async () => {
+    const spy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (this.dataset.issueNumber === '12') return box(0, 0, 120, 48)
+      if (this.dataset.issueNumber === '10') return box(360, 30, 120, 48)
+      return box(0, 0, 800, 500)
+    })
+    const blocked: BoardCard = {
+      ...bugCard,
+      issueNumber: 10,
+      title: 'Waiting',
+      labels: ['feature'],
+      blockedBy: [
+        {
+          number: 12,
+          title: 'Schema',
+          htmlUrl: 'https://github.com/octo/cat/issues/12',
+          state: 'open',
+          repo: 'octo/cat',
+        },
+      ],
+      blockedByOpenCount: 1,
+    }
+    const blocker: BoardCard = {
+      ...bugCard,
+      issueNumber: 12,
+      title: 'Schema',
+      blocking: [
+        {
+          number: 10,
+          title: 'Waiting',
+          htmlUrl: 'https://github.com/octo/cat/issues/10',
+          state: 'open',
+          repo: 'octo/cat',
+        },
+      ],
+      blockingOpenCount: 1,
+    }
+    const onCardClick = vi.fn()
+    const { container } = render(Board, {
+      props: {
+        ...props(),
+        onCardClick,
+        columns: [
+          { label: 'bug', isOther: false, title: 'bug', color: null, cards: [blocker] },
+          { label: 'feature', isOther: false, title: 'feature', color: null, cards: [blocked] },
+        ],
+      },
+    })
+
+    const arrow = container.querySelector('.dep-arrow')
+    expect(arrow?.getAttribute('d')).toContain('C ')
+    expect(arrow?.getAttribute('marker-end')).toContain('issues-dep-arrow')
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Show #12 Schema, which blocks this issue' }))
+
+    expect(onCardClick).not.toHaveBeenCalled()
+    expect(container.querySelector('[data-issue-number="12"]')?.classList.contains('issues-dep-focus')).toBe(true)
+    expect(arrow?.classList.contains('is-active')).toBe(true)
+    spy.mockRestore()
+  })
+})

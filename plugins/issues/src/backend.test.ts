@@ -145,6 +145,57 @@ describe('issues_get_board', () => {
     ])
   })
 
+  it('attaches open issue dependencies from the same GraphQL read', async () => {
+    const registry = await setup()
+    stubGitHub({
+      '/issues?state=open': OPEN_ISSUES,
+      '/labels?per_page': REPO_LABELS,
+      '/graphql': {
+        data: {
+          repository: {
+            issues: {
+              pageInfo: { hasNextPage: false, endCursor: null },
+              nodes: [
+                {
+                  number: 1,
+                  closedByPullRequestsReferences: { nodes: [] },
+                  issueDependenciesSummary: { blockedBy: 1, blocking: 0 },
+                  blockedBy: {
+                    nodes: [
+                      {
+                        number: 4,
+                        title: 'Schema',
+                        state: 'OPEN',
+                        url: 'https://github.com/acme/repo/issues/4',
+                        repository: { nameWithOwner: 'acme/repo' },
+                      },
+                    ],
+                  },
+                  blocking: { nodes: [] },
+                },
+              ],
+            },
+          },
+        },
+      },
+    })
+
+    const board = await invoke<IssuesBoard>(registry, 'issues_get_board', { projectId: 'P-1' })
+
+    expect(board.issues[0]?.blocked_by).toEqual([
+      {
+        number: 4,
+        title: 'Schema',
+        html_url: 'https://github.com/acme/repo/issues/4',
+        state: 'open',
+        repo: 'acme/repo',
+      },
+    ])
+    expect(board.issues[0]?.blocked_by_open_count).toBe(1)
+    expect(board.issues[0]?.blocking).toEqual([])
+    expect(board.issues[0]?.blocking_open_count).toBe(0)
+  })
+
   it('fails with an actionable message when no GitHub token is configured', async () => {
     const registry = await setup({ token: null })
     stubGitHub({ '/issues?state=open': OPEN_ISSUES, '/labels?per_page': REPO_LABELS })

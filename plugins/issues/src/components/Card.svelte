@@ -1,8 +1,10 @@
 <script lang="ts">
   import { ChevronDown, ChevronRight, ExternalLink, Copy, Play } from '@lucide/svelte'
   import type { BoardCard } from '../lib/board'
+  import { cardIsBlocked } from '../lib/dependency'
   import { cardExcerpt, type SearchTerms } from '../lib/search'
   import { valueBandColor } from '../lib/valueColor'
+  import DependencyMarks from './DependencyMarks.svelte'
   import HighlightedText from './HighlightedText.svelte'
   import LinkedPullRequestLinks from './LinkedPullRequestLinks.svelte'
   import SubIssueList from './SubIssueList.svelte'
@@ -24,6 +26,10 @@
     onToggleExpand?: (issueNumber: number) => void
     onOpenChild?: (card: BoardCard) => void
     isExpanded?: (issueNumber: number) => boolean
+    /** Scroll a same-repo issue into view. Return false when it is not on the board. */
+    onRevealIssue?: (issueNumber: number) => boolean
+    isDependencyPeer?: (issueNumber: number) => boolean
+    isDependencyFocus?: (issueNumber: number) => boolean
   }
 
   let {
@@ -41,9 +47,13 @@
     onToggleExpand,
     onOpenChild,
     isExpanded,
+    onRevealIssue = () => false,
+    isDependencyPeer = () => false,
+    isDependencyFocus = () => false,
   }: Props = $props()
 
   let issueUrl = $derived(`https://github.com/${repo}/issues/${card.issueNumber}`)
+  let blocked = $derived(cardIsBlocked(card))
   let excerpt = $derived(cardExcerpt(card, terms))
   let valuePickerOpen = $state(false)
 
@@ -75,7 +85,9 @@
 </script>
 
 <article
-  class="card card-compact bg-base-100 border border-base-300 shadow-sm hover:border-primary/50 transition-colors"
+  class="card card-compact border transition-colors {blocked
+    ? 'issue-blocked'
+    : 'bg-base-100 border-base-300 shadow-sm hover:border-primary/50'}"
 >
   <div class="card-body p-3 gap-2">
     <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -87,7 +99,7 @@
       onkeydown={handleKeydown}
     >
       <div class="flex items-start gap-2">
-        <span class="text-sm font-medium text-base-content flex-1 min-w-0 break-words">
+        <span class="issue-title text-sm font-medium flex-1 min-w-0 break-words">
           <HighlightedText text={card.title} {terms} />
         </span>
         <!-- Wrapping stopPropagation keeps every click here — opening the picker,
@@ -123,6 +135,15 @@
            the title row above is what lets the title use the card's full width. -->
       <div class="flex items-center gap-1 flex-wrap">
         <span class="text-xs text-base-content/40">#{card.issueNumber}</span>
+        <DependencyMarks
+          blockedBy={card.blockedBy}
+          blocking={card.blocking}
+          blockedByOpenCount={card.blockedByOpenCount}
+          blockingOpenCount={card.blockingOpenCount}
+          {repo}
+          {onOpenUrl}
+          {onRevealIssue}
+        />
         {#if card.parentIssueNumber !== null}
           <span class="text-xs text-base-content/50">Parent #{card.parentIssueNumber}</span>
         {/if}
@@ -206,10 +227,14 @@
           issues={card.subIssues}
           parentNumber={card.issueNumber}
           {terms}
+          {repo}
           {isExpanded}
           onToggleExpand={onToggleExpand}
           onOpen={onOpenChild}
           {onOpenUrl}
+          {onRevealIssue}
+          isPeer={isDependencyPeer}
+          isFocus={isDependencyFocus}
         />
       {/if}
     {/if}
@@ -217,6 +242,25 @@
 </article>
 
 <style>
+  .issue-title {
+    color: var(--color-base-content);
+  }
+
+  /* A blocked issue waits. The gray surface marks that end of a dependency arrow. */
+  .issue-blocked {
+    background-color: color-mix(in srgb, var(--color-base-content) 7%, var(--color-base-200));
+    border-color: color-mix(in srgb, var(--color-base-content) 16%, var(--color-base-300));
+    box-shadow: none;
+  }
+
+  .issue-blocked:hover {
+    border-color: color-mix(in srgb, var(--color-base-content) 32%, var(--color-base-300));
+  }
+
+  .issue-blocked .issue-title {
+    color: color-mix(in srgb, var(--color-base-content) 68%, var(--color-base-100));
+  }
+
   /* Task id and linked-PR chips share one hover/focus treatment so they read as the same control. */
   :global(.issue-meta-chip) {
     transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;

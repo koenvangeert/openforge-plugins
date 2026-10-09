@@ -2,6 +2,8 @@
   import { ChevronDown, ChevronRight } from '@lucide/svelte'
   import type { BoardCard } from '../lib/board'
   import { cardExcerpt, type SearchTerms } from '../lib/search'
+  import { cardIsBlocked } from '../lib/dependency'
+  import DependencyMarks from './DependencyMarks.svelte'
   import HighlightedText from './HighlightedText.svelte'
   import LinkedPullRequestLinks from './LinkedPullRequestLinks.svelte'
   import SubIssueList from './SubIssueList.svelte'
@@ -14,9 +16,25 @@
     onOpenUrl: (url: string) => void
     isExpanded: (issueNumber: number) => boolean
     onToggleExpand: (issueNumber: number) => void
+    repo?: string
+    onRevealIssue?: (issueNumber: number) => boolean
+    isPeer?: (issueNumber: number) => boolean
+    isFocus?: (issueNumber: number) => boolean
   }
 
-  let { issues, parentNumber, terms = [], onOpen, onOpenUrl, isExpanded, onToggleExpand }: Props = $props()
+  let {
+    issues,
+    parentNumber,
+    terms = [],
+    onOpen,
+    onOpenUrl,
+    isExpanded,
+    onToggleExpand,
+    repo = '',
+    onRevealIssue = () => false,
+    isPeer = () => false,
+    isFocus = () => false,
+  }: Props = $props()
 
   function handleKeydown(event: KeyboardEvent, card: BoardCard) {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -60,6 +78,10 @@
         {/if}
         <div
           class="sub-issue-row"
+          class:issue-blocked={cardIsBlocked(issue)}
+          class:issues-dep-focus={isFocus(issue.issueNumber)}
+          class:issues-dep-peer={isPeer(issue.issueNumber)}
+          data-issue-number={issue.issueNumber}
           role="button"
           tabindex="0"
           aria-label={`Issue #${issue.issueNumber}: ${issue.title}`}
@@ -77,6 +99,15 @@
                 aria-label={`${issue.subIssuesSummary.completed} of ${issue.subIssuesSummary.total} sub-issues complete`}
               >{issue.subIssuesSummary.completed}/{issue.subIssuesSummary.total}</span>
             {/if}
+            <DependencyMarks
+              blockedBy={issue.blockedBy}
+              blocking={issue.blocking}
+              blockedByOpenCount={issue.blockedByOpenCount}
+              blockingOpenCount={issue.blockingOpenCount}
+              {repo}
+              {onOpenUrl}
+              {onRevealIssue}
+            />
             <LinkedPullRequestLinks pullRequests={issue.linkedPullRequests} {onOpenUrl} />
           </div>
           {#if excerpt}
@@ -91,10 +122,14 @@
           issues={issue.subIssues}
           parentNumber={issue.issueNumber}
           {terms}
+          {repo}
           {isExpanded}
           {onToggleExpand}
           {onOpen}
           {onOpenUrl}
+          {onRevealIssue}
+          {isPeer}
+          {isFocus}
         />
       {/if}
     </li>
@@ -173,6 +208,29 @@
   .sub-issue-row:focus-visible {
     background-color: color-mix(in srgb, var(--color-primary) 10%, transparent);
     outline: none;
+  }
+
+  .sub-issue-row.issue-blocked {
+    background-color: color-mix(in srgb, var(--color-base-content) 7%, var(--color-base-200));
+  }
+
+  .sub-issue-row.issue-blocked:hover,
+  .sub-issue-row.issue-blocked:focus-visible {
+    background-color: color-mix(in srgb, var(--color-base-content) 12%, var(--color-base-200));
+  }
+
+  .sub-issue-row.issue-blocked .sub-issue-title {
+    color: color-mix(in srgb, var(--color-base-content) 68%, var(--color-base-100));
+  }
+
+  /* An unblocked child stays bright when its parent card is gray. */
+  :global(.issue-blocked) .sub-issue-row:not(.issue-blocked) {
+    background-color: var(--color-base-100);
+  }
+
+  :global(.issue-blocked) .sub-issue-row:not(.issue-blocked):hover,
+  :global(.issue-blocked) .sub-issue-row:not(.issue-blocked):focus-visible {
+    background-color: color-mix(in srgb, var(--color-primary) 10%, var(--color-base-100));
   }
 
   .sub-issue-row:focus-visible {
