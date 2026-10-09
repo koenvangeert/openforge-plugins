@@ -7,7 +7,7 @@ import {
   createIssue,
   editIssue,
   listLabels,
-  listLinkedPullRequestsByIssue,
+  listOpenIssueRelations,
   listOpenIssues,
   updateLabelColor,
 } from './lib/github/client'
@@ -74,14 +74,18 @@ export default defineBackendPlugin({
       openforge.backend.registerMethod<{ projectId: string }, IssuesBoard>('issues_get_board', {
         handler: async ({ projectId }) => {
           const { repo, token } = await connect(openforge, projectId)
-          const [issues, labels, linkedByIssue] = await Promise.all([
+          const [issues, labels, relations] = await Promise.all([
             listOpenIssues(token, repo),
             listLabels(token, repo),
-            listLinkedPullRequestsByIssue(token, repo),
+            listOpenIssueRelations(token, repo),
           ])
           const issuesWithLinks = issues.map((issue) => ({
             ...issue,
-            linked_pull_requests: linkedByIssue.get(issue.number) ?? [],
+            linked_pull_requests: relations.linkedPullRequests.get(issue.number) ?? [],
+            blocked_by: relations.blockedBy.get(issue.number) ?? [],
+            blocking: relations.blocking.get(issue.number) ?? [],
+            blocked_by_open_count: relations.blockedByOpenCount.get(issue.number) ?? 0,
+            blocking_open_count: relations.blockingOpenCount.get(issue.number) ?? 0,
           }))
           const [values, columnLabels] = await Promise.all([
             readValues(openforge.storage, projectId),

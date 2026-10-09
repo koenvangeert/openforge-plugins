@@ -254,4 +254,39 @@ describe('CardDrawer', () => {
     const input = screen.getByLabelText('Title') as HTMLInputElement
     expect(input.value).toBe('A different title')
   })
+
+  it('lists the issues that block this one and the issues this one blocks', async () => {
+    const onOpenUrl = vi.fn()
+    renderDrawer({
+      onOpenUrl,
+      card: {
+        ...card,
+        blockedBy: [
+          {
+            number: 12,
+            title: 'Schema',
+            htmlUrl: 'https://github.com/owner/repo/issues/12',
+            state: 'open',
+            repo: 'owner/repo',
+          },
+        ],
+        blockedByOpenCount: 1,
+        blocking: [
+          {
+            number: 20,
+            title: 'Release',
+            htmlUrl: 'https://github.com/other/repo/issues/20',
+            state: 'open',
+            repo: 'other/repo',
+          },
+        ],
+        blockingOpenCount: 1,
+      },
+    })
+
+    expect(screen.getByText('Dependencies')).toBeTruthy()
+    await fireEvent.click(screen.getByRole('button', { name: '#12 Schema' }))
+    expect(onOpenUrl).toHaveBeenCalledWith('https://github.com/owner/repo/issues/12')
+    expect(screen.getByRole('button', { name: 'other/repo#20 Release' })).toBeTruthy()
+  })
 })

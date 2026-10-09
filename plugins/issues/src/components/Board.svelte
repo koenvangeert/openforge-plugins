@@ -1,6 +1,12 @@
 <script lang="ts">
   import { ChevronRight, Plus } from '@lucide/svelte'
-  import type { BoardCard, BoardColumn } from '../lib/board'
+  import { flattenCards, type BoardCard, type BoardColumn } from '../lib/board'
+  import {
+    dependencyEdges,
+    measureBoardArrows,
+    peerIssueNumbers,
+    type DrawnDependencyArrow,
+  } from '../lib/dependencyArrows'
   import { countColumnResults, type SearchTerms } from '../lib/search'
   import Card from './Card.svelte'
   import ColorPicker from './ColorPicker.svelte'
@@ -52,6 +58,10 @@
   }: Props = $props()
 
   let openColorLabel = $state<string | null>(null)
+  let wrapEl = $state<HTMLDivElement | null>(null)
+  let arrows = $state<DrawnDependencyArrow[]>([])
+  let focusedIssue = $state<number | null>(null)
+  const markerId = `issues-dep-arrow-${Math.random().toString(36).slice(2)}`
   // The card currently being dragged, and the label of the column it's hovering over
   // (a valid drop target only — the column it came from never lights up). Column-to-
   // column moves only: this board has no manual card ordering (see lib/board.ts), so
@@ -137,6 +147,71 @@
     if (dragOverLabel === column.label) dragOverLabel = null
   }
 
+  const boardEdges = $derived.by(() => {
+    const cards = columns.flatMap((column) => column.cards)
+    const onBoard = new Set(flattenCards(cards).map((card) => card.issueNumber))
+    return dependencyEdges(cards, repo, onBoard)
+  })
+  const peerNumbers = $derived(
+    focusedIssue === null ? new Set<number>() : new Set(peerIssueNumbers(boardEdges, focusedIssue)),
+  )
+
+  function issueNumberFromTarget(target: EventTarget | null): number | null {
+    if (!(target instanceof Element)) return null
+    const node = target.closest('[data-issue-number]')
+    if (!(node instanceof HTMLElement)) return null
+    const issueNumber = Number(node.dataset.issueNumber)
+    return Number.isInteger(issueNumber) ? issueNumber : null
+  }
+
+  function trackPointer(event: MouseEvent | FocusEvent): void {
+    const issueNumber = issueNumberFromTarget(event.target)
+    if (issueNumber !== null) focusedIssue = issueNumber
+  }
+
+  function clearPointer(event: MouseEvent | FocusEvent): void {
+    const next = event.relatedTarget
+    if (next instanceof Node && wrapEl?.contains(next)) return
+    focusedIssue = null
+  }
+
+  function revealIssue(issueNumber: number): boolean {
+    const node = wrapEl?.querySelector(`[data-issue-number="${issueNumber}"]`)
+    if (!(node instanceof HTMLElement)) return false
+    const reduce =
+      typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    try {
+      node.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: reduce ? 'auto' : 'smooth' })
+    } catch {
+      // Some hosts reject the options object. The highlight still shows the card.
+    }
+    focusedIssue = issueNumber
+    return true
+  }
+
+  function arrowIsActive(arrow: DrawnDependencyArrow): boolean {
+    return focusedIssue !== null && (arrow.blocker === focusedIssue || arrow.blocked === focusedIssue)
+  }
+
+  $effect(() => {
+    const node = wrapEl
+    // Re-measure when the card tree opens or the columns change.
+    void columns
+    void expandedIssueNumbers
+    if (!node) {
+      arrows = []
+      return
+    }
+    const measure = () => {
+      arrows = measureBoardArrows(node, columns, repo)
+    }
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => measure())
+    observer.observe(node)
+    return () => observer.disconnect()
+  })
+
   function handleDrop(event: DragEvent, column: BoardColumn) {
     event.preventDefault()
     const dragged = draggedCard
@@ -147,6 +222,18 @@
   }
 </script>
 
+<!-- The arrow layer is a sibling of the column layout. A child of `.issues-board` would fall into one CSS column. -->
+<!-- Hover and focus only emphasize dependency arrows. This wrapper is not a control. -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+  class="issues-board-wrap"
+  class:issues-dep-active={focusedIssue !== null}
+  bind:this={wrapEl}
+  onmouseover={trackPointer}
+  onmouseleave={clearPointer}
+  onfocusin={trackPointer}
+  onfocusout={clearPointer}
+>
 <div class="issues-board p-4">
   {#each columns as column (column.label || 'other')}
     {@const collapsed = collapsedLabels.has(column.label)}
@@ -224,6 +311,9 @@
               draggable={!busy}
               class="issue-group cursor-grab active:cursor-grabbing"
               class:opacity-40={draggedCard?.issueNumber === card.issueNumber}
+              class:issues-dep-focus={focusedIssue === card.issueNumber}
+              class:issues-dep-peer={peerNumbers.has(card.issueNumber)}
+              data-issue-number={card.issueNumber}
               ondragstart={(e) => handleDragStart(e, card, column)}
               ondragend={handleDragEnd}
             >
@@ -242,6 +332,9 @@
                 {onCopyLink}
                 {onSetValue}
                 onStart={() => onStart(card)}
+                onRevealIssue={revealIssue}
+                isDependencyPeer={(issueNumber) => peerNumbers.has(issueNumber)}
+                isDependencyFocus={(issueNumber) => focusedIssue === issueNumber}
               />
             </div>
           {/each}
@@ -253,6 +346,27 @@
     </div>
   {/each}
 </div>
+{#if arrows.length > 0}
+  <svg class="dep-overlay" aria-hidden="true">
+    <defs>
+      <marker
+        id={markerId}
+        viewBox="0 0 10 10"
+        refX="8"
+        refY="5"
+        markerWidth="7"
+        markerHeight="7"
+        orient="auto"
+      >
+        <path d="M 0 1.2 L 9 5 L 0 8.8 Z" fill="currentColor" />
+      </marker>
+    </defs>
+    {#each arrows as arrow (`${arrow.blocker}->${arrow.blocked}`)}
+      <path class="dep-arrow" class:is-active={arrowIsActive(arrow)} d={arrow.d} marker-end="url(#{markerId})" />
+    {/each}
+  </svg>
+{/if}
+</div>
 
 <style>
   /* Masonry-style packing: trays flow into as many ~300px tracks as fit the width and
@@ -261,9 +375,54 @@
      A constrained height here would make the browser open extra tracks off to the right
      to fit everything within that height, turning the board into sideways-scrolling
      columns instead of a page that only scrolls down. */
+  .issues-board-wrap {
+    position: relative;
+  }
+
   .issues-board {
     columns: 300px;
     column-gap: 0.75rem;
+  }
+
+  .dep-overlay {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    pointer-events: none;
+    z-index: 3;
+    color: color-mix(in srgb, var(--color-warning) 48%, var(--color-base-content));
+  }
+
+  .dep-arrow {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    opacity: 0.55;
+    transition: opacity 150ms ease;
+  }
+
+  .issues-dep-active .dep-arrow {
+    opacity: 0.14;
+  }
+
+  .issues-dep-active .dep-arrow.is-active {
+    opacity: 1;
+    stroke-width: 2.25;
+  }
+
+  :global(.issues-dep-focus),
+  :global(.issues-dep-peer) {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-warning) 62%, var(--color-base-content));
+    border-radius: 0.5rem;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dep-arrow {
+      transition: none;
+    }
   }
 
   .issues-column {

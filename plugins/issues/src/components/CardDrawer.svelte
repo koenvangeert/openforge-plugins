@@ -2,7 +2,8 @@
   import { ExternalLink, Copy, Play } from '@lucide/svelte'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
   import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
-  import type { BoardCard } from '../lib/board'
+  import type { BoardCard, IssueRelation } from '../lib/board'
+  import { relationLabel, unlistedRelationCount } from '../lib/dependency'
   import type { RepoLabel } from '../lib/types'
   import DrawerPager from './DrawerPager.svelte'
 
@@ -67,6 +68,11 @@
   // The exit awaiting confirmation, or null when no unsaved-changes prompt is showing.
   let pending = $state<Exit | null>(null)
   let saveButton = $state<HTMLButtonElement | null>(null)
+
+  function dependencyLine(relation: IssueRelation): string {
+    const label = relationLabel(relation, repo)
+    return relation.title ? `${label} ${relation.title}` : label
+  }
 
   $effect(() => {
     if (card.issueNumber !== lastIssueNumber) {
@@ -250,6 +256,46 @@
           <button class="btn btn-xs btn-ghost" onclick={() => onSetValue(null)} disabled={busy}>clear</button>
         </div>
       </div>
+
+      {#if card.blockedByOpenCount > 0 || card.blockingOpenCount > 0}
+        <div class="flex flex-col gap-2">
+          <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wide">Dependencies</span>
+          {#if card.blockedByOpenCount > 0}
+            <div class="flex flex-col gap-1">
+              <span class="text-sm text-base-content/70">Blocked by</span>
+              {#each card.blockedBy as relation (`${relation.repo}#${relation.number}`)}
+                <button
+                  type="button"
+                  class="btn btn-xs btn-ghost justify-start"
+                  onclick={() => onOpenUrl(relation.htmlUrl)}
+                >{dependencyLine(relation)}</button>
+              {/each}
+              {#if unlistedRelationCount(card.blockedBy, card.blockedByOpenCount) > 0}
+                <p class="text-sm m-0 text-base-content/60">
+                  +{unlistedRelationCount(card.blockedBy, card.blockedByOpenCount)} more on GitHub
+                </p>
+              {/if}
+            </div>
+          {/if}
+          {#if card.blockingOpenCount > 0}
+            <div class="flex flex-col gap-1">
+              <span class="text-sm text-base-content/70">Blocks</span>
+              {#each card.blocking as relation (`${relation.repo}#${relation.number}`)}
+                <button
+                  type="button"
+                  class="btn btn-xs btn-ghost justify-start"
+                  onclick={() => onOpenUrl(relation.htmlUrl)}
+                >{dependencyLine(relation)}</button>
+              {/each}
+              {#if unlistedRelationCount(card.blocking, card.blockingOpenCount) > 0}
+                <p class="text-sm m-0 text-base-content/60">
+                  +{unlistedRelationCount(card.blocking, card.blockingOpenCount)} more on GitHub
+                </p>
+              {/if}
+            </div>
+          {/if}
+        </div>
+      {/if}
 
       {#if card.parentIssueNumber !== null || card.subIssues.length > 0 || card.subIssuesSummary}
         <div class="flex flex-col gap-2">

@@ -180,6 +180,44 @@ describe('Card linked pull requests', () => {
     expect(onOpen).not.toHaveBeenCalled()
   })
 
+  it('shows the blocking issue and scrolls to it when that issue is on the board', async () => {
+    const onOpen = vi.fn()
+    const onOpenUrl = vi.fn()
+    const onRevealIssue = vi.fn(() => true)
+    render(Card, {
+      props: {
+        card: {
+          ...card,
+          blockedBy: [
+            {
+              number: 12,
+              title: 'Schema',
+              htmlUrl: 'https://github.com/octo/cat/issues/12',
+              state: 'open',
+              repo: 'octo/cat',
+            },
+          ],
+          blockedByOpenCount: 1,
+        },
+        repo: 'octo/cat',
+        onOpen,
+        onOpenUrl,
+        onOpenTask: vi.fn(),
+        onCopyLink: vi.fn(),
+        onSetValue: vi.fn(),
+        onStart: vi.fn(),
+        onRevealIssue,
+      },
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Show #12 Schema, which blocks this issue' }))
+
+    expect(document.querySelector('article.issue-blocked')).toBeTruthy()
+    expect(onRevealIssue).toHaveBeenCalledWith(12)
+    expect(onOpenUrl).not.toHaveBeenCalled()
+    expect(onOpen).not.toHaveBeenCalled()
+  })
+
   it('shows a pull request link on a nested sub-issue', async () => {
     const onOpenUrl = vi.fn()
     render(Card, {
