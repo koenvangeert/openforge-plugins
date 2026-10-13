@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from '@testing-library/svelte'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { clearIssuesFilterSession } from '../lib/filterSession'
 import IssuesView from './IssuesView.svelte'
 import { createIssuesViewApi } from './IssuesView.testUtils'
 import type { IssueDependency, IssuesBoard } from '../lib/types'
@@ -53,6 +54,10 @@ function renderBoard() {
 }
 
 describe('IssuesView dependency filter', () => {
+  beforeEach(() => {
+    clearIssuesFilterSession()
+  })
+
   it('switches between all issues, blocked issues, and issues that are not blocked', async () => {
     renderBoard()
 

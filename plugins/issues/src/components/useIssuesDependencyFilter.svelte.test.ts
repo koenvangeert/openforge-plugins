@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { emptyHierarchy, type BoardModel, type IssueRelation } from '../lib/board'
+import { clearIssuesFilterSession } from '../lib/filterSession'
 import { useIssuesDependencyFilter } from './useIssuesDependencyFilter.svelte'
 
 const blocker: IssueRelation = {
@@ -92,5 +93,37 @@ describe('useIssuesDependencyFilter', () => {
 
     expect(filter.mode).toBe('all')
     expect(filter.board).toBe(board)
+  })
+})
+
+describe('useIssuesDependencyFilter session', () => {
+  beforeEach(() => {
+    clearIssuesFilterSession()
+  })
+
+  it('starts a new filter on the mode saved for that project', () => {
+    const board = makeBoard()
+    const first = useIssuesDependencyFilter(() => board, () => 'proj-1')
+    first.setMode('unblocked')
+
+    const second = useIssuesDependencyFilter(() => board, () => 'proj-1')
+
+    expect(second.mode).toBe('unblocked')
+    expect(second.board!.columns[0]!.cards.map((card) => card.issueNumber)).toEqual([1])
+  })
+
+  it('keeps a separate mode for each project', () => {
+    const board = makeBoard()
+    const filter = useIssuesDependencyFilter(() => board, () => 'proj-1')
+    filter.setMode('blocked')
+
+    filter.activateProject('proj-2')
+    expect(filter.mode).toBe('all')
+
+    filter.setMode('unblocked')
+    filter.activateProject('proj-1')
+
+    expect(filter.mode).toBe('blocked')
+    expect(filter.board!.columns[0]!.cards.map((card) => card.issueNumber)).toEqual([2])
   })
 })

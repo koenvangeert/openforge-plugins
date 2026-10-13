@@ -42,10 +42,10 @@
   // queue captured at click time. Task filter, then dependency filter, then search,
   // then value filter. Each step sees the board the previous step produced.
   const drawer = useIssuesDrawer(() => issues.board)
-  const taskFilter = useIssuesTaskFilter(() => issues.board)
-  const dependencyFilter = useIssuesDependencyFilter(() => taskFilter.board)
+  const taskFilter = useIssuesTaskFilter(() => issues.board, () => projectId)
+  const dependencyFilter = useIssuesDependencyFilter(() => taskFilter.board, () => projectId)
   const search = useIssuesSearch(() => dependencyFilter.board)
-  const valueFilter = useIssuesValueFilter(() => search.board)
+  const valueFilter = useIssuesValueFilter(() => search.board, () => projectId)
   // svelte-ignore state_referenced_locally
   const createDialog = useIssuesCreateDialog(api, issues)
   const columnSettings = useIssuesColumnSettings(issues)
@@ -54,8 +54,10 @@
 
   let searchInputEl = $state<HTMLInputElement | null>(null)
 
-  // Reset view-local state only when the logical project changes. This intentionally
-  // has no effect cleanup: prop identity churn for the same project must not close resources.
+  // Close overlays when the logical project changes. Task, dependency, and value
+  // selections stay in process memory, one set per project, until OpenForge quits.
+  // Search starts empty on each visit. This effect has no cleanup: prop identity
+  // churn for the same project must not close resources.
   $effect(() => {
     const pid = projectId
     if (issues.activateProject(pid)) {
@@ -63,9 +65,9 @@
       createDialog.close()
       columnSettings.close()
       search.clear()
-      taskFilter.clear()
-      dependencyFilter.clear()
-      valueFilter.clear()
+      taskFilter.activateProject(pid)
+      dependencyFilter.activateProject(pid)
+      valueFilter.activateProject(pid)
       void collapsedColumns.activateProject(pid)
     }
   })
