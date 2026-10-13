@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from '@testing-library/svelte'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { clearIssuesFilterSession } from '../lib/filterSession'
 import IssuesView from './IssuesView.svelte'
 import { createIssuesViewApi } from './IssuesView.testUtils'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
@@ -57,6 +58,10 @@ function renderBoard(links: Record<number, ReturnType<typeof taskLink>>) {
 }
 
 describe('IssuesView task filter', () => {
+  beforeEach(() => {
+    clearIssuesFilterSession()
+  })
+
   it('switches between all issues, issues with no task, and issues with a task', async () => {
     renderBoard({ 11: taskLink('T-11') })
 

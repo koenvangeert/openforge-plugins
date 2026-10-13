@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { emptyHierarchy, type BoardModel, type IssueTaskLink } from '../lib/board'
+import { clearIssuesFilterSession } from '../lib/filterSession'
 import { useIssuesTaskFilter } from './useIssuesTaskFilter.svelte'
 
 const link: IssueTaskLink = {
@@ -71,5 +72,50 @@ describe('useIssuesTaskFilter', () => {
 
     expect(filter.mode).toBe('all')
     expect(filter.board).toBe(board)
+  })
+})
+
+describe('useIssuesTaskFilter session', () => {
+  beforeEach(() => {
+    clearIssuesFilterSession()
+  })
+
+  it('starts a new filter on the mode saved for that project', () => {
+    const board = makeBoard()
+    const first = useIssuesTaskFilter(() => board, () => 'proj-1')
+    first.setMode('without')
+
+    const second = useIssuesTaskFilter(() => board, () => 'proj-1')
+
+    expect(second.mode).toBe('without')
+    expect(second.board!.columns[0]!.cards.map((card) => card.issueNumber)).toEqual([1])
+  })
+
+  it('keeps a separate mode for each project', () => {
+    const board = makeBoard()
+    const filter = useIssuesTaskFilter(() => board, () => 'proj-1')
+    filter.setMode('without')
+
+    filter.activateProject('proj-2')
+    expect(filter.mode).toBe('all')
+    expect(filter.board).toBe(board)
+
+    filter.setMode('with')
+    filter.activateProject('proj-1')
+
+    expect(filter.mode).toBe('without')
+    expect(filter.board!.columns[0]!.cards.map((card) => card.issueNumber)).toEqual([1])
+  })
+
+  it('clear() drops the saved mode for the active project', () => {
+    const board = makeBoard()
+    const filter = useIssuesTaskFilter(() => board, () => 'proj-1')
+    filter.setMode('without')
+
+    filter.clear()
+
+    const next = useIssuesTaskFilter(() => board, () => 'proj-1')
+    expect(next.mode).toBe('all')
+    expect(next.board).toBe(board)
   })
 })
